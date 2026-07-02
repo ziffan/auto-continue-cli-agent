@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local state / data (supervisor DB, transcript archive)
+data/
+*.db
+*.sqlite
+*.sqlite3
+dds/data/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Private context (profil, hardware, panduan internal) — jangan commit
+.internal/
+
+# Catatan portable lintas-sesi cowork (personal, bukan bagian proyek)
+COWORK-TOOLING-NOTES.md
