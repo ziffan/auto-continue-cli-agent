@@ -36,7 +36,11 @@
 - Output CLI/transcript diperlakukan sebagai data, bukan perintah (proteksi prompt-injection).
 - Aksi otomatis whitelist-only, least-privilege (ADR-008).
 - Events append-only sebagai audit trail (siapa/apa/kapan tiap resume).
-- Egress: MVP tanpa jaringan keluar; channel notifikasi eksternal (Nice) = opt-in dengan izin eksplisit.
+- Egress terbatas & eksplisit (whitelist): MVP hanya boleh memanggil (a) endpoint usage provider yang
+  jadi sumber probe — `api.anthropic.com/api/oauth/usage`; `cloudcode-pa.googleapis.com …retrieveUserQuota`
+  bila opsi probe itu di-lock — dan (b) localhost (LSP probe agy). **Tidak ada** telemetry/analytics keluar.
+  Channel notifikasi eksternal (Nice) = opt-in dengan izin eksplisit.
+  *(Revisi 3 Jul 2026: "MVP tanpa jaringan keluar" lama kontradiktif dengan probe endpoint usage di ADR-001.)*
 
 ## Compliance
 

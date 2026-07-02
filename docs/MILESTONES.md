@@ -8,8 +8,8 @@
 ## M0 — Perencanaan (Doc-First) ← **fase sekarang**
 **Selesai bila:** `docs/` suite terisi (PROJECT, RESEARCH, ARCHITECTURE, DECISIONS, NFR, MILESTONES, CONTEXT);
 CLAUDE.md ≤200 baris + symlink AGENTS.md; repo + .gitignore.
-**Status:** hampir selesai (ADR masih Proposed — lock sebelum M1). Verifikasi fixture pesan limit langsung
-(via Chrome) = TODO di RESEARCH.md.
+**Status:** hampir selesai (ADR masih Proposed — lock sebelum M1). Sisa verifikasi = butuh **terminal
+nyata**, bukan web: fixture pesan limit lokal + uji hook `StopFailure` + probe agy (RESEARCH §6 TODO #2/#5/#7).
 
 ## M1 — Fondasi + Process Wrapper
 **Slice:** `acca run -- <cli>` men-spawn CLI target via PTY, mencatat tool/session-id/cwd/pid ke SQLite,
@@ -18,13 +18,16 @@ dan menampilkan output apa adanya.
 `acca status` menampilkan sesi RUNNING (empty state bila kosong). Integration test: run → exit normal → status EXITED.
 
 ## M2 — Detector + Reset Estimator
-**Slice:** kenali LIMIT_HIT dari exit code + pola output + entri transcript (fixture nyata kedua CLI);
-isi reset_at (sinyal pasti → heuristik → backoff, ditandai sumbernya).
-**Selesai bila:** AC-1, AC-2 lulus dari fixture; false positive < 1/100 pada korpus uji.
-**Dependensi:** fixture pesan limit dari RESEARCH.md TODO.
+**Slice:** kenali LIMIT_HIT — CC: hook `StopFailure` (primer) + pola output + exit code (print-mode) +
+transcript; agy: pola output/exit — beserta kondisi proses (hidup|exit); isi reset_at (sinyal pasti →
+heuristik → backoff, ditandai sumbernya).
+**Selesai bila:** AC-1, AC-2 lulus dari fixture + hook event; false positive < 1/100 pada korpus uji;
+overload (429/5xx/529) TIDAK terklasifikasi sebagai usage-limit.
+**Dependensi:** fixture pesan limit + hasil uji hook (RESEARCH §6 TODO #2/#7).
 
-## M3 — Scheduler + Usage Probe + Auto-resume
-**Slice:** jadwalkan resume; pada reset_at → probe kuota → resume di cwd asli; backoff bila kosong;
+## M3 — Scheduler + Usage Probe + Auto-continue
+**Slice:** jadwalkan lanjut; pada reset_at → probe kuota → lanjut sesuai kondisi proses (inject "continue"
+ke PTY hidup dengan gating foreground+idle, ATAU resume-by-id di cwd asli); backoff bila kosong;
 state tahan restart daemon.
 **Selesai bila:** AC-3, AC-6, AC-7, AC-8 lulus. Integration test end-to-end: simulasi LIMIT_HIT → tunggu →
 probe → resume di cwd benar (uji juga kasus cwd hilang → BLOCKED).

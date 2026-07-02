@@ -17,13 +17,26 @@ diekspos ke statusLine JSON (v2.1.80, isu #18121) + ada endpoint OAuth usage (un
 yang **sudah berhenti** untuk di-resume.
 **Decision:** Dua tanggung jawab, dua mekanisme:
 1. **Monitor usage** → sumber resmi: statusLine JSON (dalam sesi) atau endpoint OAuth usage (daemon standalone).
-   Untuk Antigravity: probe kuota + tangkap sinyal quota-exhausted dari output.
-2. **Deteksi sesi berhenti + auto-resume** → **PTY wrapper**: tangkap exit code + pola output, fallback
-   parsing transcript JSONL. Resume di cwd asli — Claude Code: `claude --resume <id>`;
-   Antigravity: `agy --conversation <id>` (atau perintah auto-printed saat exit; `-c` = sesi terakhir saja).
-**Consequences:** (+) monitor tanpa scraping/hack; (+) deteksi mati tetap andal via wrapper.
-(−) dua jalur untuk dirawat; parsing output/exit rapuh terhadap perubahan format → butuh fixture & test regresi;
-(−) sisa verifikasi: **format pesan/exit saat kena limit** (fixture Detector) — butuh observasi terminal nyata.
+   Untuk Antigravity *(direvisi 3 Jul 2026 — `/usage` terbukti stale di sesi hidup, RESEARCH §4b)*: probe kuota
+   via salah satu dari — fresh-launch snapshot `/usage` / probe language-server lokal (ala CodexBar) /
+   endpoint `v1internal:retrieveUserQuota` — **pilihan di-lock sebelum M3** (lihat Pending) + tangkap sinyal
+   quota-exhausted dari output.
+2. **Deteksi LIMIT_HIT + auto-continue** *(direvisi 3 Jul 2026 dini hari — temuan hook `StopFailure`,
+   RESEARCH §2c)*: untuk Claude Code, sinyal primer = **hook `StopFailure`** matcher `rate_limit`
+   (event-driven resmi, v2.1.78+; supervisor pasang hook ke sesi yang di-supervise), fallback = pola
+   output PTY (korpus §2b), exit code hanya untuk print-mode (**tak ada exit code khusus rate-limit**;
+   fallback terakhir parsing transcript JSONL). Antigravity: pola output PTY + exit (transcript `.pb`
+   tak praktis di-parse). **Limit-hit ≠ proses exit**: sesi interaktif tetap hidup di prompt → dua jalur
+   lanjut: (a) proses masih hidup → inject "continue" ke PTY yang dipegang supervisor (dengan gating
+   foreground+idle ala claude-auto-retry); (b) proses mati → resume by-id di cwd asli — Claude Code:
+   `claude --resume <id>`; Antigravity: `agy --conversation <id>` (atau perintah auto-printed saat exit;
+   `-c` = sesi terakhir saja).
+**Consequences:** (+) monitor tanpa scraping/hack; (+) deteksi limit CC deterministik via hook (typed
+error, sekaligus membedakan overload vs usage-limit); (+) deteksi mati tetap andal via wrapper.
+(−) dua jalur untuk dirawat; fallback parsing output rapuh terhadap perubahan format → tetap butuh
+fixture & test regresi; (−) hook butuh instalasi per-config (supervisor kelola `CLAUDE_CONFIG_DIR`/settings)
+dan payload-nya belum diuji empiris (RESEARCH §6 TODO #7); (−) sisa verifikasi: fixture pesan limit sebagai
+fallback + varian Antigravity (termasuk perilaku TUI agy saat quota habis) — butuh observasi terminal nyata.
 *(Skema statusLine `rate_limits` & resume kedua CLI sudah terkonfirmasi — lihat RESEARCH.md §2/§4b/§4c.)*
 **Alternatives Rejected:** Hanya wrapper+scraping transcript untuk usage (tak perlu lagi — ada jalur resmi);
 hanya statusLine/hook (tak bisa deteksi sesi mati); scraping claude.ai (rapuh, dilarang di RESEARCH).
@@ -98,7 +111,19 @@ error ambigu), catat sebagai ADR baru dengan model + budget eksplisit.
 
 ## Pending decisions (belum diputuskan)
 
-- Retensi arsip transcript/sesi: berapa lama sebelum purge? (butuh angka; sejalan "hard delete + retention").
-- Format IPC CLI ↔ daemon (unix socket vs named pipe vs HTTP localhost).
-- TUI library final (Ink vs blessed) untuk `acca status`.
-- Lisensi repo (MIT vs proprietary) — terkait rencana komersialisasi.
+| Keputusan | Owner | Target |
+|---|---|---|
+| Retensi arsip transcript/sesi (berapa lama sebelum purge; sejalan "no hard delete + retention") | Ziffan | sebelum lock ADR-004 |
+| Format IPC CLI ↔ daemon (unix socket vs named pipe vs HTTP localhost) | Ziffan | awal M1 |
+| TUI library final (Ink vs blessed) untuk `acca status` | Ziffan | sebelum M4 |
+| Lisensi repo (MIT vs proprietary) — terkait rencana komersialisasi | Ziffan | sebelum publik |
+| **Mekanisme probe usage Antigravity** (fresh-launch `/usage` vs LSP probe vs `retrieveUserQuota`) — tergantung hasil uji RESEARCH §6 TODO #5 | Ziffan | sebelum M3 |
+| **Strategi continue sesi interaktif yang masih hidup** (inject "continue" ke PTY vs kill→resume-by-id; kebijakan default + gating) — tergantung uji hook `StopFailure` (RESEARCH §6 TODO #7) | Ziffan | sebelum M3 |
+
+## Change Log
+
+| Tanggal | Perubahan |
+|---|---|
+| 2026-07-02 | ADR-001..009 draft (Proposed); ADR-001 direvisi pasca temuan statusLine v2.1.80. |
+| 2026-07-03 | ADR-001 (masih Proposed) direvisi: opsi probe Antigravity diperluas + catatan `/usage` stale & tak ada exit code khusus rate-limit (run riset terjadwal — RESEARCH §2b/§4b/§5b–c). Pending decisions diberi owner+target; tambah pending probe Antigravity. |
+| 2026-07-03 (dini hari) | ADR-001 (masih Proposed) direvisi lagi: deteksi limit CC primer = **hook `StopFailure`** matcher `rate_limit` (v2.1.78+); eksplisitkan **limit-hit ≠ proses exit** → dua jalur lanjut (inject-PTY vs resume-by-id). Tambah pending: strategi continue sesi hidup. (Sesi interaktif — RESEARCH §2c.) |

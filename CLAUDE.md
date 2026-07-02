@@ -58,8 +58,13 @@ Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file 
 
 - **Claude Code**: transcript sesi di `~/.claude/projects/<cwd-encoded>/<session-id>.jsonl`.
   Resume: `claude -c` (sesi terakhir) / `claude -r` (picker) / `claude --resume <id>` —
-  **harus `cd` ke cwd asli sesi**. Usage **kini terekspos** ke statusLine JSON (sejak v2.1.80, isu #18121)
-  + ada endpoint OAuth usage (undocumented) → **monitor** pakai jalur resmi itu; **deteksi sesi mati**
-  untuk resume tetap lewat wrapper proses (exit code) + fallback transcript. (Lihat docs/RESEARCH.md.)
+  **harus `cd` ke cwd asli sesi**. Usage **terekspos resmi** ke statusLine JSON (v2.1.80+, isu #18121)
+  + endpoint OAuth usage (undocumented) → **monitor** pakai jalur itu. **Deteksi limit** primer =
+  hook **`StopFailure`** matcher `rate_limit` (v2.1.78+); fallback pola output PTY. **Limit ≠ exit**:
+  sesi interaktif tetap hidup di prompt → lanjut = inject "continue" ke PTY; resume-by-id untuk sesi
+  yang mati; wrapper proses = lifecycle + fallback. (RESEARCH §2, §2b–2c.)
 - **Antigravity CLI**: dual limit (refresh 5-jam + kuota mingguan); dua-duanya harus > 0.
   Kuota berkorelasi dengan beban kerja per-prompt (variabel). Ada opsi AI Credits untuk overage.
+  `/usage` di sesi hidup **stale** (snapshot saat launch) — opsi probe kuota: fresh-launch / LSP probe /
+  `retrieveUserQuota` (pending, RESEARCH §4b). Prior art: CodexBar (usage agy solved, §5b),
+  claude-auto-retry (auto-continue CC via tmux, §5c).

@@ -82,8 +82,10 @@ Format Connextra + acceptance criteria (Given/When/Then). Klasifikasi: **Must (M
 *As a* solo orchestrator, *I want* supervisor mendeteksi otomatis saat sesi CLI berhenti karena
 usage/quota, *so that* aku tidak perlu memelototi terminal.
 - Given sebuah sesi berjalan di bawah supervisor,
-  When CLI mengeluarkan sinyal kehabisan limit (exit code / pesan rate-limit / entri error di transcript),
-  Then supervisor menandai sesi `LIMIT_HIT` dan mencatat waktu deteksi + sumber sinyal.
+  When CLI mengeluarkan sinyal kehabisan limit (hook event `StopFailure` [Claude Code] / pesan
+  rate-limit di output / exit code [print-mode] / entri error di transcript),
+  Then supervisor menandai sesi `LIMIT_HIT`, mencatat waktu deteksi + sumber sinyal + **kondisi proses
+  (masih hidup di prompt vs sudah exit)** — sesi interaktif umumnya TETAP HIDUP saat limit (RESEARCH §2c).
 
 **US-2 — Estimasi waktu reset**
 *As a* solo orchestrator, *I want* tahu perkiraan kapan limit reset, *so that* resume bisa dijadwalkan.
@@ -135,8 +137,9 @@ Alur utama (happy path) auto-continue:
 2. Supervisor spawn CLI (via PTY wrapper), catat: tool, session-id, cwd, PID.
 3. Sesi berjalan normal → user kerja seperti biasa.
 4. CLI kehabisan limit:
-   ├─ Sinyal terdeteksi (exit code / pesan / entri transcript rate-limit)
-   └─ Supervisor set status = LIMIT_HIT, catat waktu + sumber sinyal.
+   ├─ Sinyal terdeteksi (hook StopFailure [CC] / pesan output / exit code [print-mode] / transcript)
+   └─ Supervisor set status = LIMIT_HIT, catat waktu + sumber sinyal + kondisi proses (hidup|exit).
+      (Sesi interaktif biasanya TETAP HIDUP idle di prompt — RESEARCH §2c.)
 5. Tentukan reset_at:
    ├─ Ada sinyal pasti (retry-after / header)?  → pakai itu.
    └─ Tidak ada?  → heuristik window 5-jam + fallback backoff, tandai "perkiraan".
@@ -145,7 +148,9 @@ Alur utama (happy path) auto-continue:
 8. Pada reset_at → probe usage (kuota tersedia?).
    ├─ Ya  → lanjut ke 9.
    └─ Tidak (mis. kuota mingguan habis) → jadwal ulang dengan backoff, notifikasi, kembali ke 7.
-9. Auto-resume: cd ke cwd asli → jalankan perintah resume yang benar untuk tool itu.
+9. Auto-continue, sesuai kondisi proses:
+   ├─ Proses masih hidup di prompt → inject "continue" ke PTY (gating: foreground benar + idle).
+   └─ Proses sudah mati → cd ke cwd asli → jalankan perintah resume yang benar untuk tool itu.
 10. Status = RESUMED, kirim notifikasi sukses. Kembali ke 3.
 ```
 
@@ -204,3 +209,4 @@ Checklist test milestone (detail Given/When/Then ada di tiap story §3):
 | Tanggal | Perubahan | Oleh |
 |---|---|---|
 | 2026-07-02 | Draft awal (6 artefak discovery Bagian 2.1). | Ziffan × Claude |
+| 2026-07-03 | US-1 + flow §4 direvisi pasca temuan hook `StopFailure` & nuansa "limit-hit ≠ proses exit": sumber sinyal deteksi diperluas, langkah 9 bercabang inject-PTY (proses hidup) vs resume-by-id (proses mati). (RESEARCH §2c) | Claude (validasi sesi 3 Jul) |

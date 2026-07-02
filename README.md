@@ -29,17 +29,30 @@ Detail (untuk siapa, biaya masalah terukur, batasan) → [`docs/PROJECT.md`](doc
 
 ## Kenapa ini bukan hal sepele
 
-- Header rate-limit Claude Code **belum** diekspos ke hooks/status line → deteksi harus lewat
-  wrapper proses / parsing transcript, bukan hook resmi. Lihat [`docs/RESEARCH.md`](docs/RESEARCH.md).
+- Usage Claude Code kini terekspos resmi (statusLine JSON v2.1.80+), dan deteksi limit bisa event-driven
+  via **hook `StopFailure`** (v2.1.78+) — tapi dua-duanya hanya bekerja pada sesi yang di-manage; dan
+  **limit-hit tidak men-exit sesi interaktif** (proses idle di prompt), sementara sesi yang benar-benar
+  mati (reboot/tutup terminal) tak bersinyal apa pun — supervisor harus menangani **dua kondisi berbeda**:
+  inject "continue" ke sesi hidup vs resume-by-id sesi mati. Lihat [`docs/RESEARCH.md`](docs/RESEARCH.md) §2c.
 - Resume Claude Code **scoped ke working directory** sesi — harus `cd` ke folder asli.
-- Kuota Antigravity variabel (berkorelasi beban kerja per-prompt), tidak sesederhana hitung prompt.
+- Kuota Antigravity variabel (berkorelasi beban kerja per-prompt), dan `/usage`-nya **snapshot saat
+  launch, bukan live** — probe kuota harus dirancang khusus.
 
 ## Prior art & posisi
 
-[CodexBar](https://github.com/steipete/CodexBar) memonitor usage 56+ provider AI coding (menu bar macOS,
-Swift) — tapi **monitor-only, tanpa auto-resume**, dan belum mendukung Antigravity (isu #1178 terbuka).
-Diferensiasi kita: **monitor + auto-resume sesi terputus**, **cross-OS** (Linux+Windows), fokus dalam pada
-2 CLI. Detail perbandingan + temuan cara membaca usage agy → [`docs/RESEARCH.md`](docs/RESEARCH.md) §4d–§5b.
+- [CodexBar](https://github.com/steipete/CodexBar) — monitor usage 56+ provider (menu bar **macOS-only**,
+  Swift), **monitor-only tanpa auto-resume**. Kini sudah mendukung Antigravity (isu #1178 ditutup via
+  PR #1341) — mekanismenya (probe language-server lokal + endpoint OAuth `retrieveUserQuota`)
+  justru jadi referensi implementasi untuk probe kita.
+- [claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) — auto-continue Claude Code
+  via tmux (deteksi pesan limit → tunggu reset → kirim "continue"). **Claude Code-only, butuh tmux,
+  tanpa native Windows**, tanpa monitor usage, dan hanya menangani sesi yang masih hidup di pane.
+
+Diferensiasi kita: **monitor + auto-continue sesi hidup (PTY sendiri, tanpa tmux) + resume sesi yang
+sudah mati** (claude-auto-retry hanya menangani pane hidup), **cross-OS native** (Linux + Windows tanpa
+WSL/tmux), dual-CLI (Claude Code + Antigravity), state persisten + audit trail. Catatan risiko:
+auto-continue native sedang diminta ke upstream Claude Code (tracking #13354, masih open per 3 Jul 2026) —
+lihat [`docs/RESEARCH.md`](docs/RESEARCH.md) §5b–§5c.
 
 ## Dokumentasi
 

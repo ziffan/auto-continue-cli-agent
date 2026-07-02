@@ -1,9 +1,16 @@
 # RESEARCH.md — Usage Limit & Resume: Claude Code + Antigravity CLI
 
 > Riset pendukung problem statement & arsitektur. **Diverifikasi 2 Juli 2026** via WebSearch + browsing
-> langsung (Chrome, isu GitHub) + **inspeksi binary & storage di mesin Windows ini**. Fakta usage/limit
-> **cepat basi** — verifikasi ulang via sumber primer sebelum keputusan penting. `/usage` di dalam CLI
-> adalah sumber kebenaran real-time untuk angka usermu.
+> langsung (Chrome, isu GitHub) + **inspeksi binary & storage di mesin Windows ini**.
+> **Update 3 Juli 2026** (run terjadwal; Chrome MCP tak tersambung → WebSearch/web_fetch): koreksi §4b
+> (/usage agy stale), §5b (CodexBar kini support Antigravity), tambah §2b (kandidat fixture) & §5c
+> (claude-auto-retry + tracking auto-continue native).
+> **Update 3 Juli 2026 dini hari** (sesi interaktif; Chrome MCP down → web_fetch docs resmi + GitHub):
+> re-validasi klaim 2–3 Jul — **semua lolos** (#1178 closed/PR #1341, #46 open, #13354 open, skema
+> statusLine, pola claude-auto-retry). Temuan baru material: **§2c hook `StopFailure`** (deteksi limit
+> event-driven resmi, v2.1.78+) + nuansa **"limit-hit ≠ proses exit"** untuk sesi interaktif; detail
+> probe CodexBar diperkaya (§5b). Fakta usage/limit **cepat basi** — verifikasi ulang via sumber primer
+> sebelum keputusan penting.
 
 ---
 
@@ -37,7 +44,8 @@ Tiga sumber usage untuk Claude Code, dari paling resmi:
    }
    ```
 
-   - `rate_limits.five_hour.used_percentage` / `.seven_day.used_percentage` → 0–100.
+   - `rate_limits.five_hour.used_percentage` / `.seven_day.used_percentage` → 0–100
+     (**bisa pecahan** — contoh di docs: `23.5`; jangan parse sebagai integer).
    - `rate_limits.five_hour.resets_at` / `.seven_day.resets_at` → **Unix epoch seconds** (bukan ISO string).
    - Penamaan `five_hour`/`seven_day` **sama** dengan endpoint OAuth usage → konsisten.
    - **Caveat penting:** `rate_limits` hanya muncul untuk **subscriber Claude.ai (Pro/Max)** dan
@@ -60,9 +68,68 @@ di Starship, dan berbagai limit-tracker.
 **Implikasi desain (revisi):**
 - **Monitor usage** (bagian "monitor" produk) → pakai **statusLine JSON** (di dalam sesi) atau
   **endpoint OAuth usage** (untuk daemon standalone). Tidak perlu scraping/hack.
-- **Deteksi sesi yang sudah berhenti** (untuk auto-resume) tetap butuh **wrapper proses** (exit code) +
-  fallback parsing transcript — statusLine hanya hidup selama sesi jalan, tak bisa mendeteksi sesi yang
-  sudah mati. Jadi arsitektur wrapper tetap relevan, tapi **bukan lagi** karena "usage tak terekspos".
+- **Deteksi LIMIT_HIT Claude Code** *(revisi 3 Jul dini hari — lihat §2c)*, urutan prioritas:
+  1. **Hook `StopFailure`** matcher `rate_limit` (resmi, event-driven, deterministik — §2c);
+  2. **Pola output PTY** (korpus §2b) — fallback bila hook tak terpasang;
+  3. **Exit code non-nol** — hanya bermakna untuk print-mode (`-p`) / abnormal exit; **tidak ada
+     exit code khusus rate-limit** (usulan exit 75 + `--wait-on-limit` di #36320 ditutup duplikat).
+- **Wrapper PTY tetap wajib**, tapi perannya kini: pegang lifecycle proses (deteksi sesi yang mati
+  karena sebab apa pun), kanal fallback output-scraping, dan kanal inject "continue" ke sesi hidup
+  (§2c) — bukan lagi satu-satunya jalur deteksi limit.
+- **"Deteksi limit" ≠ "deteksi sesi mati"** — limit-hit di sesi interaktif TIDAK men-exit proses
+  (§2c); dua sinyal ini harus dimodelkan terpisah di Detector.
+
+## 2b. Kandidat fixture pesan limit Claude Code *(dari komunitas, 3 Jul 2026 — BELUM dikonfirmasi lokal)*
+
+Pola real-world yang dideteksi `claude-auto-retry` (README-nya, MIT — dipakai produksi oleh usernya)
++ isu GitHub (#9236, #5977, #35744):
+
+| Pola | Contoh |
+|---|---|
+| N-hour limit reached | `5-hour limit reached - resets 3pm (UTC)` |
+| Usage limit | `Claude usage limit reached. Resets at 2pm` / `Claude usage limit reached. Your limit will reset at 3pm (America/New_York)` |
+| Out of extra usage | `You're out of extra usage · resets 3pm` |
+| Try again | `Please try again in 5 hours` |
+| Hit your limit | `You've hit your limit · resets 3pm (Europe/Dublin)` |
+| Rate limit | `Rate limit hit. Resets at 4pm` |
+
+Catatan: format berubah antar versi (varian lama pakai kalimat panjang + timezone eksplisit; varian
+baru pakai `·` separator); waktu reset kadang tanpa timezone. **Status: kandidat** — TODO #2 (§6) tetap
+terbuka sampai tertangkap dari terminal sendiri; jadikan tabel ini korpus awal fixture + test regresi.
+
+## 2c. Hook `StopFailure` + perilaku proses saat limit *(temuan baru, 3 Jul 2026 dini hari — docs resmi hooks + CHANGELOG)*
+
+**Hook `StopFailure` (sejak v2.1.78, per CHANGELOG resmi)** — jalur deteksi limit **event-driven resmi**
+yang belum tercatat di dokumen ini sebelumnya:
+
+- Fire "when the turn ends due to an API error"; **matcher = tipe error**, nilai persis dari docs:
+  `rate_limit`, `overloaded`, `authentication_failed`, `oauth_org_not_allowed`, `billing_error`,
+  `invalid_request`, `model_not_found`, `server_error`, `max_output_tokens`, `unknown`.
+- Sifat: **side-effect only** (output & exit code hook diabaikan; tanpa decision control) → pas untuk
+  menulis marker/event ke supervisor (file marker atau IPC), persis pola `install-hook`-nya
+  claude-auto-retry (§5c).
+- Matcher `StopFailure` (dan `FileChanged`) pakai exact-match set sempit (huruf/digit/`_`/`|`) —
+  `rate_limit|overloaded` valid; koma/hyphen membuatnya dievaluasi sebagai regex.
+- Bonus lifecycle untuk supervisor: **`SessionStart`** matcher `startup|resume|clear|compact`
+  (konfirmasi RESUMED benar-benar terjadi) dan **`SessionEnd`** matcher
+  `clear|resume|logout|prompt_input_exit|bypass_permissions_disabled|other` (sinyal sesi berakhir).
+- Konsekuensi: supervisor bisa **menginstal hook ke sesi yang di-supervise** (via `CLAUDE_CONFIG_DIR`
+  / settings project) → deteksi `rate_limit` **tanpa scraping**, dengan taxonomy error yang sekaligus
+  membedakan **overload sementara (429/5xx/529 — CC punya internal retry sendiri) vs usage limit** —
+  dua kasus yang wajib ditangani berbeda (overload = backoff pendek, bukan tunggu window reset).
+
+**Perilaku proses saat usage-limit (nuansa penting yang mengoreksi asumsi implisit dokumen lama):**
+
+| Mode sesi | Saat limit habis | Sinyal deteksi | Cara lanjut |
+|---|---|---|---|
+| Interaktif (TUI) | **Proses TETAP HIDUP**, idle di prompt dengan pesan limit | Hook `StopFailure` / pola output | Inject "continue" ke **PTY yang kita pegang sendiri** (tak butuh tmux — beda dari claude-auto-retry) setelah reset; verifikasi dulu proses masih hidup & idle |
+| Print mode (`-p`) | Proses **exit** non-nol | Exit code + pesan di output | Re-exec / `claude -p --resume <id>` |
+| Mati di luar limit (reboot/tutup terminal/crash) | Proses tidak ada | Wrapper lifecycle | `claude --resume <id>` di cwd asli |
+
+Basis: mekanisme inti claude-auto-retry (kirim "continue" ke pane hidup — hanya mungkin karena proses
+tak exit saat limit; §5c), premis #13354, dan semantik `StopFailure` ("turn ends", bukan "process exits").
+**Belum diverifikasi untuk Antigravity** — perilaku TUI agy saat quota habis (tetap hidup vs exit) =
+bagian TODO #2 varian agy (§6).
 
 ## 3. Claude Code — resume sesi
 
@@ -108,10 +175,22 @@ aktual** sebelum resume, dan sediakan penjadwalan reset mingguan + backoff. Esti
   `plugin`, `install`. **Diuji:** `agy --print "/usage"` → **output kosong** (slash command tidak dirender
   di print mode; TUI-only).
 
-**Implikasi desain:** adapter Antigravity `resumeCmd(id)` → `agy --conversation <id>` (fallback: tangkap
-perintah auto-printed saat exit). `probeUsage()` Antigravity: karena `/usage` TUI-only → supervisor harus
-**men-drive PTY** (kirim `/usage`, parse output render) **atau** panggil endpoint server dengan OAuth creds
-(lihat §4d). Tidak ada jalur non-interaktif resmi yang bersih.
+**⚠️ Koreksi penting (3 Jul 2026):** `/usage` agy **bukan data live** — nilainya snapshot yang diambil
+**saat launch** dan tidak ter-update selama sesi berjalan (terkonfirmasi forum Google AI Dev, 20 Mei 2026:
+user kehabisan kuota saat `/usage` masih menunjukkan 100%; angka baru benar setelah `/quit` + relaunch).
+Isu `/stats`/usage visibility juga masih dikeluhkan di repo resmi (antigravity-cli#46, open).
+
+**Implikasi desain (revisi 3 Jul 2026):** adapter Antigravity `resumeCmd(id)` → `agy --conversation <id>`
+(fallback: tangkap perintah auto-printed saat exit). `probeUsage()` Antigravity — tiga opsi, urutan preferensi
+belum di-lock (lihat DECISIONS.md Pending):
+1. **Fresh-launch probe:** spawn proses agy baru sesaat sebelum resume, baca snapshot `/usage` saat launch
+   (satu-satunya momen snapshot di-refresh), lalu exit. Jangan kirim `/usage` ke sesi yang sudah lama hidup —
+   datanya basi.
+2. **Probe language-server lokal** (cara CodexBar, §5b): baca `csrf_token` + port dari argumen proses
+   language server, `POST /exa.language_server_pb.LanguageServerService/GetUserStatus` →
+   `quotaInfo.{remainingFraction,resetTime}` per model. Butuh proses Antigravity/agy hidup; protokol internal.
+3. **Endpoint OAuth Google:** `POST https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota`
+   dengan kredensial `~/.gemini/oauth_creds.json` (sensitif; undocumented; dipakai CodexBar di produksi).
 
 ## 4d. Antigravity/agy — penyimpanan lokal *(diinspeksi di mesin, 2 Jul 2026 — read-only)*
 
@@ -129,8 +208,16 @@ perintah auto-printed saat exit). `probeUsage()` Antigravity: karena `/usage` TU
 **Temuan kunci:**
 1. **Transcript Antigravity = protobuf (`.pb`), bukan JSONL** → parsing untuk deteksi limit **lebih sulit**
    daripada Claude Code (butuh skema protobuf; kemungkinan besar andalkan exit-code/PTY output, bukan parse `.pb`).
-2. **Tidak ada cache usage/quota lokal** → usage murni server-side, hanya tampil via `/usage` TUI.
+2. **Tidak ada cache usage/quota lokal** → usage murni server-side, hanya tampil via `/usage` TUI
+   (dan itu pun snapshot saat launch — lihat §4b) atau via language-server/endpoint (§5b).
 3. Conversation id mudah dipetakan: nama file `.pb` = id yang dipakai `--conversation`.
+
+**Konteks ekosistem (3 Jul 2026):**
+- Ada **repo resmi** `google-antigravity/antigravity-cli` di GitHub (issue tracker aktif; CHANGELOG.md
+  di repo hanya stub "1.0.0", tanpa releases) → rilis di-track via `agy update`/`agy changelog`, bukan GitHub.
+- **Gemini CLI untuk individu di-EOL 18 Juni 2026** — Google mengarahkan user individual ke Antigravity CLI
+  (pengumuman developers.googleblog; diskusi gemini-cli#27274). Binary `gemini` 0.42.0 di mesin ini praktis
+  legacy → fokus MVP ke agy makin tervalidasi.
 
 ## 4c. Terpasang di mesin ini (snapshot 2 Jul 2026, Windows PC)
 
@@ -147,24 +234,50 @@ Claude Code resume flags terverifikasi: `-c/--continue` (sesi terakhir di cwd), 
 
 | Temuan | Konsekuensi arsitektur |
 |---|---|
-| Usage Claude Code **kini** terekspos (statusLine JSON v2.1.80 + endpoint OAuth usage) | Monitor pakai jalur resmi; wrapper hanya untuk **deteksi sesi mati** + resume |
+| Usage Claude Code **kini** terekspos (statusLine JSON v2.1.80 + endpoint OAuth usage) | Monitor pakai jalur resmi; wrapper untuk lifecycle proses + fallback + inject |
+| **Hook `StopFailure` matcher `rate_limit`** (v2.1.78+, §2c) | Deteksi limit CC primer = hook event (deterministik); scraping §2b = fallback |
+| **Limit-hit ≠ proses exit** di sesi interaktif (§2c) | Detector pisahkan sinyal "limit" vs "sesi mati"; lanjut via inject-PTY (hidup) atau resume-by-id (mati) |
 | Resume scoped ke cwd | Simpan cwd+session-id; resume di cwd persis; status BLOCKED bila cwd hilang |
 | Angka limit volatil, `/usage` = sumber live | Baca usage live; tampilkan "perkiraan" saat sumbernya heuristik |
 | Antigravity: mingguan bisa 0 meski 5-jam reset | Probe kuota sebelum resume; jadwal mingguan + backoff |
 | Antigravity `/usage` TUI-only + transcript `.pb` protobuf | Probe usage via drive-PTY; deteksi limit andalkan exit-code/PTY output, bukan parse `.pb` |
 | Reliabilitas sinyal reset bervariasi | Fallback backoff konservatif; jangan spam-resume |
 
-## 5b. Prior art — CodexBar (`steipete/CodexBar`)
+## 5b. Prior art — CodexBar (`steipete/CodexBar`) *(dikoreksi 3 Jul 2026)*
 
 Referensi terdekat yang perlu diketahui (disarankan user). **CodexBar** = app **menu bar macOS** (Swift)
 yang menampilkan usage real-time untuk **56+ provider** AI coding (Claude, Codex, Cursor, Copilot, Gemini,
 Grok, dll). Mekanisme baca usage: **endpoint OAuth**, **parsing output CLI via PTY**, inspeksi config lokal
 (`~/.claude`, `~/.codex`, `~/.config/codexbar/`), cookie browser, keychain, log JSONL untuk kalkulasi biaya.
 
-**Yang memvalidasi arahan kita:** pendekatan PTY + endpoint OAuth + inspeksi config = persis jalur yang
-kita rancang (ADR-001). Bukan jalan buntu.
+**⚠️ Koreksi (3 Jul 2026) — CodexBar KINI mendukung Antigravity.** Isu #1178 **sudah ditutup** (via
+PR #1341); klaim sebelumnya di dokumen ini ("masih terbuka, mereka belum tahu caranya") **obsolete**.
+Mekanisme mereka terdokumentasi di `docs/antigravity.md` (repo CodexBar) — dua jalur:
 
-**Diferensiasi kita (bukan duplikasi):**
+1. **Probe language-server lokal** *(detail diverifikasi dari docs/antigravity.md mereka, 3 Jul dini hari)*:
+   temukan proses via `ps` — match nama `language_server_macos` + marker Antigravity (`--app_data_dir
+   antigravity` atau path mengandung `/antigravity/`); ekstrak flag `--csrf_token` (wajib) +
+   `--extension_server_port` (fallback HTTP); enumerasi port listening via `lsof`; **pilih connect-port**
+   dengan probe `GetUnleashData` (respons 200 pertama menang); lalu quota fetch
+   `https://127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/GetUserStatus`
+   (header `X-Codeium-Csrf-Token` + `Connect-Protocol-Version: 1`; fallback `GetCommandModelConfigs`;
+   HTTPS self-signed → insecure allow; bila HTTPS gagal → retry HTTP di extension_server_port).
+   Data: `userStatus.cascadeModelConfigData.clientModelConfigs[].quotaInfo.{remainingFraction, resetTime}`
+   per model (Claude / Gemini Pro / Gemini Flash) — `resetTime` ISO-8601, fallback epoch seconds —
+   plus `accountEmail`, `planName`.
+   **⚠️ Caveat kunci untuk kita:** dokumen CodexBar menarget language server **IDE Antigravity**
+   (`Antigravity.app`, macOS). Apakah **`agy` CLI** men-spawn language server serupa (dan bagaimana
+   menemukannya di Windows/Linux tanpa `lsof`) **belum diverifikasi** → inti TODO #5 (§6).
+2. **Endpoint OAuth remote:** `POST cloudcode-pa.googleapis.com/v1internal:{loadCodeAssist, onboardUser,
+   fetchAvailableModels, retrieveUserQuota}` dengan kredensial OAuth Google milik Antigravity.
+
+Konsekuensi untuk kita: (a) klaim "temuan §4b–4d orisinal" diturunkan — yang tetap khas kita: pemetaan
+**CLI** (`agy --conversation`, auto-printed resume cmd, storage `.pb`, /usage stale); (b) kita dapat
+**referensi implementasi konkret** untuk `probeUsage()` agy (§4b opsi 2–3); (c) caveat mereka berlaku juga
+untuk kita: protokol internal yang bisa berubah, butuh proses hidup untuk jalur lokal, deteksi proses/port
+per-OS (`ps`/`lsof` = macOS/Linux; Windows perlu padanan — belum ada referensi).
+
+**Diferensiasi kita (tetap berlaku, direvisi):**
 
 | Aspek | CodexBar | auto-continue-cli-agent (kita) |
 |---|---|---|
@@ -172,12 +285,50 @@ kita rancang (ADR-001). Bukan jalan buntu.
 | Auto-continue | **Tidak ada** | **Fitur inti** |
 | Platform | macOS menu bar | **Cross-OS** (Linux daily + Windows weekend), CLI/daemon |
 | Cakupan | 56+ provider, luas & dangkal | 2 CLI (Claude Code + Antigravity), dalam |
-| Antigravity | **Belum didukung** — isu #1178 *masih terbuka*, mereka belum tahu cara baca usage agy | Sudah dipetakan (§4b–4d) |
+| Antigravity | Didukung (usage via LSP/OAuth) — macOS | Usage **+ resume by-id + deteksi limit** lintas OS |
 
-**Catatan penting:** isu CodexBar **#1178** (dukungan usage Antigravity CLI) **masih terbuka & belum
-terpecahkan** — mereka belum menemukan cara agy mengekspos usage. Temuan kita di §4b–4d (`/usage` TUI-only,
-storage `~/.gemini/`, tak ada cache usage lokal, `.pb` protobuf) = kontribusi orisinal yang bisa jadi
-referensi (atau bahkan kita share balik ke isu itu nanti).
+## 5c. Prior art — auto-continue Claude Code (kompetitor langsung + risiko native)
+
+**`cheapestinference/claude-auto-retry`** (npm, MIT, ±145 stars, Node ≥18, zero-dep) — tool yang
+menyelesaikan sebagian masalah kita **khusus Claude Code**: shell function membungkus `claude` dalam tmux,
+monitor `tmux capture-pane` tiap 5 detik, deteksi pesan limit (tabel pola §2b), parse waktu reset
+(timezone-aware + DST), tunggu reset + margin 60 detik, lalu `tmux send-keys "continue"`. Support
+`--print` mode (buffer + re-exec). Batasan yang mereka akui sendiri: **butuh tmux** (auto-install via
+package manager), **tanpa native Windows** (WSL saja), retry message = teks polos ke TUI hidup.
+
+**Detail tambahan (README diverifikasi penuh, 3 Jul dini hari):**
+- Mereka juga menyediakan **mode event-driven**: `claude-auto-retry install-hook` memasang hook
+  **`StopFailure`** (matcher `overloaded|server_error|rate_limit`) yang menulis marker per-pane —
+  scraping dimatikan begitu marker pertama datang. Validasi langsung untuk arah §2c kita.
+- **Jalur overload terpisah** dari usage-limit: deteksi `API Error: <code>` terminal (429/500/502/503/
+  504/529, `overloaded_error`) → exponential backoff + jitter + cap kumulatif; **tidak** menunggu window
+  reset. Mereka hanya bereaksi pada error *terminal* (bentuk `API Error: <code>`), bukan retry internal
+  CC yang masih berjalan (bentuk `(… Retrying …)`). Taxonomy ini harus kita tiru di Detector.
+- **Gating alive-at-prompt:** kirim retry hanya bila foreground process = claude/node **dan** sesi idle
+  (footer "esc to interrupt" absen); kalau proses keburu exit ke shell → **jangan ketik apa pun**
+  (log & surface, auto-relaunch off by default). Praktik aman yang wajib ditiru PTY driver kita.
+
+**Posisi kita vs claude-auto-retry:**
+
+| Aspek | claude-auto-retry | Kita |
+|---|---|---|
+| CLI didukung | Claude Code saja | Claude Code + Antigravity |
+| Mekanisme lanjut | Kirim "continue" ke **pane tmux yang masih hidup** | Inject ke **PTY sendiri** (sesi hidup, tanpa tmux) **+ resume by-id** sesi yang sudah mati, di cwd asli |
+| Sesi mati / host reboot | Hilang (monitor per-pane) | State SQLite + scheduler tahan restart |
+| Windows | WSL only | Native (node-pty + Task Scheduler) |
+| Monitor usage terpusat | Tidak ada | `acca status` dual-CLI |
+
+Nilai yang bisa dipetik: tabel pola pesan mereka = korpus fixture awal (§2b); pendekatan
+"verifikasi foreground process sebelum inject" = praktik aman yang patut ditiru di PTY driver kita.
+Proyek terkait lain yang mereka rujuk: `claude-code-queue` (antrian task dengan rate-limit handling),
+`opencode-claude-quota` (monitor kuota, display-only).
+
+**Risiko produk — auto-continue native:** permintaan fitur ini ramai di upstream Claude Code:
+**#13354** (tracking utama, 41+ upvote per referensi #35744), #35744 (open), #36320 & #26789 & #18980
+(ditutup duplikat). Belum ada sinyal implementasi (belum ada exit code khusus / flag `--wait-on-limit`).
+Kalau Anthropic mengimplementasikan native, nilai kita untuk Claude Code menyempit ke: dual-CLI,
+resume lintas reboot/host always-on, monitor terpusat, notifikasi. **Mitigasi:** jangan bangun MVP yang
+nilainya 100% bergantung pada celah "Claude Code tak bisa lanjut sendiri"; pantau #13354 tiap sesi riset.
 
 ## 6. Sumber (verifikasi 2 Juli 2026)
 
@@ -193,7 +344,19 @@ Utamakan **sumber primer** (docs resmi) di atas blog pihak ketiga — tanggal ce
 - Claude Code issue #13585 — quota access CLI (endpoint OAuth `api/oauth/usage` didiskusikan di sini): https://github.com/anthropics/claude-code/issues/13585
 - Tooling komunitas: https://github.com/nsanden/claude-rate-monitor
 - Prior art CodexBar (monitor usage macOS, 56+ provider): https://github.com/steipete/CodexBar
-- CodexBar issue #1178 (dukungan usage Antigravity CLI — masih terbuka): https://github.com/steipete/CodexBar/issues/1178
+- CodexBar issue #1178 (usage Antigravity CLI — **ditutup via PR #1341**, 3 Jul 2026): https://github.com/steipete/CodexBar/issues/1178
+- CodexBar docs — mekanisme provider Antigravity (LSP probe + retrieveUserQuota): https://github.com/steipete/CodexBar/blob/main/docs/antigravity.md
+- Repo resmi Antigravity CLI (issue tracker; CHANGELOG stub): https://github.com/google-antigravity/antigravity-cli
+- antigravity-cli issue #46 — usage/quota tak terlihat di AGY (open): https://github.com/google-antigravity/antigravity-cli/issues/46
+- Forum Google AI Dev — `/usage` agy hanya update saat launch (20 Mei 2026): https://discuss.ai.google.dev/t/gemini-cli-antigravity-cli-day-1-impressions-only-updates-usage-after-quit-and-reload/146374
+- Transisi Gemini CLI → Antigravity CLI (EOL individu 18 Jun 2026): https://github.com/google-gemini/gemini-cli/discussions/27274
+- claude-auto-retry (kompetitor auto-continue Claude Code, tmux-based): https://github.com/cheapestinference/claude-auto-retry
+- Claude Code issue #35744 — FEATURE auto-continue (rujuk #13354 sebagai tracking utama): https://github.com/anthropics/claude-code/issues/35744
+- Claude Code issue #36320 — auto-resume + usulan exit 75 / `--wait-on-limit` (ditutup duplikat): https://github.com/anthropics/claude-code/issues/36320
+- Claude Code Docs — Hooks reference (**event `StopFailure`**, matcher error type `rate_limit` dkk;
+  `SessionStart`/`SessionEnd` matcher — diverifikasi 3 Jul 2026): https://code.claude.com/docs/en/hooks
+- Claude Code CHANGELOG (StopFailure ditambahkan **v2.1.78**; tak ada fitur auto-continue native s/d
+  entri teratas per 3 Jul 2026): https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md
 - Google Antigravity Docs — Plans/quota: https://antigravity.google/docs/plans
 - Antigravity forum — quota multi-day lockout vs 5-hour: https://discuss.ai.google.dev/t/google-ai-pro-antigravity-quota-shows-multi-day-lockouts-instead-of-5-hour-reset/130202
 - Antigravity forum — quota problems & fix: https://sanj.dev/post/google-antigravity-quota-problems-fix/
@@ -204,9 +367,22 @@ Utamakan **sumber primer** (docs resmi) di atas blog pihak ketiga — tanggal ce
 > **TODO verifikasi berikutnya:**
 > 1. ~~Skema `rate_limits` statusLine JSON~~ ✅ **ditutup** (§2): `rate_limits.{five_hour,seven_day}.
 >    {used_percentage, resets_at(epoch s)}`, Claude Code 2.1.198. Caveat: Pro/Max only, muncul pasca API-call pertama.
-> 2. Konfirmasi format persis **pesan/exit** saat sesi Claude Code & Antigravity CLI berhenti karena limit
->    (untuk fixture Detector US-1) — **butuh observasi terminal saat benar-benar kena limit** (belum bisa dipaksa).
+> 2. Konfirmasi format persis **pesan/perilaku** saat sesi Claude Code & Antigravity CLI kena limit
+>    (untuk fixture Detector US-1) — **maju (3 Jul 2026):** korpus kandidat terkumpul di §2b dari komunitas;
+>    **masih perlu** tangkapan terminal sendiri untuk lock + varian Antigravity (belum ada korpus publiknya;
+>    sekalian catat: TUI agy tetap hidup atau exit saat quota habis? — §2c). Bobot TODO ini **turun** untuk
+>    Claude Code karena jalur deteksi primer kini hook `StopFailure` (§2c); fixture = fallback + agy.
 > 3. ~~Resume Antigravity CLI~~ ✅ **ditutup** (§4b): `agy --conversation <id>` (bukan `-c`) +
 >    auto-printed resume cmd. Binary `agy` v1.0.15 terkonfirmasi.
 > 4. (Opsi) Verifikasi endpoint OAuth usage `api/oauth/usage` secara langsung — **ditunda**: butuh baca token
 >    dari kredensial (sensitif); statusLine JSON sudah cukup untuk MVP monitor.
+> 5. **(Baru, 3 Jul 2026)** Probe usage Antigravity: uji 3 opsi §4b di mesin sendiri — (a) freshness snapshot
+>    `/usage` saat fresh-launch, (b) probe language-server ala CodexBar **di Windows/Linux** (deteksi proses/port
+>    tanpa `lsof` di Windows), (c) bentuk request/respons `v1internal:retrieveUserQuota`. Hasil → lock di ADR.
+> 6. **(Baru, 3 Jul 2026)** Pantau Claude Code #13354 (auto-continue native) tiap sesi riset — kalau shipped,
+>    revisit positioning (§5c) & scope MVP. *(Re-cek 3 Jul dini hari: masih open, belum ada sinyal implementasi;
+>    CHANGELOG juga nihil auto-continue.)*
+> 7. **(Baru, 3 Jul 2026 dini hari)** Uji empiris hook `StopFailure` di mesin sendiri: pasang hook matcher
+>    `rate_limit`, konfirmasi ia fire saat usage-limit di sesi interaktif + bentuk payload-nya (field apa
+>    saja yang diterima hook di stdin) — dasar desain marker/IPC Detector (§2c). Sekalian uji
+>    `SessionStart` matcher `resume` sebagai konfirmasi RESUMED.

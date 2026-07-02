@@ -48,3 +48,6 @@ coverage/
 
 # Catatan portable lintas-sesi cowork (personal, bukan bagian proyek)
 COWORK-TOOLING-NOTES.md
+
+# Claude Code local settings (machine-specific permissions)
+.claude/settings.local.json
