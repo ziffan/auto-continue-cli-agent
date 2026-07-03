@@ -8,10 +8,11 @@
 ## M0 — Perencanaan (Doc-First) ← **fase sekarang**
 **Selesai bila:** `docs/` suite terisi (PROJECT, RESEARCH, ARCHITECTURE, DECISIONS, NFR, MILESTONES, CONTEXT);
 CLAUDE.md ≤200 baris + symlink AGENTS.md; repo + .gitignore.
-**Status:** hampir selesai. **Stack di-lock 3 Jul (ADR-003/004 Accepted)**; ADR-010 (probe hybrid) Proposed.
-Uji terminal 3 Jul: hook `StopFailure` (TODO #7) **selesai**, probe agy LS/RPC (TODO #5) **maju besar** (§5b).
-Sisa verifikasi (butuh **terminal nyata**/limit asli): fixture pesan limit lokal + `quotaInfo` non-nil LS interaktif
-+ req/resp `retrieveUserQuota` (RESEARCH §6 TODO #2/#5).
+**Status:** hampir selesai. **Stack di-lock 3 Jul (ADR-003/004 Accepted)**; **ADR-010 (probe hybrid) LOCKED 3 Jul
+malam** (opsi #2 LS `GetUserStatus` interaktif ber-PTY terbukti — `quotaInfo` non-nil). Uji terminal 3 Jul: hook
+`StopFailure` (TODO #7) **selesai**, probe agy item (d) **selesai**. **Semua ADR terkunci kecuali ADR-001.**
+Sisa verifikasi (butuh **limit/quota asli**, non-blocking): fixture pesan limit lokal + varian agy TUI saat quota
+habis (ADR-001, RESEARCH §6 TODO #2); residual probe agy #3/#1 = impl-tuning M3.
 
 ## M1 — Fondasi + Process Wrapper
 **Slice:** `acca run -- <cli>` men-spawn CLI target via PTY, mencatat tool/session-id/cwd/pid ke SQLite,
@@ -28,9 +29,10 @@ overload (429/5xx/529) TIDAK terklasifikasi sebagai usage-limit.
 **Dependensi:** fixture pesan limit + hasil uji hook (RESEARCH §6 TODO #2/#7).
 
 ## M3 — Scheduler + Usage Probe + Auto-continue
-**Slice:** jadwalkan lanjut; pada reset_at → probe kuota → lanjut sesuai kondisi proses (inject "continue"
-ke PTY hidup dengan gating foreground+idle, ATAU resume-by-id di cwd asli); backoff bila kosong;
-state tahan restart daemon.
+**Slice:** jadwalkan lanjut; pada reset_at → probe kuota → lanjut sesuai kondisi proses **(strategi ADR-014:**
+inject "continue" ke PTY hidup dengan gating foreground+idle+alive [preferred], ATAU resume-by-id di cwd asli
+saat `exited`; gating-gagal sesi hidup → surface manual, tak auto-kill); backoff bila kosong; state tahan restart
+daemon. **Catatan agy:** jalur inject provisional — verifikasi perilaku TUI agy saat quota habis dulu (TODO #2).
 **Selesai bila:** AC-3, AC-6, AC-7, AC-8 lulus. Integration test end-to-end: simulasi LIMIT_HIT → tunggu →
 probe → resume di cwd benar (uji juga kasus cwd hilang → BLOCKED).
 
@@ -51,8 +53,9 @@ probe → resume di cwd benar (uji juga kasus cwd hilang → BLOCKED).
 **Selesai bila:** **AC-9..AC-12 lulus** + **security-review gate** (skill `milestone-wrapup`) terhadap
 keempatnya. Uji khusus: test injection (payload di output tak memicu aksi), test redaksi (pola rahasia
 ter-redaksi), test authz (sender tak sah ditolak+audit), test konfirmasi (tanpa `/confirm` tak ada inject).
-**Dependensi (gate ADR-013 §5):** **THREAT-MODEL.md** (✅ ada) di-review; **pola redaksi rahasia** &
-**lib Telegram bot Node + pin versi** diputuskan (pending DECISIONS.md) sebelum mulai; butuh Notifier (M4).
+**Dependensi (gate ADR-013 §5):** **THREAT-MODEL.md** (✅ ada) di-review; **pola redaksi rahasia** (✅ hybrid
+regex+entropy, ADR-013 §2) & **lib Telegram bot Node** (✅ `grammy` 1.44.0, ADR-011) diputuskan & **ADR-011/012/013
+di-LOCK** (3 Jul malam); butuh Notifier (M4). Sisa yang di-tune saat M-remote: regex/threshold redaksi eksak + test corpus.
 **Catatan:** ini milestone paling sensitif — tak dimulai sebelum tier prasyaratnya hijau dan gate terpenuhi.
 
 ## M5 — Hardening + Deploy sebagai service
@@ -70,6 +73,6 @@ ter-redaksi), test authz (sender tak sah ditolak+audit), test konfirmasi (tanpa 
 ## Urutan dependency dokumen (Bagian 2.6)
 
 PROJECT → ARCHITECTURE (+DECISIONS) → DATA-MODEL/CONTRACTS → NFR/CAPACITY/FAILURE/SECURITY → MILESTONES → MAP+CONVENTIONS.
-File yang sudah dibuat untuk gate remote: **THREAT-MODEL.md** (✅ 3 Jul — gate wajib tier C, ADR-013 §5).
-File yang **belum** dibuat (menyusul saat dibutuhkan): DATA-MODEL.md, FAILURE-MODES.md, SECURITY.md,
-DEPENDENCY-POLICY.md, MAP.md, CONVENTIONS.md.
+Sudah dibuat: **THREAT-MODEL.md** (✅ 3 Jul, gate tier C), **DATA-MODEL.md** (✅ 3 Jul malam, skema store),
+**MAP.md** (✅), **CONVENTIONS.md** (✅), **DEPENDENCY-POLICY.md** (✅) — **fondasi M1 siap**.
+File yang **belum** dibuat (menyusul saat dibutuhkan): FAILURE-MODES.md, SECURITY.md, CONTRACTS (adapter interface — bisa di kode M1).

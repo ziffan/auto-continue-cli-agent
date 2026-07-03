@@ -241,8 +241,8 @@ Isu `/stats`/usage visibility juga masih dikeluhkan di repo resmi (antigravity-c
 
 **Implikasi desain (revisi 3 Jul 2026):** adapter Antigravity `resumeCmd(id)` → `agy --conversation <id>`
 (fallback: tangkap perintah auto-printed saat exit). `probeUsage()` Antigravity — **diputuskan hybrid di
-ADR-010 (Proposed 3 Jul): #2 LS `GetUserStatus` untuk sesi interaktif hidup + #3 `retrieveUserQuota` untuk
-pre-resume** (dasar uji §5b). Tiga opsi kandidat aslinya:
+ADR-010 (Accepted 3 Jul malam): #2 LS `GetUserStatus` untuk sesi interaktif hidup + #3 `retrieveUserQuota` untuk
+pre-resume** (dasar uji §5b; #2 terbukti end-to-end — quotaInfo non-nil, TODO #5d ditutup). Tiga opsi kandidat aslinya:
 1. **Fresh-launch probe:** spawn proses agy baru sesaat sebelum resume, baca snapshot `/usage` saat launch
    (satu-satunya momen snapshot di-refresh), lalu exit. Jangan kirim `/usage` ke sesi yang sudah lama hidup —
    datanya basi.
@@ -513,7 +513,15 @@ Utamakan **sumber primer** (docs resmi) di atas blog pihak ketiga — tanggal ce
 >    respons sukses `retrieveUserQuota` masih belum tertangkap** (perlu token valid). Masih perlu: (a) freshness
 >    snapshot `/usage` (#1), (c) **respons sukses** retrieveUserQuota (**ditunda ke M3 atas keputusan user 3 Jul** —
 >    butuh refresh token via `oauth2.googleapis.com`; ditangkap nanti saat wrapper pegang token sesi hidup),
->    (d) `quotaInfo` non-nil dari LS sesi interaktif ber-PTY nyata. Lock di ADR (sebelum M3).
+>    ~~(d) `quotaInfo` non-nil dari LS sesi interaktif ber-PTY nyata~~ ✅ **DITUTUP (3 Jul malam):** agy interaktif
+>    dibungkus **PTY nyata (node-pty 1.1.0, Node 24.18.0 Win** — winpty passthrough gagal, stdin non-tty) → LS
+>    `GetUserStatus` **200 OK, `cascadeModelConfigData` terisi, `quotaInfo` NON-NIL per model, tanpa csrf, TANPA
+>    prompt (0 kuota)**. Skema: `clientModelConfigs[].quotaInfo.{remainingFraction float 0..1, resetTime ISO-8601 Z}`
+>    **per model** (reset window per-kelas-model: Gemini-fast frac≈0.37 reset 17:15Z vs premium Claude/GPT frac≈0.20
+>    reset 14:55Z) + `planInfo.{monthlyPromptCredits, monthlyFlowCredits}` + `availablePromptCredits/FlowCredits` +
+>    `userTier`/`availableCredits`. Respons memuat **PII (nama+email)** → feed redaksi ADR-013. **→ opsi #2 terbukti
+>    end-to-end; ADR-010 di-LOCK (Accepted).** node-pty prebuild Node 24 Win terverifikasi (de-risk ADR-003 M1).
+>    Residual (a/#1 freshness + c/#3 body-sukses) = impl-tuning M3, non-blocking.
 > 6. **(Baru, 3 Jul 2026)** Pantau Claude Code #13354 (auto-continue native) tiap sesi riset — kalau shipped,
 >    revisit positioning (§5c) & scope MVP. *(Re-cek 3 Jul dini hari: masih open, belum ada sinyal implementasi;
 >    CHANGELOG juga nihil auto-continue.)*

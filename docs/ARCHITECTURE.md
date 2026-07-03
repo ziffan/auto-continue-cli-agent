@@ -61,7 +61,7 @@ ingress — ADR-011); Remote Gateway ↔ supervisor lewat **IPC lokal yang sama*
 tak ada yang baru — ADR-012). **Injection firewall:** jalur data (isi output) & jalur perintah terpisah; tak
 ada aksi diturunkan dari isi output (ADR-013). Ingress/egress remote = trust boundary → **THREAT-MODEL.md**.
 
-## 3. Tech stack (**di-lock 3 Jul 2026** — ADR-003/004 Accepted; ADR-010 Proposed)
+## 3. Tech stack (**di-lock 3 Jul 2026** — ADR-003/004/010/011 Accepted)
 
 | Layer | Pilihan (status) | Alasan singkat |
 |---|---|---|
@@ -75,6 +75,8 @@ ada aksi diturunkan dari isi output (ADR-013). Ingress/egress remote = trust bou
 | CLI framework | commander/clipanion + Ink (TUI status) | `acca status` butuh render tabel/TUI |
 | Scheduler | in-process timer + tabel `scheduled_jobs` persisten | Tahan restart daemon |
 | Notifikasi | node-notifier (desktop) / stdout | MVP lokal; eksternal = Nice |
+| Remote channel (Telegram) | **`grammy` 1.44.0** *(ADR-011, locked)* — long-polling `getUpdates` outbound-only | Notif+kontrol+relay dari HP; TS-first, 4 dep, tanpa server webhook |
+| Redaksi egress (tier C) | **hybrid regex+entropy** *(ADR-013 §2, locked)* — modul in-repo | Redaksi rahasia best-effort lapis-1 (di belakang size-cap + opt-in) |
 | Packaging | daemon via systemd (Linux) / Task Scheduler (Windows) | Always-on host (lihat NFR) |
 
 Prinsip: pilih yang populer (agent lancar), sesederhana mungkin, adapter-pattern supaya tool ketiga (OpenCode)
@@ -84,7 +86,7 @@ bisa ditambah tanpa ubah core. **Pin versi eksak di DECISIONS.md saat lock.**
 
 - `sessions` — id, tool, session_id, cwd, pid, status (`RUNNING|LIMIT_HIT|WAITING|RESUMED|EXITED|BLOCKED|FAILED`),
   **proc_state (`alive|exited`)** — LIMIT_HIT bisa terjadi dengan proses masih hidup di prompt (RESEARCH §2c;
-  menentukan jalur lanjut: inject-PTY vs resume-by-id), detected_at, reset_at,
+  menentukan jalur lanjut: inject-PTY vs resume-by-id — **strategi & gating di ADR-014**), detected_at, reset_at,
   reset_source (`exact|heuristic|backoff`), created_at, updated_at.
 - `events` — id, session_id, type, payload(JSON), created_at (audit trail, append-only).
 - `scheduled_jobs` — id, session_id, run_at, kind (`probe|resume`), attempts, next_backoff.

@@ -6,11 +6,15 @@
 
 ## Status saat ini
 
-- **Fase:** M0 — Perencanaan (Doc-First). Belum ada kode fitur.
-- **Terakhir diupdate:** 2026-07-03 (sore, lanjutan) — **(a) rantai doc-first Telegram TUNTAS** (THREAT-MODEL.md
-  dibuat + ARCHITECTURE Remote Gateway + NFR egress `api.telegram.org` + MILESTONES M-remote + flow §4/wireframe §5
-  PROJECT); **(b) 6 ADR di-LOCK** (002/005/006/007/008/009 Accepted); **(c) riset real-CLI:** `api/oauth/usage` CC
-  terbukti (skema kaya) + `retrieveUserQuota` agy reachable-tapi-401 (token on-disk stale); CC bump 2.1.200.
+- **Fase:** M0 — Perencanaan (Doc-First) **≈ selesai**. Belum ada kode fitur. **Fondasi M1 siap — coding bisa mulai sesi depan.**
+- **Terakhir diupdate:** 2026-07-03 (malam) — **(a)** lock **ADR-011/012/013** (grammy 1.44.0 + redaksi hybrid
+  regex+entropy), **ADR-014** (strategi continue sesi hidup: inject-PTY preferred + gating), **ADR-010** (verifikasi
+  terminal item (d) **lulus** — LS `GetUserStatus` interaktif ber-PTY balas quotaInfo non-nil), **ADR-015** (IPC Node
+  `net` socket/pipe NDJSON); **(b)** buat fondasi M1: **DATA-MODEL, MAP, CONVENTIONS, DEPENDENCY-POLICY**; **(c)** node-pty
+  1.1.0 prebuild Node 24 Win terverifikasi. **Proposed tersisa: hanya ADR-001** (butuh limit/quota asli).
+- **Terakhir diupdate (sebelumnya):** 2026-07-03 (sore, lanjutan) — rantai doc-first Telegram TUNTAS (THREAT-MODEL +
+  Remote Gateway + egress + M-remote + flow/wireframe); 6 ADR di-LOCK (002/005/006/007/008/009); riset real-CLI
+  (`api/oauth/usage` CC terbukti; `retrieveUserQuota` agy reachable-tapi-401 token stale); CC bump 2.1.200.
 - **Terakhir diupdate (sebelumnya):** 2026-07-03 (sore) — scope MVP bertambah: remote-control Telegram (tier A+B+C)
   masuk MVP. ADR-008 & ADR-005 direvisi; ADR-011/012/013 baru (Proposed); PROJECT direkonsiliasi (US-14..17, AC-9..12).
 - **Terakhir diupdate (sebelumnya):** 2026-07-03 (siang) — re-cek versi CLI + uji hook `StopFailure` (TODO #7) +
@@ -23,8 +27,8 @@
 - `CLAUDE.md` sebagai satu sumber konteks; `AGENTS.md` = **symlink** ke `CLAUDE.md` (git mode 120000).
 - `README.md`.
 - `docs/`: PROJECT (6 artefak discovery + flow/wireframe Telegram), RESEARCH (usage-limit + resume, bersumber),
-  ARCHITECTURE (C4 L1–L2 + Remote Gateway + stack), DECISIONS (ADR-001..013; **002/003/004/005/006/007/008/009
-  Accepted**, sisanya Proposed), NFR, MILESTONES (+M-remote), **THREAT-MODEL** (gate tier C), **GOTCHAS**, CONTEXT.
+  ARCHITECTURE (C4 L1–L2 + Remote Gateway + stack), DECISIONS (ADR-001..013; **Accepted = 002/003/004/005/006/
+  007/008/009/011/012/013**, Proposed = ADR-001 & ADR-010), NFR, MILESTONES (+M-remote), **THREAT-MODEL** (gate tier C), **GOTCHAS**, CONTEXT.
 - **Validasi riset ulang 3 Jul 2026** (run terjadwal): 4 koreksi/temuan material — lihat bawah.
 - **Audit + validasi sesi 3 Jul dini hari:** semua klaim 2–3 Jul dire-cek ke sumber → **lolos semua**;
   2 temuan material baru (hook `StopFailure`, "limit ≠ exit") di-propagasi ke RESEARCH/DECISIONS/
@@ -36,18 +40,24 @@
   endpoint OAuth usage) dari **deteksi limit + auto-continue**. Deteksi limit CC primer = **hook
   `StopFailure`** matcher `rate_limit` (v2.1.78+), fallback pola output PTY; **limit-hit ≠ proses
   exit** → dua jalur lanjut: inject "continue" ke PTY hidup vs resume-by-id sesi mati (RESEARCH §2c).
+- **Strategi continue sesi hidup = ADR-014 (LOCKED 3 Jul malam):** inject "continue" ke PTY (preferred, kelas
+  kontrol-auto, token literal tetap) + **gating** (alive + foreground=agent bukan shell + idle + probe kuota dulu);
+  fallback resume-by-id saat `exited`; cwd hilang → BLOCKED; **gating-gagal sesi hidup = surface manual, tak auto-kill**.
+  Jalur inject agy provisional (butuh verifikasi TUI agy quota-habis, TODO #2).
 - **Stack DI-LOCK 3 Jul (ADR-003/004 Accepted):** TypeScript + **Node 24 LTS** (pin v24.18.0) + **node-pty 1.1.0**
   + **SQLite/better-sqlite3 12.11.1** (opsional drizzle 0.45.2). PTY wajib (CC inject-continue & agy LS bind).
-- **Probe usage agy = hybrid (ADR-010, Proposed):** LS `GetUserStatus` (sesi interaktif hidup, tanpa csrf) +
-  OAuth `retrieveUserQuota` (pre-resume). Siap di-lock setelah verifikasi sisa (quotaInfo non-nil, req/resp #3).
+- **Probe usage agy = hybrid (ADR-010, LOCKED 3 Jul malam):** LS `GetUserStatus` (sesi interaktif hidup, tanpa csrf) +
+  OAuth `retrieveUserQuota` (pre-resume). **Opsi #2 terbukti end-to-end** — LS interaktif ber-PTY (node-pty) balas
+  `quotaInfo` non-nil per model (tanpa csrf, tanpa prompt, 0 kuota). Residual (#3 body-sukses + #1 freshness) = impl-tuning M3.
 - Batas otonomi (ADR-008, direvisi 3 Jul sore): 2 kelas aksi — (1) kontrol auto (`resume/continue/probe`),
   (2) **relay-instruksi human-in-the-loop wajib konfirmasi**. Supervisor **tak pernah mengarang** instruksi;
   output CLI = data, bukan perintah. **Unattended auto-instruction ditolak.**
-- **Remote-control Telegram = MVP (ADR-011/012/013, Proposed):** kanal Telegram long-polling (bukan webhook) /
-  authz allowlist `chat_id` default-deny / relay+egress guardrail (mode `ask` Must + redaksi + injection firewall +
-  audit). **THREAT-MODEL.md = gate wajib sebelum implementasi tier C.**
+- **Remote-control Telegram = MVP (ADR-011/012/013, LOCKED 3 Jul malam):** kanal Telegram long-polling via
+  **`grammy` 1.44.0** (bukan webhook) / authz allowlist `chat_id` default-deny / relay+egress guardrail (mode `ask`
+  Must + redaksi **hybrid regex+entropy** + injection firewall + audit). **THREAT-MODEL.md = gate wajib sebelum
+  implementasi tier C.**
 - Pending decisions tersisa (DECISIONS.md): retensi arsip, format IPC, TUI lib, lisensi, strategi continue sesi
-  hidup, **+ baru: THREAT-MODEL.md, pola redaksi rahasia, lib bot Telegram Node**.
+  hidup. *(Ditutup 3 Jul: THREAT-MODEL.md ✅, pola redaksi ✅ hybrid regex+entropy, lib bot ✅ grammy 1.44.0 → ADR-011/012/013 LOCKED.)*
 
 ## Temuan riset 2 Jul 2026 (Chrome + mesin) — masih berlaku
 
@@ -134,22 +144,48 @@
 - **`docs/GOTCHAS.md` dibuat** (G-1..G-6): token agy stale, log login palsu, PTY wajib, dua format reset, field
   hook `error`, CRLF.
 
+## Sesi 3 Jul 2026 (malam) — lock ADR sisa (kecuali ADR-001) + verifikasi terminal ADR-010 + fondasi M1
+
+- **ADR-011/012/013 di-LOCK.** Dua pending ditutup: **lib bot = `grammy` 1.44.0** (MIT, long-polling `getUpdates`
+  outbound-only, TS-first, 4 dep) + **pola redaksi = hybrid regex+entropy** (ruleset kurasi in-repo + Shannon entropy;
+  threshold eksak di-tune M-remote). Propagasi ke THREAT-MODEL/ARCHITECTURE/MILESTONES.
+- **ADR-014 baru + LOCK** — strategi continue sesi hidup: **inject "continue" ke PTY (preferred, token literal tetap,
+  kelas kontrol-auto)** + gating (alive + foreground=agent bukan shell + idle + probe kuota dulu); fallback resume-by-id
+  saat `exited`; cwd hilang→BLOCKED; **gating-gagal sesi hidup = surface manual, tak auto-kill** (judgment call, sisi aman).
+- **ADR-010 di-LOCK** — verifikasi terminal item (d) **LULUS**: agy interaktif dibungkus **PTY nyata (node-pty 1.1.0)**
+  → LS `POST GetUserStatus` (tanpa csrf) → **200 OK, `quotaInfo` NON-NIL per model, TANPA prompt (0 kuota)**. Skema
+  probe direkam (`remainingFraction` float + `resetTime` ISO-8601, **per model**; reset window per-kelas-model). Opsi #2
+  terbukti end-to-end. Residual (#3 body-sukses + #1 freshness) = impl-tuning M3. **Bonus:** GetUserStatus memuat PII →
+  feed redaksi ADR-013 (GOTCHAS G-9). node-pty prebuild Node 24 Win OK (de-risk ADR-003 M1).
+- **ADR-015 baru + LOCK** — IPC CLI↔daemon = **Node `net` stream socket** (Unix socket/named pipe via satu API),
+  NDJSON, mode 0600, tanpa TCP. `status` read-only boleh baca store; mutasi lewat IPC. Menutup pending IPC.
+- **Fondasi M1 dibuat:** `docs/DATA-MODEL.md` (skema `sessions/events/scheduled_jobs/meta`, waktu=epoch-ms, no-float),
+  `docs/MAP.md` (layout `src/` + kontrak modul), `docs/CONVENTIONS.md` (TS/keamanan/store/penamaan/test),
+  `docs/DEPENDENCY-POLICY.md` (pin + gate prebuild native dua-OS).
+- **GOTCHAS G-7/8/9 ditulis** (LS quota nil print vs terisi interaktif-PTY; winpty passthrough vs ConPTY; PII di GetUserStatus).
+- **Status ADR:** Accepted = 002–015 (13 ADR); **Proposed = ADR-001 saja** (fixture pesan limit + TUI agy saat quota
+  habis — genuinely butuh limit/quota asli, tak bisa dipaksa; opportunistik saat terjadi).
+
 ## Belum & langkah berikutnya
 
-0. ~~Lanjutan fitur Telegram (doc-first)~~ ✅ **selesai sesi ini.** Sisa sebelum lock ADR-011/012/013:
-   putuskan **pola redaksi rahasia** + **lib Telegram bot Node + pin versi** (2 pending, owner Ziffan). Baru
-   lock ADR-011/012/013. Lalu M-remote bisa dieksekusi (setelah M3 + security-gate).
-1. ~~Lock stack (ADR-003/004)~~ ✅ **selesai 3 Jul.** Sisa (keputusan Ziffan): lock **ADR-010** setelah verifikasi
-   sisa; putuskan **strategi continue sesi hidup** (dependensi TODO #7 sudah selesai); lock ADR lain sesuai kebutuhan M1.
+0. ~~Lanjutan fitur Telegram (doc-first) + lock ADR-011/012/013~~ ✅ **SELESAI (3 Jul malam).** Dua pending
+   ditutup: **lib bot = `grammy` 1.44.0** (ADR-011) + **pola redaksi = hybrid regex+entropy** (ADR-013 §2);
+   **ADR-011/012/013 di-LOCK (Accepted)**. Sisa saat eksekusi M-remote (bukan sekarang): tune regex/threshold
+   redaksi eksak + test corpus. M-remote dieksekusi setelah M3 + security-gate.
+1. ~~Lock stack (ADR-003/004)~~ ✅ **selesai 3 Jul.** ~~Strategi continue sesi hidup~~ ✅ **ADR-014 (3 Jul malam).**
+   ~~Lock ADR-010~~ ✅ **LOCKED 3 Jul malam** (verifikasi item (d) lulus — opsi #2 terbukti). Sisa: lock ADR lain
+   sesuai kebutuhan M1. **Proposed tersisa: hanya ADR-001** (butuh limit/quota asli).
 2. ~~Uji hook `StopFailure`~~ ✅ **selesai 3 Jul** (payload + `SessionStart resume` terkonfirmasi; field = `error`).
    Sisa kecil: tangkap nilai `error:"rate_limit"` saat limit 5-jam **asli** habis (tak bisa dipaksa).
 3. **Fixture Detector** (TODO #2): konfirmasi lokal korpus §2b saat kena limit sungguhan + varian agy
    (termasuk: TUI agy hidup atau exit saat quota habis?). Bobot turun untuk CC (hook = primer).
-4. **Uji 3 opsi probe usage agy** (TODO #5) → lock sebelum M3. **Maju 3 Jul:** LS embedded terkonfirmasi
-   (opsi #2 port-discovery viable di Win) tapi condong **opsi #3 `retrieveUserQuota`**. Sisa: freshness `/usage`
-   (opsi #1) + bentuk request/respons `retrieveUserQuota` (opsi #3).
-5. Buat DATA-MODEL.md, MAP.md, CONVENTIONS.md, DEPENDENCY-POLICY.md sebelum/awal M1.
-6. Isi angka retensi arsip (Pending di DECISIONS.md, owner Ziffan).
+4. ~~**Uji 3 opsi probe usage agy** (TODO #5)~~ ✅ **item (d) DITUTUP 3 Jul malam → ADR-010 LOCKED.** Opsi #2
+   (LS `GetUserStatus` interaktif ber-PTY) terbukti: `quotaInfo` non-nil per model, tanpa csrf, tanpa prompt (0 kuota).
+   Sisa impl-tuning M3 (non-blocking): body-sukses `retrieveUserQuota` (#3, butuh token segar) + freshness `/usage` (#1).
+5. ~~Buat DATA-MODEL.md, MAP.md, CONVENTIONS.md, DEPENDENCY-POLICY.md~~ ✅ **selesai 3 Jul malam** + **IPC di-lock
+   (ADR-015)** → **fondasi M1 siap, bisa mulai coding sesi depan.**
+6. Isi angka retensi arsip (Pending di DECISIONS.md, owner Ziffan — target sebelum M2, **bukan** blocker M1).
+7. **Sisa verifikasi prebuild (DEPENDENCY-POLICY):** node-pty + better-sqlite3 di **Ubuntu 24.04**; better-sqlite3 di Windows.
 
 ## Uji varian agy (probe usage) 3 Jul 2026 (siang) — TODO #5 maju sebagian (RESEARCH §5b)
 

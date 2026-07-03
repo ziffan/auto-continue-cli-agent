@@ -84,7 +84,7 @@ memverifikasi mitigasi; kolom **Kontrol** = ADR sumber.
 |---|---|---|---|---|
 | T-D1 | Output PTY/transcript berisi rahasia dikirim → di-cache Telegram | **Egress guard:** redaksi pola rahasia + **size cap** (truncate, simpan penuh lokal) + **opt-in per sesi** (default: tidak stream) | ADR-013 §2 | AC-12 |
 | T-D2 | Kredensial upstream / bot token ikut ter-echo ke chat | Redaksi rahasia berlaku ke semua egress; kredensial hanya dibaca, tak pernah masuk jalur pesan | ADR-010/013 §2 | AC-12 |
-| T-D3 | Redaksi pola gagal menangkap rahasia (best-effort) | Lapis kedua: size cap + opt-in membatasi blast radius; pola redaksi = pending decision (regex/entropy) di-review sebelum M-remote | ADR-013 §2 | AC-12 |
+| T-D3 | Redaksi pola gagal menangkap rahasia (best-effort) | Lapis kedua: size cap + opt-in membatasi blast radius; pola redaksi = **hybrid regex+entropy** (ADR-013 §2, locked); regex/threshold eksak di-tune M-remote dgn test corpus | ADR-013 §2 | AC-12 |
 | T-D4 | Egress "nyasar" ke host selain Telegram (exfil) | **Whitelist egress**: hanya `api.telegram.org` untuk kanal ini (NFR §Security) | ADR-011 / NFR | AC-9 |
 
 ### Vektor 3 — Tampering / Elevation: injection→aksi via isi output agent
@@ -121,7 +121,8 @@ Kontrol §5 = gate dokumen ini sendiri.
 - **R-1 (diterima, MVP).** `chat_id` = kontrol-akses spoof-resistant, **bukan** kripto-auth. Cukup untuk
   single-user (ADR-006/012); multi-user v2 butuh model lebih kuat (mis. per-user secret / signed command).
 - **R-2 (dimitigasi berlapis).** Redaksi rahasia = best-effort pola → bisa lolos. Lapis kedua: size cap +
-  opt-in default-off. Pola redaksi final = **pending decision** (DECISIONS.md), di-review sebelum M-remote.
+  opt-in default-off. Pola redaksi = **hybrid regex+entropy** (ADR-013 §2, locked 3 Jul malam); regex/threshold
+  eksak + allowlist di-tune di M-remote dengan test corpus redaksi.
 - **R-3 (diterima, terdokumentasi).** Telegram meng-cache pesan → egress tak bisa ditarik balik. Karena itu
   egress tier C **opt-in per sesi**, bukan default.
 - **R-4 (terdokumentasi).** Long-polling butuh koneksi keluar persisten; kompromi mesin host = kompromi
@@ -133,11 +134,11 @@ Kontrol §5 = gate dokumen ini sendiri.
 
 Sebelum menulis kode tier B/C (M-remote):
 1. Dokumen ini **di-review** (owner: Ziffan × Claude) — ✅ ada.
-2. **Pola redaksi rahasia** diputuskan (pending DECISIONS.md) sebelum egress output diaktifkan.
-3. **Lib Telegram bot Node + pin versi** diputuskan (pending DECISIONS.md) di awal M-remote.
+2. **Pola redaksi rahasia** — ✅ **diputuskan** (hybrid regex+entropy, ADR-013 §2, locked 3 Jul malam);
+   regex/threshold eksak + allowlist di-tune di M-remote dengan test corpus.
+3. **Lib Telegram bot Node + pin versi** — ✅ **diputuskan** (`grammy` 1.44.0, ADR-011, locked 3 Jul malam).
 4. **security-review gate** dijalankan di akhir M-remote terhadap AC-9..AC-12 (skill `milestone-wrapup`).
-5. ADR-011/012/013 di-**lock** (Accepted) setelah rantai doc-first (ARCHITECTURE Remote Gateway + NFR
-   egress + MILESTONES M-remote) rampung — dokumen ini prasyaratnya.
+5. ADR-011/012/013 — ✅ **di-lock (Accepted)** 3 Jul malam setelah rantai doc-first rampung — dokumen ini prasyaratnya.
 
 ---
 
