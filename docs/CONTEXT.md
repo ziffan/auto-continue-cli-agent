@@ -7,9 +7,12 @@
 ## Status saat ini
 
 - **Fase:** M0 — Perencanaan (Doc-First). Belum ada kode fitur.
-- **Terakhir diupdate:** 2026-07-03 (sore) — **scope MVP bertambah: fitur remote-control Telegram (tier A+B+C)
-  masuk MVP atas keputusan user.** ADR-008 & ADR-005 direvisi; ADR-011/012/013 baru (Proposed); PROJECT
-  direkonsiliasi (US-14..17, AC-9..12). Prinsip pengikat: **human-in-the-loop, never autonomous**.
+- **Terakhir diupdate:** 2026-07-03 (sore, lanjutan) — **(a) rantai doc-first Telegram TUNTAS** (THREAT-MODEL.md
+  dibuat + ARCHITECTURE Remote Gateway + NFR egress `api.telegram.org` + MILESTONES M-remote + flow §4/wireframe §5
+  PROJECT); **(b) 6 ADR di-LOCK** (002/005/006/007/008/009 Accepted); **(c) riset real-CLI:** `api/oauth/usage` CC
+  terbukti (skema kaya) + `retrieveUserQuota` agy reachable-tapi-401 (token on-disk stale); CC bump 2.1.200.
+- **Terakhir diupdate (sebelumnya):** 2026-07-03 (sore) — scope MVP bertambah: remote-control Telegram (tier A+B+C)
+  masuk MVP. ADR-008 & ADR-005 direvisi; ADR-011/012/013 baru (Proposed); PROJECT direkonsiliasi (US-14..17, AC-9..12).
 - **Terakhir diupdate (sebelumnya):** 2026-07-03 (siang) — re-cek versi CLI + uji hook `StopFailure` (TODO #7) +
   uji varian agy LS/RPC live (TODO #5) + lock ADR-003/004 & draft ADR-010 + pass linearitas seluruh docs.
 
@@ -19,8 +22,9 @@
   (+ `.claude/settings.local.json` diignore per 3 Jul).
 - `CLAUDE.md` sebagai satu sumber konteks; `AGENTS.md` = **symlink** ke `CLAUDE.md` (git mode 120000).
 - `README.md`.
-- `docs/`: PROJECT (6 artefak discovery), RESEARCH (usage-limit + resume, bersumber), ARCHITECTURE
-  (C4 L1–L2 + stack), DECISIONS (ADR-001..010; **003/004 Accepted**, sisanya Proposed), NFR, MILESTONES, CONTEXT.
+- `docs/`: PROJECT (6 artefak discovery + flow/wireframe Telegram), RESEARCH (usage-limit + resume, bersumber),
+  ARCHITECTURE (C4 L1–L2 + Remote Gateway + stack), DECISIONS (ADR-001..013; **002/003/004/005/006/007/008/009
+  Accepted**, sisanya Proposed), NFR, MILESTONES (+M-remote), **THREAT-MODEL** (gate tier C), **GOTCHAS**, CONTEXT.
 - **Validasi riset ulang 3 Jul 2026** (run terjadwal): 4 koreksi/temuan material — lihat bawah.
 - **Audit + validasi sesi 3 Jul dini hari:** semua klaim 2–3 Jul dire-cek ke sumber → **lolos semua**;
   2 temuan material baru (hook `StopFailure`, "limit ≠ exit") di-propagasi ke RESEARCH/DECISIONS/
@@ -104,11 +108,37 @@
 - **Catatan:** scope MVP berubah tapi **tidak** dibuat HANDOFF_CONTEXT baru (proyek belum pakai konvensi itu; docs
   DECISIONS/PROJECT sudah menangkap penuh). Kalau sesi berikutnya mau, ini kandidat pertama HANDOFF_CONTEXT_v1.
 
+## Sesi 3 Jul 2026 (sore, lanjutan) — doc-first Telegram tuntas + lock 6 ADR + riset real-CLI
+
+- **Doc-first Telegram TUNTAS:** `docs/THREAT-MODEL.md` **baru** (aset, trust boundary, STRIDE 4 vektor,
+  matriks kontrol→AC-9..12, residual risk); ARCHITECTURE +container **Remote Gateway** & Telegram di C4 L1 &
+  §5 batas otonomi; NFR §Security +`api.telegram.org` (tutup doc-drift) +blok kontrol remote; MILESTONES
+  **M-remote** (tier A/B/C, security-gate); PROJECT flow §4 sub-flow remote + wireframe §5 mobile. Pass linearitas
+  (grep 8 file konsisten). **ADR-011/012/013 kini bisa di-lock** setelah 2 pending (pola redaksi + lib bot).
+- **6 ADR di-LOCK (Accepted, immutable):** ADR-002/005/006/007/008/009. Set minimal ADR lengkap-terkunci.
+  ADR-008: **prinsip** human-in-the-loop dikunci, **mekanisme** (ADR-011/012/013) tetap Proposed. Sengaja tetap
+  Proposed: ADR-001/010/011/012/013 (masih ada verifikasi terbuka).
+- **Riset real-CLI (jawab "test real cli cc & agy"):**
+  - ✅ **CC `api/oauth/usage`** (2.1.200): **200 OK** (Bearer dari `~/.claude/.credentials.json` +
+    `anthropic-beta: oauth-2025-04-20`). Skema **lebih kaya dari statusLine**: array `limits[]`
+    (`kind`/`severity`/`is_active`/`scope.model`), `resets_at` **ISO-8601** (bukan epoch), `spend.amount_minor`
+    integer. **Jalur monitor daemon-standalone CC terbukti** → perkuat ADR-001. **TODO #4 ditutup.**
+  - ⚠️ **agy `retrieveUserQuota`**: endpoint **reachable** (bukan 404) + request-shape valid, **tapi 401**
+    karena token on-disk **stale**. Temuan: **agy refresh token internal, `oauth_creds.json` tak ditulis ulang**
+    (GOTCHAS G-1). Konsekuensi lock ADR-010: opsi #3 butuh refresh via `oauth2.googleapis.com` (egress tambahan)
+    atau token dari LS sesi hidup. **Body-sukses ditunda ke M3 (keputusan user).**
+  - ⛔ **Blocked (bukan hari ini):** TODO #5d (`quotaInfo` LS interaktif — butuh PTY/M1), TODO #2/#7 (pesan
+    limit & `error:"rate_limit"` asli — butuh limit/quota benar-benar habis).
+- **CC update 2.1.199→2.1.200** (agy tetap 1.0.16): **tak ada perubahan spek-kritis** (StopFailure, statusLine,
+  resume, limit≠exit tetap; auto-continue native belum ada → risiko #4 aman). Disinkron ke RESEARCH §4c.
+- **`docs/GOTCHAS.md` dibuat** (G-1..G-6): token agy stale, log login palsu, PTY wajib, dua format reset, field
+  hook `error`, CRLF.
+
 ## Belum & langkah berikutnya
 
-0. **[BARU] Lanjutan fitur Telegram (doc-first):** tulis **THREAT-MODEL.md** (gate wajib tier C) → update
-   **ARCHITECTURE** (container Remote Gateway) → **NFR** (egress whitelist) → **MILESTONES** (M-remote) →
-   redraw flow §4 + wireframe §5 PROJECT. Baru sesudah itu ADR-011/012/013 bisa di-lock.
+0. ~~Lanjutan fitur Telegram (doc-first)~~ ✅ **selesai sesi ini.** Sisa sebelum lock ADR-011/012/013:
+   putuskan **pola redaksi rahasia** + **lib Telegram bot Node + pin versi** (2 pending, owner Ziffan). Baru
+   lock ADR-011/012/013. Lalu M-remote bisa dieksekusi (setelah M3 + security-gate).
 1. ~~Lock stack (ADR-003/004)~~ ✅ **selesai 3 Jul.** Sisa (keputusan Ziffan): lock **ADR-010** setelah verifikasi
    sisa; putuskan **strategi continue sesi hidup** (dependensi TODO #7 sudah selesai); lock ADR lain sesuai kebutuhan M1.
 2. ~~Uji hook `StopFailure`~~ ✅ **selesai 3 Jul** (payload + `SessionStart resume` terkonfirmasi; field = `error`).
