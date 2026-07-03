@@ -57,7 +57,7 @@ target via PTY (stdio); daemon ↔ store via SQL lokal; daemon ↔ transcript vi
 | Usage source (Claude Code) | statusLine JSON `rate_limits.{five_hour,seven_day}` (v2.1.80+) / endpoint OAuth usage | Jalur resmi/semi-resmi, hindari scraping |
 | Deteksi limit (Claude Code) | hook `StopFailure` matcher `rate_limit` (v2.1.78+) → pola output PTY → exit code (print-mode) | Event resmi ber-taxonomy (bedakan overload vs limit); scraping = fallback (RESEARCH §2c) |
 | Usage source (Antigravity) | fresh-launch `/usage` snapshot / LSP probe `GetUserStatus` / `retrieveUserQuota` (pending — DECISIONS) | `/usage` sesi hidup stale; referensi implementasi: CodexBar (RESEARCH §5b) |
-| Resume (Claude Code / Antigravity) | `claude --resume <id>` / `agy --conversation <id>` | Terverifikasi v2.1.198 / v1.0.15 |
+| Resume (Claude Code / Antigravity) | `claude --resume <id>` / `agy --conversation <id>` | Terverifikasi v2.1.199 / v1.0.16 |
 | Store | **SQLite** (better-sqlite3/Drizzle) | Single-user, offline-first, tidak butuh server |
 | CLI framework | commander/clipanion + Ink (TUI status) | `acca status` butuh render tabel/TUI |
 | Scheduler | in-process timer + tabel `scheduled_jobs` persisten | Tahan restart daemon |

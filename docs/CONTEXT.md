@@ -7,8 +7,8 @@
 ## Status saat ini
 
 - **Fase:** M0 — Perencanaan (Doc-First). Belum ada kode fitur.
-- **Terakhir diupdate:** 2026-07-03 dini hari (sesi interaktif: audit + validasi ulang seluruh docs;
-  Chrome MCP down → web_fetch docs resmi + GitHub, sesuai hierarki COWORK-TOOLING-NOTES).
+- **Terakhir diupdate:** 2026-07-03 (sesi interaktif: re-cek versi CLI terpasang + rapikan CONTEXT.
+  Sebelumnya dini hari: audit + validasi ulang seluruh docs via web_fetch docs resmi + GitHub).
 
 ## Sudah dikerjakan
 
@@ -38,7 +38,7 @@
 - Isu #18121 (fixed v2.1.80): usage Claude Code ada di statusLine JSON; skema `rate_limits.
   {five_hour,seven_day}.{used_percentage, resets_at}` terkonfirmasi (Pro/Max, pasca API-call pertama;
   `used_percentage` bisa pecahan).
-- Terpasang di mesin: Claude Code **2.1.198**, agy **1.0.15**, gemini 0.42.0 (RESEARCH §4c).
+- Terpasang di mesin: Claude Code **2.1.199**, agy **1.0.16**, gemini 0.42.0 (RESEARCH §4c).
 - Resume: `claude --resume <id>` / `agy --conversation <id>`; agy auto-print resume cmd saat exit.
 - Storage agy `~/.gemini/`: conversations = `<UUID>.pb` protobuf; tak ada cache usage lokal.
 
@@ -85,12 +85,21 @@
 5. Buat DATA-MODEL.md, MAP.md, CONVENTIONS.md, DEPENDENCY-POLICY.md sebelum/awal M1.
 6. Isi angka retensi arsip (Pending di DECISIONS.md, owner Ziffan).
 
+## Re-cek versi CLI 3 Jul 2026 (siang) — tak ada perubahan spek
+
+- Versi terpasang naik patch: Claude Code **2.1.198→2.1.199**, agy **1.0.15→1.0.16** (gemini 0.42.0 tetap).
+- Changelog keduanya diverifikasi (CC: cache lokal `changelog.md`; agy: GitHub releases). **Fakta spek-kritis
+  tetap:** StopFailure hook (≥2.1.78), skema statusLine `rate_limits` (≥2.1.80), limit≠exit, resume
+  (`--resume`/`--conversation`). **Auto-continue native belum ada** di CC → **risiko #4 belum terpicu.**
+- Koroboratif (bukan perubahan spek): CC 2.1.199 kini auto-retry **429 transient non-usage-limit** →
+  memperkuat taksonomi overload-vs-usage-limit (§2c); agy 1.0.16 juga menambah client-side retry transient.
+  Konsekuensi desain: Detector hanya trigger resume pada usage-limit asli, **jangan** pada 429 transient.
+- Angka versi disinkronkan ke RESEARCH §4c/§2/§6, ARCHITECTURE tabel resume, dan file ini.
+
 ## Catatan lingkungan
 
 - Cross-platform wajib: Ubuntu (daily) + Windows 11 (weekend). Node LTS di kedua OS.
 - Auto-resume butuh host always-on (kandidat: VPS / node headless LAN — lihat DECISIONS ADR-007).
-- Remote git: `origin` = https://github.com/ziffan/auto-continue-cli-agent.git (koreksi atas catatan
-  lama "belum ada remote"). Perubahan 3 Jul (run terjadwal + sesi dini hari) **belum di-commit** —
-  `git commit` menunggu perintah user, dijalankan user di terminal disk asli (COWORK-TOOLING-NOTES #6).
-- **`.git/index.lock` stale tertinggal** (0 byte, 3 Jul 01:17; sandbox tak boleh menghapus).
-  Hapus manual sebelum operasi git: PowerShell `Remove-Item -Force D:\PROYEK\auto-continue-cli-agent\.git\index.lock`.
+- Remote git: `origin` = https://github.com/ziffan/auto-continue-cli-agent.git. Perubahan 3 Jul (run
+  terjadwal + audit dini hari) **sudah di-commit** (`9c0c75e`). Perubahan sesi ini (re-cek versi + rapikan
+  CONTEXT) **belum di-commit** — `git commit` menunggu perintah user.

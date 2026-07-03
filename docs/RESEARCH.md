@@ -35,7 +35,7 @@ Data usage/rate-limit **SUDAH diekspos ke statusLine JSON** sejak Claude Code **
 Tiga sumber usage untuk Claude Code, dari paling resmi:
 
 1. **statusLine JSON (resmi, sejak v2.1.80).** **Skema persis terkonfirmasi** dari docs resmi
-   (code.claude.com/docs/en/statusline) + versi terpasang di mesin ini = **Claude Code 2.1.198**:
+   (code.claude.com/docs/en/statusline) + versi terpasang di mesin ini = **Claude Code 2.1.199**:
 
    ```json
    "rate_limits": {
@@ -160,7 +160,7 @@ aktual** sebelum resume, dan sediakan penjadwalan reset mingguan + backoff. Esti
 
 ## 4b. Antigravity CLI (AGY CLI) — resume sesi *(diverifikasi via `agy --help` di mesin, 2 Jul 2026)*
 
-**Terkonfirmasi dari binary terpasang `agy` v1.0.15** (mengoreksi tutorial pihak ketiga):
+**Terkonfirmasi dari binary terpasang `agy` v1.0.16** (mengoreksi tutorial pihak ketiga):
 
 - **`-c` / `--continue`** — Continue the **most recent** conversation. (Bukan resume-by-id!)
 - **`--conversation <ID>`** — Resume a previous conversation **by ID**. **Ini jalur scriptable supervisor**
@@ -219,13 +219,21 @@ belum di-lock (lihat DECISIONS.md Pending):
   (pengumuman developers.googleblog; diskusi gemini-cli#27274). Binary `gemini` 0.42.0 di mesin ini praktis
   legacy → fokus MVP ke agy makin tervalidasi.
 
-## 4c. Terpasang di mesin ini (snapshot 2 Jul 2026, Windows PC)
+## 4c. Terpasang di mesin ini (snapshot 2 Jul 2026, re-cek 3 Jul 2026, Windows PC)
 
 | Tool | Binary | Versi | Catatan |
 |---|---|---|---|
-| Claude Code | `C:\Users\ziffa\.local\bin\claude.exe` | **2.1.198** | ≥2.1.80 → `rate_limits` ada di statusLine JSON |
-| Antigravity CLI | `C:\Users\ziffa\AppData\Local\agy\bin\agy.exe` | **1.0.15** | ≥1.0.4 → `--conversation <id>` resume |
+| Claude Code | `C:\Users\ziffa\.local\bin\claude.exe` | **2.1.199** | ≥2.1.80 → `rate_limits` ada di statusLine JSON |
+| Antigravity CLI | `C:\Users\ziffa\AppData\Local\agy\bin\agy.exe` | **1.0.16** | ≥1.0.4 → `--conversation <id>` resume |
 | Gemini CLI | `...\npm\gemini.ps1` | 0.42.0 | terpisah; bukan target MVP |
+
+> **Re-cek versi 3 Jul 2026** (dari 2.1.198→**2.1.199** & agy 1.0.15→**1.0.16**, keduanya patch bump):
+> changelog kedua-nya diverifikasi **tak mengubah fakta spek-kritis** — StopFailure hook (≥2.1.78),
+> skema statusLine `rate_limits` (≥2.1.80), limit≠exit, dan resume (`--resume`/`--conversation`) **tetap**;
+> **auto-continue native belum ada** di CC (risiko #4 belum terpicu). Catatan koroboratif (bukan perubahan spek):
+> CC 2.1.199 kini **auto-retry 429 transient yang tak terkait usage-limit** → memperkuat taksonomi
+> overload-vs-usage-limit (§2c): Detector hanya boleh trigger resume pada usage-limit asli, bukan 429 transient.
+> agy 1.0.16 juga menambah client-side retry transient (bukan perubahan `/usage`/quota/resume).
 
 Claude Code resume flags terverifikasi: `-c/--continue` (sesi terakhir di cwd), `-r/--resume [id]`
 (picker/by-id), `--session-id <uuid>`, `--fork-session` (resume jadi id baru), `--from-pr`.
@@ -366,14 +374,14 @@ Utamakan **sumber primer** (docs resmi) di atas blog pihak ketiga — tanggal ce
 >
 > **TODO verifikasi berikutnya:**
 > 1. ~~Skema `rate_limits` statusLine JSON~~ ✅ **ditutup** (§2): `rate_limits.{five_hour,seven_day}.
->    {used_percentage, resets_at(epoch s)}`, Claude Code 2.1.198. Caveat: Pro/Max only, muncul pasca API-call pertama.
+>    {used_percentage, resets_at(epoch s)}`, Claude Code 2.1.199. Caveat: Pro/Max only, muncul pasca API-call pertama.
 > 2. Konfirmasi format persis **pesan/perilaku** saat sesi Claude Code & Antigravity CLI kena limit
 >    (untuk fixture Detector US-1) — **maju (3 Jul 2026):** korpus kandidat terkumpul di §2b dari komunitas;
 >    **masih perlu** tangkapan terminal sendiri untuk lock + varian Antigravity (belum ada korpus publiknya;
 >    sekalian catat: TUI agy tetap hidup atau exit saat quota habis? — §2c). Bobot TODO ini **turun** untuk
 >    Claude Code karena jalur deteksi primer kini hook `StopFailure` (§2c); fixture = fallback + agy.
 > 3. ~~Resume Antigravity CLI~~ ✅ **ditutup** (§4b): `agy --conversation <id>` (bukan `-c`) +
->    auto-printed resume cmd. Binary `agy` v1.0.15 terkonfirmasi.
+>    auto-printed resume cmd. Binary `agy` v1.0.16 terkonfirmasi.
 > 4. (Opsi) Verifikasi endpoint OAuth usage `api/oauth/usage` secara langsung — **ditunda**: butuh baca token
 >    dari kredensial (sensitif); statusLine JSON sudah cukup untuk MVP monitor.
 > 5. **(Baru, 3 Jul 2026)** Probe usage Antigravity: uji 3 opsi §4b di mesin sendiri — (a) freshness snapshot
