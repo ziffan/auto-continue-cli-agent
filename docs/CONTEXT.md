@@ -96,9 +96,15 @@
 - **Beda auth:** `--csrf_token` tak di argv; auth LS→upstream via **OAuth token source** (`~/.gemini/oauth_creds.json`,
   file ada). Csrf klien→LS belum terpecahkan. → **condong pilih opsi #3 `retrieveUserQuota`** (pakai oauth_creds)
   atau #1 fresh-launch, di atas #2, untuk lock pending decision.
-- **⚠️ Insidental:** sesi agy yg jalan saat uji (PID 4764) **"not logged into Antigravity"** — semua RPC gagal
-  token source. Perlu Ziffan cek: ada proses agy nyangkut/tak-login? (bukan blok riset, tapi anomali mesin.)
-- **Masih terbuka:** perilaku TUI agy saat **quota asli habis** (hidup vs exit) — butuh quota habis, tak bisa dipaksa.
+- **Fresh-launch oleh Claude (agy `-p`, PID 19528, `--log-file` ke scratchpad):** reproduktif — LS in-process
+  (PID==agy), dua port random (gRPC 55031 / HTTP 55032), **`server.go:2424] Auth succeeded`**, output `pong`
+  exit 0 → **mesin agy login NORMAL**. Flag `--log-file` bisa pin lokasi log; `--print-timeout` default 5m.
+- **KOREKSI (penting):** baris **"not logged into Antigravity" BUKAN indikator gagal-login** — muncul 26× saat
+  LS boot (race cache-refresh, ~12ms **sebelum** `Auth succeeded`) bahkan di sesi sehat. Sinyal auth andal =
+  **`server.go … Auth succeeded`**, bukan ada/tidaknya baris "not logged in". → Flag anomali PID 4764 sebelumnya
+  kemungkinan **salah baca** (tak sempat cek `Auth succeeded`); tak ada bukti mesin agy bermasalah.
+- **Masih terbuka:** perilaku TUI agy saat **quota asli habis** (hidup vs exit) — butuh quota habis, tak bisa dipaksa;
+  serta menerbitkan RPC `GetUserStatus` live ke port HTTP LS (butuh agy hidup + resolusi csrf) — belum dicoba.
 
 ## Uji hook `StopFailure` 3 Jul 2026 (siang) — TODO #7 ditutup (RESEARCH §2c)
 

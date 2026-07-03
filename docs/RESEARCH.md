@@ -315,9 +315,19 @@ Mekanisme mereka terdokumentasi di `docs/antigravity.md` (repo CodexBar) — dua
      alternatif parse baris `server.go` di log. **Terbukti bekerja.**
    - **Beda model auth (penting):** `--csrf_token` **tidak** ada di argv agy Windows (asumsi CodexBar
      batal di sini). Auth LS→upstream pakai **OAuth token source** dari `~/.gemini/oauth_creds.json`
-     (file **ada**, 1.8 KB); saat agy "not logged in", semua RPC gagal (*"error getting token source:
-     You are not logged into Antigravity"*). Jalur auth klien-lokal→LS (csrf) **belum terpecahkan**
-     (tak di argv; mungkin tak wajib untuk localhost / via handshake) — sisa TODO #5.
+     (file **ada**, 1.8 KB). Jalur auth klien-lokal→LS (csrf) **belum terpecahkan** (tak di argv; mungkin
+     tak wajib untuk localhost / via handshake) — sisa TODO #5.
+   - **✅ Reproduksi fresh-launch (Claude jalankan sendiri, 3 Jul siang):** `agy -p "…" --log-file <path>`
+     (PID 19528) → LS **in-process** (`server.go:1322] Starting language server process with pid 19528`;
+     `Language server version: 1.0.16`), dua port random (gRPC 55031 / HTTP 55032), **`server.go:2424]
+     Auth succeeded`**, output `pong` exit 0 → **login mesin NORMAL**; opsi #2 (LS lokal) **viable saat agy
+     login**. Flag berguna: `--log-file <path>` (pin lokasi log utk discovery port/auth bersih),
+     `--print-timeout` (default 5m).
+   - **⚠️ Nuansa deteksi auth (penting utk Detector):** baris *"error getting token source: You are not
+     logged into Antigravity"* **BUKAN** indikator gagal-login — muncul **26×** saat LS boot (race
+     cache-refresh, ~12 ms **sebelum** `Auth succeeded`) **bahkan di sesi sehat**. **Sinyal auth andal =
+     `server.go … Auth succeeded`** (atau kegagalan persisten tanpa pernah mencapainya), bukan ada/tidaknya
+     baris "not logged in".
    - Surface RPC internal terkonfirmasi di log: `fetchAdminControls`, `availableModels`, `userInfo`,
      `ListExperiments`, `load code assist response` — konsisten dgn adanya `GetUserStatus`/quota di LS yang sama.
    - **Implikasi pilihan probe:** opsi #2 (LS lokal) viable di Windows untuk *discovery port*, tapi
