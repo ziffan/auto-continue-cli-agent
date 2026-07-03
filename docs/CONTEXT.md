@@ -7,8 +7,9 @@
 ## Status saat ini
 
 - **Fase:** M0 — Perencanaan (Doc-First). Belum ada kode fitur.
-- **Terakhir diupdate:** 2026-07-03 (sesi interaktif: re-cek versi CLI terpasang + rapikan CONTEXT.
-  Sebelumnya dini hari: audit + validasi ulang seluruh docs via web_fetch docs resmi + GitHub).
+- **Terakhir diupdate:** 2026-07-03 (sesi interaktif: re-cek versi CLI + uji hook `StopFailure` (TODO #7) +
+  uji varian agy LS/RPC live (TODO #5) + **lock ADR-003/004 & draft ADR-010** + pass linearitas seluruh docs.
+  Sebelumnya dini hari: audit + validasi ulang seluruh docs).
 
 ## Sudah dikerjakan
 
@@ -17,7 +18,7 @@
 - `CLAUDE.md` sebagai satu sumber konteks; `AGENTS.md` = **symlink** ke `CLAUDE.md` (git mode 120000).
 - `README.md`.
 - `docs/`: PROJECT (6 artefak discovery), RESEARCH (usage-limit + resume, bersumber), ARCHITECTURE
-  (C4 L1–L2 + stack), DECISIONS (ADR-001..009, semua Proposed), NFR, MILESTONES, CONTEXT (file ini).
+  (C4 L1–L2 + stack), DECISIONS (ADR-001..010; **003/004 Accepted**, sisanya Proposed), NFR, MILESTONES, CONTEXT.
 - **Validasi riset ulang 3 Jul 2026** (run terjadwal): 4 koreksi/temuan material — lihat bawah.
 - **Audit + validasi sesi 3 Jul dini hari:** semua klaim 2–3 Jul dire-cek ke sumber → **lolos semua**;
   2 temuan material baru (hook `StopFailure`, "limit ≠ exit") di-propagasi ke RESEARCH/DECISIONS/
@@ -29,9 +30,12 @@
   endpoint OAuth usage) dari **deteksi limit + auto-continue**. Deteksi limit CC primer = **hook
   `StopFailure`** matcher `rate_limit` (v2.1.78+), fallback pola output PTY; **limit-hit ≠ proses
   exit** → dua jalur lanjut: inject "continue" ke PTY hidup vs resume-by-id sesi mati (RESEARCH §2c).
-- Stack usulan: TypeScript + Node LTS + node-pty + SQLite (semua masih Proposed, belum di-lock).
+- **Stack DI-LOCK 3 Jul (ADR-003/004 Accepted):** TypeScript + **Node 24 LTS** (pin v24.18.0) + **node-pty 1.1.0**
+  + **SQLite/better-sqlite3 12.11.1** (opsional drizzle 0.45.2). PTY wajib (CC inject-continue & agy LS bind).
+- **Probe usage agy = hybrid (ADR-010, Proposed):** LS `GetUserStatus` (sesi interaktif hidup, tanpa csrf) +
+  OAuth `retrieveUserQuota` (pre-resume). Siap di-lock setelah verifikasi sisa (quotaInfo non-nil, req/resp #3).
 - Batas otonomi: hanya resume/continue/probe whitelist; output CLI = data, bukan perintah.
-- Pending decisions bertabel owner + target di DECISIONS.md (baru: probe agy; strategi continue sesi hidup).
+- Pending decisions tersisa (DECISIONS.md): retensi arsip, format IPC, TUI lib, lisensi, strategi continue sesi hidup.
 
 ## Temuan riset 2 Jul 2026 (Chrome + mesin) — masih berlaku
 
@@ -76,7 +80,8 @@
 
 ## Belum & langkah berikutnya
 
-1. **Lock ADR** (Proposed → Accepted) — terutama stack (ADR-003/004) sebelum M1. (Keputusan Ziffan.)
+1. ~~Lock stack (ADR-003/004)~~ ✅ **selesai 3 Jul.** Sisa (keputusan Ziffan): lock **ADR-010** setelah verifikasi
+   sisa; putuskan **strategi continue sesi hidup** (dependensi TODO #7 sudah selesai); lock ADR lain sesuai kebutuhan M1.
 2. ~~Uji hook `StopFailure`~~ ✅ **selesai 3 Jul** (payload + `SessionStart resume` terkonfirmasi; field = `error`).
    Sisa kecil: tangkap nilai `error:"rate_limit"` saat limit 5-jam **asli** habis (tak bisa dipaksa).
 3. **Fixture Detector** (TODO #2): konfirmasi lokal korpus §2b saat kena limit sungguhan + varian agy

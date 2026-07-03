@@ -8,8 +8,10 @@
 ## M0 — Perencanaan (Doc-First) ← **fase sekarang**
 **Selesai bila:** `docs/` suite terisi (PROJECT, RESEARCH, ARCHITECTURE, DECISIONS, NFR, MILESTONES, CONTEXT);
 CLAUDE.md ≤200 baris + symlink AGENTS.md; repo + .gitignore.
-**Status:** hampir selesai (ADR masih Proposed — lock sebelum M1). Sisa verifikasi = butuh **terminal
-nyata**, bukan web: fixture pesan limit lokal + uji hook `StopFailure` + probe agy (RESEARCH §6 TODO #2/#5/#7).
+**Status:** hampir selesai. **Stack di-lock 3 Jul (ADR-003/004 Accepted)**; ADR-010 (probe hybrid) Proposed.
+Uji terminal 3 Jul: hook `StopFailure` (TODO #7) **selesai**, probe agy LS/RPC (TODO #5) **maju besar** (§5b).
+Sisa verifikasi (butuh **terminal nyata**/limit asli): fixture pesan limit lokal + `quotaInfo` non-nil LS interaktif
++ req/resp `retrieveUserQuota` (RESEARCH §6 TODO #2/#5).
 
 ## M1 — Fondasi + Process Wrapper
 **Slice:** `acca run -- <cli>` men-spawn CLI target via PTY, mencatat tool/session-id/cwd/pid ke SQLite,

@@ -210,8 +210,9 @@ user kehabisan kuota saat `/usage` masih menunjukkan 100%; angka baru benar sete
 Isu `/stats`/usage visibility juga masih dikeluhkan di repo resmi (antigravity-cli#46, open).
 
 **Implikasi desain (revisi 3 Jul 2026):** adapter Antigravity `resumeCmd(id)` → `agy --conversation <id>`
-(fallback: tangkap perintah auto-printed saat exit). `probeUsage()` Antigravity — tiga opsi, urutan preferensi
-belum di-lock (lihat DECISIONS.md Pending):
+(fallback: tangkap perintah auto-printed saat exit). `probeUsage()` Antigravity — **diputuskan hybrid di
+ADR-010 (Proposed 3 Jul): #2 LS `GetUserStatus` untuk sesi interaktif hidup + #3 `retrieveUserQuota` untuk
+pre-resume** (dasar uji §5b). Tiga opsi kandidat aslinya:
 1. **Fresh-launch probe:** spawn proses agy baru sesaat sebelum resume, baca snapshot `/usage` saat launch
    (satu-satunya momen snapshot di-refresh), lalu exit. Jangan kirim `/usage` ke sesi yang sudah lama hidup —
    datanya basi.

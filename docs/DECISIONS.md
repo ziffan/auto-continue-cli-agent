@@ -2,7 +2,8 @@
 
 > Format Nygard. ADR *Accepted* immutable — revisi = ADR baru yang men-supersede.
 > Status per ADR: **Proposed** (masih bisa berubah) / Accepted / Deprecated / Superseded.
-> Semua ADR di bawah masih **Proposed** — belum di-lock; ini fase perencanaan.
+> Status per 2026-07-03: **ADR-003 & ADR-004 = Accepted (locked)**; ADR-001/002/005–009 = Proposed;
+> ADR-010 = Proposed (draft). Accepted = immutable.
 
 Wajib ada (Bagian 2.2): monolith vs services · stack utama · auth · multi-tenancy · deployment ·
 data retention · **model routing policy** · **batas otonomi agent**.
@@ -48,20 +49,29 @@ hanya statusLine/hook (tak bisa deteksi sesi mati); scraping claude.ai (rapuh, d
 **Consequences:** (+) sederhana, mudah deploy sebagai service OS. (−) skalabilitas multi-node = kerja v2+.
 **Alternatives Rejected:** Services (over-engineering untuk skala ini).
 
-## ADR-003: TypeScript + Node.js LTS
-**Status:** Proposed
+## ADR-003: TypeScript + Node.js LTS + node-pty
+**Status:** **Accepted** (locked 2026-07-03) — *immutable; revisi = ADR baru yang men-supersede.*
 **Context:** Butuh kontrol proses/PTY, cross-platform (Ubuntu daily + Windows weekend), sejalan ekosistem user.
-**Decision:** TypeScript + Node.js LTS + `node-pty`.
-**Consequences:** (+) ekosistem PTY/CLI matang, agent lancar. (−) bukan single static binary seperti Go →
-mitigasi dengan packaging (pkg/SEA) bila perlu.
+Diperkuat uji empiris 3 Jul: **PTY terbukti wajib di dua sisi** — (a) Claude Code "inject continue" ke sesi
+interaktif hidup (limit ≠ exit, §2c), (b) Antigravity **hanya mem-bind language server saat ber-PTY** (interaktif
+tanpa TTY = 0 port; §5b) → probe usage #2 & continue keduanya butuh PTY nyata. `node-pty` = pustaka PTY lintas-OS
+paling matang di ekosistem Node.
+**Decision:** TypeScript + Node.js **LTS 24 ("Krypton")** + `node-pty`. **Versi ter-pin saat lock:**
+Node **24.x** (mesin lock: v24.18.0), `node-pty` **1.1.0**, TypeScript **5.x**. Pin eksak via lockfile
+(`package-lock.json`) di kedua OS; standarisasi Node 24 LTS via `.nvmrc` / `engines`.
+**Consequences:** (+) ekosistem PTY/CLI matang, agent lancar, satu bahasa untuk CLI+daemon. (−) bukan single
+static binary seperti Go → mitigasi packaging (pkg/SEA) bila perlu. (−) `node-pty` native (node-gyp/prebuild) →
+**wajib verifikasi prebuild untuk Node 24 di Win+Ubuntu** saat setup M1 (DEPENDENCY-POLICY).
 **Alternatives Rejected:** Go (binary bagus, tapi ekosistem PTY interaktif + kecepatan iterasi kurang cocok
 untuk user); Rust (overkill, iterasi lambat untuk solo part-time).
-**Catatan:** Pin versi eksak Node + node-pty saat lock.
 
 ## ADR-004: SQLite untuk state
-**Status:** Proposed
+**Status:** **Accepted** (locked 2026-07-03) — *immutable; revisi = ADR baru yang men-supersede.*
 **Context:** Single-user, offline-first, tak butuh server DB.
-**Decision:** SQLite (better-sqlite3, opsional Drizzle) untuk sessions/events/scheduled_jobs.
+**Decision:** SQLite via **`better-sqlite3`** (opsional `drizzle-orm`) untuk `sessions`/`events`/`scheduled_jobs`.
+**Versi ter-pin saat lock:** `better-sqlite3` **12.11.1**, `drizzle-orm` **0.45.2** (opsional). Native (node-gyp)
+→ verifikasi prebuild Node 24 Win+Ubuntu bersama node-pty (ADR-003). WAL mode; uang/kuota **bukan** float
+(pakai integer/desimal string — konsisten anti-pattern user).
 **Consequences:** (+) zero-config, portable, tahan restart. (−) bukan multi-writer lintas mesin (tak dibutuhkan MVP).
 **Alternatives Rejected:** Postgres (butuh server, berlebihan); file JSON (rawan korupsi, tak transaksional).
 
@@ -107,18 +117,43 @@ error ambigu), catat sebagai ADR baru dengan model + budget eksplisit.
 **Consequences:** (+) tak ada biaya/latensi/ketergantungan LLM di core. (−) deteksi bergantung pola/fixture.
 **Alternatives Rejected:** Pakai LLM untuk parsing error (mahal & non-deterministik untuk tugas yang bisa regex).
 
+## ADR-010: Strategi probe usage Antigravity — **hybrid** (LS `GetUserStatus` + OAuth `retrieveUserQuota`)
+**Status:** Proposed *(draft 2026-07-03; siap di-lock — verifikasi sisa di RESEARCH §6 TODO #5 sebelum Accepted)*
+**Context:** Antigravity tak punya cache usage lokal & `/usage` TUI-only + stale (RESEARCH §4b). Uji empiris 3 Jul
+(§5b) mengunci fakta jalur probe: `agy` CLI **meng-embed language server** saat ber-PTY (dua port random gRPC+HTTP;
+temukan via `Get-NetTCPConnection -OwningProcess <pid>`, **tanpa `lsof`, port tak di argv**). RPC
+`POST /exa.language_server_pb.LanguageServerService/GetUserStatus` (Connect-JSON) **terbukti jalan tanpa csrf** di
+localhost — **tapi** LS print-mode sesaat balas `GetCascadeModelConfigData() is nil` (quota belum terisi); quota
+hanya penuh di LS sesi interaktif ter-inisialisasi. Sinyal login andal = log `server.go … Auth succeeded` (baris
+"not logged into Antigravity" saat boot = transient, **bukan** gagal-login).
+**Decision:** **Dua jalur komplementer, dipilih per-konteks:**
+1. **Sesi interaktif agy yang hidup** (dibungkus supervisor via PTY) → **probe LS `GetUserStatus`** pada port
+   milik PID sesi itu (Connect-JSON, tanpa csrf) → `…quotaInfo.{remainingFraction, resetTime}` per model. Murah,
+   real-time, tak spawn proses baru.
+2. **Cek quota pre-resume / tak ada sesi hidup** → **OAuth `POST cloudcode-pa.googleapis.com/v1internal:
+   retrieveUserQuota`** dengan kredensial `~/.gemini/oauth_creds.json` (undocumented; dipakai CodexBar di produksi)
+   — tak bergantung LS/PTY. Fallback: fresh-launch snapshot `/usage` (opsi #1).
+**Least-privilege:** kredensial hanya dibaca (tak disalin/di-log); egress hanya ke host Google resmi (whitelist NFR).
+Token/csrf yang terlihat diperlakukan rahasia (redaksi di log).
+**Consequences:** (+) monitor akurat lintas-OS tanpa csrf-hack; (+) dua konteks (hidup vs pre-resume) tertangani.
+(−) dua adapter dirawat; (−) opsi #2 butuh PTY hidup; opsi #3 pakai endpoint undocumented (rawan berubah) → butuh
+guard + fallback. **Sisa verifikasi sebelum Accepted (TODO #5):** konfirmasi `quotaInfo` non-nil dari LS sesi
+interaktif nyata; bentuk req/resp `retrieveUserQuota`; freshness `/usage`.
+**Alternatives Rejected:** Hanya `/usage` (stale, TUI-only); hanya spawn print-mode utk GetUserStatus (quota nil —
+terbukti); scraping TUI (rapuh); parsing transcript `.pb` protobuf (tak praktis, RESEARCH §4d).
+
 ---
 
 ## Pending decisions (belum diputuskan)
 
 | Keputusan | Owner | Target |
 |---|---|---|
-| Retensi arsip transcript/sesi (berapa lama sebelum purge; sejalan "no hard delete + retention") | Ziffan | sebelum lock ADR-004 |
+| Retensi arsip transcript/sesi (berapa lama sebelum purge; sejalan "no hard delete + retention") — *nilai konfigurasi, tak mengubah engine ADR-004* | Ziffan | sebelum M2 (impl arsip) |
 | Format IPC CLI ↔ daemon (unix socket vs named pipe vs HTTP localhost) | Ziffan | awal M1 |
 | TUI library final (Ink vs blessed) untuk `acca status` | Ziffan | sebelum M4 |
 | Lisensi repo (MIT vs proprietary) — terkait rencana komersialisasi | Ziffan | sebelum publik |
-| **Mekanisme probe usage Antigravity** (fresh-launch `/usage` vs LSP probe vs `retrieveUserQuota`) — tergantung hasil uji RESEARCH §6 TODO #5 | Ziffan | sebelum M3 |
-| **Strategi continue sesi interaktif yang masih hidup** (inject "continue" ke PTY vs kill→resume-by-id; kebijakan default + gating) — tergantung uji hook `StopFailure` (RESEARCH §6 TODO #7) | Ziffan | sebelum M3 |
+| ~~Mekanisme probe usage Antigravity~~ → **diputuskan: ADR-010 (hybrid)**, tinggal verifikasi sisa sebelum Accepted | — | — |
+| **Strategi continue sesi interaktif yang masih hidup** (inject "continue" ke PTY vs kill→resume-by-id; kebijakan default + gating) — *dependensi uji hook `StopFailure` (TODO #7) sudah **selesai** 3 Jul; siap diputuskan* | Ziffan | sebelum M3 |
 
 ## Change Log
 
@@ -127,3 +162,4 @@ error ambigu), catat sebagai ADR baru dengan model + budget eksplisit.
 | 2026-07-02 | ADR-001..009 draft (Proposed); ADR-001 direvisi pasca temuan statusLine v2.1.80. |
 | 2026-07-03 | ADR-001 (masih Proposed) direvisi: opsi probe Antigravity diperluas + catatan `/usage` stale & tak ada exit code khusus rate-limit (run riset terjadwal — RESEARCH §2b/§4b/§5b–c). Pending decisions diberi owner+target; tambah pending probe Antigravity. |
 | 2026-07-03 (dini hari) | ADR-001 (masih Proposed) direvisi lagi: deteksi limit CC primer = **hook `StopFailure`** matcher `rate_limit` (v2.1.78+); eksplisitkan **limit-hit ≠ proses exit** → dua jalur lanjut (inject-PTY vs resume-by-id). Tambah pending: strategi continue sesi hidup. (Sesi interaktif — RESEARCH §2c.) |
+| 2026-07-03 (siang) | **ADR-003 & ADR-004 di-LOCK (Accepted)** — stack TS+Node 24 LTS+node-pty (versi ter-pin) & SQLite/better-sqlite3; diperkuat uji empiris PTY-wajib (§2c/§5b). **ADR-010 baru (Proposed)**: strategi probe usage Antigravity **hybrid** (LS `GetUserStatus` sesi hidup + OAuth `retrieveUserQuota` pre-resume) — dasar uji RPC live §5b. Pending probe ditutup→ADR-010; baris retensi di-retarget (ADR-004 sudah lock); dependensi continue-strategy (TODO #7) ditandai selesai. |
