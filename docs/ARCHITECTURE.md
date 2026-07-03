@@ -12,17 +12,21 @@
         │  Orchestrator│                                      └──────────────────┘
         │  (user)      │ ── `acca run/status/log` ─┐          ┌──────────────────┐
         └─────────────┘                            │          │  Antigravity CLI │
-               ▲                                    ▼          └──────────────────┘
-               │ notifikasi              ┌───────────────────────┐   spawn/monitor  ▲
-               └─────────────────────────│  auto-continue-cli    │──────────────────┘
-                                         │  -agent (supervisor)  │
-                                         └───────────────────────┘
-                                                   │ baca
-                                                   ▼
-                                    transcript JSONL + output CLI
+          ▲    ▲                                    ▼          └──────────────────┘
+   notif  │    │ notif+kontrol+       ┌───────────────────────┐   spawn/monitor  ▲
+  lokal   │    │ relay (via Telegram) │  auto-continue-cli    │──────────────────┘
+          └────┼──────────────────────│  -agent (supervisor)  │
+               │                      └───────────────────────┘
+               │ getUpdates/sendMessage   │ baca      │ egress probe
+               ▼ (outbound-only)          ▼           ▼
+        ┌──────────────────┐    transcript JSONL    api.anthropic.com /
+        │  api.telegram.org │    + output CLI        cloudcode-pa.googleapis.com
+        └──────────────────┘                         (usage probe, ADR-010)
 ```
 
-Sistem = satu kotak (supervisor). External: user, dua CLI agent, filesystem transcript, channel notifikasi.
+Sistem = satu kotak (supervisor). External: user, dua CLI agent, filesystem transcript, channel notifikasi
+lokal, **Telegram (`api.telegram.org`)** sebagai kanal remote (notif keluar + kontrol/relay masuk, long-polling
+outbound-only — ADR-011), endpoint usage provider (probe, ADR-010). Trust boundary remote + ancaman: **THREAT-MODEL.md**.
 
 ## 2. C4 — Level 2: Container
 
@@ -39,7 +43,12 @@ auto-continue-cli-agent
 │   ├── Usage Probe          — cek kuota tersedia (Claude Code: statusLine JSON / endpoint OAuth
 │   │                          usage; Antigravity: fresh-launch /usage | LSP probe | retrieveUserQuota
 │   │                          — pilihan pending, RESEARCH §4b) — per adapter
-│   └── Notifier             — desktop/CLI (MVP); channel eksternal (Nice)
+│   └── Notifier             — desktop/CLI (MVP); Telegram outbound (tier A, via Remote Gateway); eksternal lain (Nice)
+├── Remote Gateway           — kanal Telegram (ADR-011/012/013; MVP tier A+B+C). Guardrail: THREAT-MODEL.md
+│   ├── Notifier egress       — kirim notif transisi status ke `chat_id` sah (tier A); redaksi+size-cap utk output (tier C)
+│   ├── Command listener       — long-polling `getUpdates` (outbound-only); parse perintah kontrol (tier B)
+│   ├── Authz                  — allowlist `chat_id` default-deny, per-command, rate-limit per sender (ADR-012)
+│   └── Confirm gate           — queue instruksi → echo → `/confirm <token>` → inject PTY (human-in-the-loop, ADR-013)
 ├── Adapters                 — abstraksi per-tool (claude-code, antigravity)
 │   └── kontrak: detectLimit(), parseReset(), resumeCmd(cwd,id), probeUsage()
 └── Store (SQLite)          — sesi, event log, timer terjadwal, arsip transcript ref
@@ -47,6 +56,10 @@ auto-continue-cli-agent
 
 Protokol antar-kotak: CLI ↔ daemon via IPC lokal (socket/named pipe) atau invoke langsung; daemon ↔ CLI
 target via PTY (stdio); daemon ↔ store via SQL lokal; daemon ↔ transcript via filesystem read-only.
+**Remote Gateway ↔ Telegram** via HTTPS long-polling (outbound-only ke `api.telegram.org`, tak buka port
+ingress — ADR-011); Remote Gateway ↔ supervisor lewat **IPC lokal yang sama** seperti CLI (otoritas identik,
+tak ada yang baru — ADR-012). **Injection firewall:** jalur data (isi output) & jalur perintah terpisah; tak
+ada aksi diturunkan dari isi output (ADR-013). Ingress/egress remote = trust boundary → **THREAT-MODEL.md**.
 
 ## 3. Tech stack (**di-lock 3 Jul 2026** — ADR-003/004 Accepted; ADR-010 Proposed)
 
@@ -78,9 +91,15 @@ bisa ditambah tanpa ubah core. **Pin versi eksak di DECISIONS.md saat lock.**
 
 Tidak ada hard delete: sesi selesai diarsipkan, bukan dihapus (retensi — sejalan anti-pattern user).
 
-## 5. Batas otonomi & keamanan (ringkas — ADR di DECISIONS.md)
+## 5. Batas otonomi & keamanan (ringkas — ADR di DECISIONS.md; threat model remote di THREAT-MODEL.md)
 
-- Supervisor **hanya** me-resume sesi yang sudah ada; tidak menyusun prompt baru otonom.
-- Output CLI/transcript = **data**, bukan perintah (proteksi prompt-injection).
-- Least-privilege: adapter hanya boleh perintah resume/probe yang whitelisted per tool.
-- Tidak menyimpan kredensial; pakai sesi login mesin yang ada.
+- **Human-in-the-loop, never autonomous** (ADR-008). Dua kelas aksi: (1) kontrol auto (`resume/continue/probe`
+  sesi yang sudah ada, di cwd tercatat) — boleh tanpa konfirmasi; (2) **relay-instruksi** user via kanal
+  terotorisasi (Telegram) — **wajib konfirmasi eksplisit** (mode `ask` = Must). Supervisor **tak pernah**
+  mengarang instruksi; ia me-relay + jadi gerbang konfirmasi.
+- Output CLI/transcript = **data**, bukan perintah (injection firewall — tak ada aksi diturunkan dari isinya, ADR-013).
+- Least-privilege: adapter hanya boleh perintah resume/probe yang whitelisted per tool; perintah remote hanya
+  dari `chat_id` allowlist (default-deny, ADR-012).
+- Tidak menyimpan kredensial **akun**; pakai sesi login mesin yang ada. Bot token Telegram = infra-secret di
+  `.env` gitignored (ADR-005/011), **bukan** kredensial akun.
+- Egress whitelist eksplisit (NFR §Security): usage provider + localhost + `api.telegram.org`. Tak ada egress lain.

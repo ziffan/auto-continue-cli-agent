@@ -200,6 +200,40 @@ Cabang error:
 - **Working directory asli hilang/berubah** → jangan resume di tempat salah; status `BLOCKED`, notifikasi.
 - **Supervisor sendiri restart** → recover state terjadwal dari store, lanjutkan timer yang belum jatuh tempo.
 
+### Alur remote-control Telegram (MVP tier A+B+C — ADR-011/012/013; threat model: THREAT-MODEL.md)
+
+Berbagi satu bot Telegram (long-polling, outbound-only ke `api.telegram.org`). Prinsip:
+**human-in-the-loop, never autonomous.**
+
+```
+A. NOTIF KELUAR (tier A):
+   transisi status (LIMIT_HIT/RESUMED/FAILED) → Notifier kirim pesan ke chat_id terotorisasi.
+
+B. KONTROL MASUK (tier B):
+   getUpdates → pesan masuk
+   ├─ chat_id DI allowlist?  ── tidak ─▶ DROP + audit (events). Selesai.
+   └─ ya → perintah ∈ whitelist {status, resume-now <id>, cancel <id>}?
+           ├─ ya  → eksekusi via IPC yang sama seperti CLI lokal → balas hasil. Audit.
+           └─ tidak → tolak ("perintah tak dikenal"). Audit.
+
+C. RELAY-INSTRUKSI (tier C — wajib gerbang konfirmasi):
+   instruksi dari chat_id terotorisasi
+   → QUEUE + echo balik ke user ("akan inject: «…», balas /confirm <token>")
+   → user balas /confirm <token>?
+     ├─ ya  → inject ke PTY sesi (gating foreground+idle). Audit tiap langkah.
+     └─ tidak / timeout → BUANG dari queue, tak ada inject. Audit.
+   * Tanpa konfirmasi TAK ADA inject. Isi output agent = data, tak pernah jadi perintah (injection firewall).
+
+D. LIHAT OUTPUT (tier C — egress sensitif, opt-in):
+   sesi di-opt-in stream? ── tidak ─▶ tolak (default tak stream).
+   └─ ya → ambil cuplikan → REDAKSI rahasia + SIZE-CAP → label "data tak tepercaya" → kirim.
+```
+
+Cabang error remote:
+- **Sender tak terotorisasi** → drop + audit; tak pernah eksekusi (default-deny, ADR-012).
+- **Token konfirmasi kadaluarsa/salah** → instruksi tetap di queue/dibuang; tak ada inject (ADR-013).
+- **Egress non-Telegram terdeteksi** → blokir (whitelist egress, NFR §Security).
+
 ---
 
 ## 5. Wireframe low-fi (CLI)
@@ -227,6 +261,31 @@ Catatan: angka usage adalah **best-effort** (lihat RESEARCH.md — header tidak 
 tampilkan indikator "perkiraan" bila sumbernya heuristik, bukan data pasti. Loading/empty/error state
 wajib eksplisit (mis. "belum ada sesi termonitor", "gagal baca usage — tampilkan terakhir diketahui").
 
+Interaksi Telegram (mobile) — tier A notif + tier B/C kontrol (ADR-011/012/013):
+
+```
+┌─ acca-bot ───────────────── 03:15 ─┐   ┌─ acca-bot ───────────────── 03:16 ─┐
+│                                    │   │                                    │
+│  🤖  #c3d4 claude ~/proj/chunklab  │   │  🧑  resume-now c3d4               │   ← tier B (whitelist)
+│      LIMIT_HIT → resume ~03:15 WIB │   │                                    │
+│                          (tier A)  │   │  🤖  ✓ #c3d4 RESUMED 03:16 (auto)  │
+│                                    │   │                                    │
+│  🤖  ✓ #c3d4 RESUMED 03:16 (auto)  │   │  🧑  send c3d4: "jalankan test"    │   ← tier C (relay)
+│                                    │   │  🤖  ⚠ Akan inject ke #c3d4:        │
+│  ────────────────────────────────  │   │      «jalankan test»               │
+│  [ status ]  [ resume-now ]        │   │      Balas /confirm 7f3a utk lanjut │   ← gerbang konfirmasi
+│  [ cancel ]                        │   │  🧑  /confirm 7f3a                  │
+│                                    │   │  🤖  ↪ ter-inject. (audit: events) │
+│  ┌──────────────────────────────┐  │   │                                    │
+│  │ ketik perintah…              │  │   │  🚫 pengirim tak dikenal → di-drop │   ← default-deny
+│  └──────────────────────────────┘  │   │     + audit (tak terlihat user)    │
+└────────────────────────────────────┘   └────────────────────────────────────┘
+```
+
+Catatan Telegram: **tanpa `/confirm` tak ada inject** (human-in-the-loop). Cuplikan output (tier C) hanya
+tampil bila sesi di-**opt-in**, sudah **diredaksi** + **size-capped**, diberi label "data tak tepercaya".
+Pesan dari `chat_id` tak terotorisasi **tak pernah** membuahkan aksi (di-drop + di-audit, senyap).
+
 ---
 
 ## 6. Acceptance Criteria (ringkas — melekat ke story)
@@ -247,7 +306,8 @@ Checklist test milestone (detail Given/When/Then ada di tiap story §3):
 - [ ] AC-12 Output ke Telegram teredaksi rahasia + size-capped + opt-in; **tak ada aksi diturunkan dari isi output** (injection firewall). (US-16, ADR-013)
 
 > Catatan: AC-9..AC-12 diuji di **M-remote** dengan **security-review gate**; prasyarat **THREAT-MODEL.md** (ADR-013 §5).
-> Flow §4 & wireframe §5 (interaksi Telegram) + container Remote Gateway (ARCHITECTURE) menyusul sesi berikutnya.
+> Flow §4 (sub-flow remote-control) & wireframe §5 (interaksi Telegram) + container Remote Gateway (ARCHITECTURE)
+> + THREAT-MODEL.md **sudah dibuat 3 Jul (sore, lanjutan)**. Sisa: putuskan pola redaksi + lib bot → lock ADR-011/012/013.
 
 ---
 
@@ -258,3 +318,4 @@ Checklist test milestone (detail Given/When/Then ada di tiap story §3):
 | 2026-07-02 | Draft awal (6 artefak discovery Bagian 2.1). | Ziffan × Claude |
 | 2026-07-03 | US-1 + flow §4 direvisi pasca temuan hook `StopFailure` & nuansa "limit-hit ≠ proses exit": sumber sinyal deteksi diperluas, langkah 9 bercabang inject-PTY (proses hidup) vs resume-by-id (proses mati). (RESEARCH §2c) | Claude (validasi sesi 3 Jul) |
 | 2026-07-03 (sore) | **Fitur remote-control Telegram masuk MVP (tier A+B+C, keputusan user).** Batasan §1 diksi ulang (human-in-the-loop, never autonomous); US-5 rujuk Telegram; **US-14..US-17 baru (Must)** — notif/kontrol/lihat-output/instruksi-ber-konfirmasi; US-6 mode `ask` naik Must utk relay-instruksi; US-9 Telegram→US-14 (ntfy/email tetap Nice); AC-9..AC-12 baru. Dasar: ADR-008 (revisi) + ADR-011/012/013 (baru). Flow/wireframe/ARCHITECTURE/NFR/MILESTONES/THREAT-MODEL = sesi berikutnya. | Ziffan × Claude |
+| 2026-07-03 (sore, lanjutan) | **Flow §4 sub-flow remote-control** (notif→kontrol→confirm gate→inject; cabang error remote) + **wireframe §5 interaksi Telegram (mobile)** ditambahkan, selaras ADR-011/012/013. (Rantai doc-first Telegram: THREAT-MODEL.md dibuat + ARCHITECTURE Remote Gateway + NFR egress `api.telegram.org` + MILESTONES M-remote — lihat DECISIONS change log.) | Ziffan × Claude |

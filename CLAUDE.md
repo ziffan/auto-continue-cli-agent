@@ -35,6 +35,7 @@ Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file 
 | Fakta usage-limit & resume kedua CLI + sumber | `docs/RESEARCH.md` |
 | C4, container map, tech stack | `docs/ARCHITECTURE.md` |
 | Keputusan arsitektur (ADR, locked/pending) | `docs/DECISIONS.md` |
+| Threat model remote Telegram (ingress/egress/injection) + kontrol→AC | `docs/THREAT-MODEL.md` |
 | Target non-fungsional terukur | `docs/NFR.md` |
 | Rencana milestone (vertical slice) | `docs/MILESTONES.md` |
 | Peta folder + konvensi kode | `docs/MAP.md`, `docs/CONVENTIONS.md` |

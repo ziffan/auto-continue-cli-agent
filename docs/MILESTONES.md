@@ -39,6 +39,22 @@ probe → resume di cwd benar (uji juga kasus cwd hilang → BLOCKED).
 (usage best-effort + indikator "perkiraan" + loading/empty/error state); `acca log`.
 **Selesai bila:** AC-4, AC-5 lulus; UX states eksplisit teruji.
 
+## M-remote — Remote-control Telegram (tier A+B+C)
+**Slice (bertahap per tier, satu kanal Telegram — ADR-011):**
+- **Tier A (egress-only):** Notifier kirim notif transisi (LIMIT_HIT/RESUMED/FAILED) ke `chat_id`
+  terotorisasi via long-polling bot (outbound-only ke `api.telegram.org`). (US-14)
+- **Tier B (kontrol masuk):** command listener + Authz allowlist `chat_id` default-deny; perintah
+  whitelist `status`/`resume-now <id>`/`cancel <id>`; sender tak sah di-drop+audit; rate-limit. (US-15)
+- **Tier C (egress sensitif + relay ber-konfirmasi):** lihat output (redaksi rahasia + size-cap +
+  opt-in per sesi) + kirim instruksi lewat Confirm gate (queue→echo→`/confirm <token>`→inject PTY);
+  injection firewall (isi output = data, tak jadi aksi). (US-16, US-17)
+**Selesai bila:** **AC-9..AC-12 lulus** + **security-review gate** (skill `milestone-wrapup`) terhadap
+keempatnya. Uji khusus: test injection (payload di output tak memicu aksi), test redaksi (pola rahasia
+ter-redaksi), test authz (sender tak sah ditolak+audit), test konfirmasi (tanpa `/confirm` tak ada inject).
+**Dependensi (gate ADR-013 §5):** **THREAT-MODEL.md** (✅ ada) di-review; **pola redaksi rahasia** &
+**lib Telegram bot Node + pin versi** diputuskan (pending DECISIONS.md) sebelum mulai; butuh Notifier (M4).
+**Catatan:** ini milestone paling sensitif — tak dimulai sebelum tier prasyaratnya hijau dan gate terpenuhi.
+
 ## M5 — Hardening + Deploy sebagai service
 **Slice:** jalankan daemon sebagai systemd (Linux) / Task Scheduler (Windows); security pass
 (least-privilege whitelist, audit events); dokumentasi user + install.
@@ -54,5 +70,6 @@ probe → resume di cwd benar (uji juga kasus cwd hilang → BLOCKED).
 ## Urutan dependency dokumen (Bagian 2.6)
 
 PROJECT → ARCHITECTURE (+DECISIONS) → DATA-MODEL/CONTRACTS → NFR/CAPACITY/FAILURE/SECURITY → MILESTONES → MAP+CONVENTIONS.
+File yang sudah dibuat untuk gate remote: **THREAT-MODEL.md** (✅ 3 Jul — gate wajib tier C, ADR-013 §5).
 File yang **belum** dibuat (menyusul saat dibutuhkan): DATA-MODEL.md, FAILURE-MODES.md, SECURITY.md,
 DEPENDENCY-POLICY.md, MAP.md, CONVENTIONS.md.
