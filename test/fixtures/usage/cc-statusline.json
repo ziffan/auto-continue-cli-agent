@@ -1,0 +1,8 @@
+{
+  "model": { "id": "claude-sonnet-4-5", "display_name": "Sonnet 4.5" },
+  "exceeds_200k_tokens": false,
+  "rate_limits": {
+    "five_hour": { "used_percentage": 23.5, "resets_at": 1738425600 },
+    "seven_day": { "used_percentage": 67, "resets_at": 1738857600 }
+  }
+}

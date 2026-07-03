@@ -1,0 +1,25 @@
+{
+  "userStatus": {
+    "name": "Ziffan Testuser",
+    "email": "ziffan.test@example.com",
+    "userTier": "PRO",
+    "availableCredits": 120,
+    "planInfo": { "monthlyPromptCredits": 500, "monthlyFlowCredits": 200 },
+    "cascadeModelConfigData": {
+      "clientModelConfigs": [
+        {
+          "model": "claude-sonnet-4-5",
+          "quotaInfo": { "remainingFraction": 0.8, "resetTime": "2026-07-03T14:55:00.000Z" }
+        },
+        {
+          "model": "gemini-2.5-flash",
+          "quotaInfo": { "remainingFraction": 0.63, "resetTime": "2026-07-03T17:15:00.000Z" }
+        },
+        {
+          "model": "gemini-2.5-pro-broken",
+          "planInfo": { "note": "no quotaInfo on this config — must be skipped" }
+        }
+      ]
+    }
+  }
+}

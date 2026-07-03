@@ -6,11 +6,25 @@
 
 ## Status saat ini
 
-- **Fase:** **M3 sedang berjalan (dipecah jadi slice).** M3a (Daemon+IPC+orphan) ✅ · **M3b (Scheduler) ✅** —
-  keduanya tier-reviewed & merge `main`. Berikutnya slice M3: **M3c Usage-Probe parser** → M3d Continue-logic
-  (di sini scheduler + detector + probe di-wire ke daemon; jalur inject/resume live = butuh keputusan/limit asli).
-  **Hard-stop** di jalur yang butuh limit asli / inject sesi live / keputusan user.
-- **Terakhir diupdate:** 2026-07-04 (dini hari, otonom via cron) — **M3b SELESAI.** Engine Scheduler: timer
+- **Fase:** **M3 sedang berjalan (dipecah jadi slice).** M3a (Daemon+IPC+orphan) ✅ · M3b (Scheduler) ✅ ·
+  **M3c (Usage-Probe parser) ✅** — ketiga slice pure tier-reviewed & merge `main`. **Trio engine murni selesai:
+  Detector (M2) + Scheduler (M3b) + Usage-parser (M3c).** Berikutnya = **M3d — wiring live + continue-engine:**
+  wire detector+scheduler+probe ke daemon; jalur probe HTTP nyata (baca creds, egress whitelist) + agy LS live;
+  inject "continue"/resume-by-id ke sesi CLI nyata (ADR-014, gating). **M3d = HARD-STOP OTONOM** — outward-facing
+  (sentuh sesi live + jaringan) + butuh limit/quota asli (ADR-001, TODO #2 verifikasi TUI agy) + keputusan user
+  → **di-surface ke user, tak dikerjakan sendiri.**
+- **Terakhir diupdate:** 2026-07-04 (dini hari, otonom via cron) — **M3c SELESAI.** Usage-Probe parsers (pure):
+  `adapters/usage.ts` — `parseClaudeOAuthUsage` (limits[] array, `resets_at` ISO), `parseClaudeStatusLine`
+  (`rate_limits`, `resets_at` epoch-detik ×1000 — G-4), `parseAgyUserStatus` (per-model `quotaInfo`,
+  `1-remainingFraction`) → model `UsageSnapshot` ternormalisasi (`usedFraction` 0..1, `resetAt` epoch ms).
+  **PII firewall (G-9): allowlist ketat** — hanya ekstrak kuota/reset, `name`/`email`/credits mustahil bocor
+  (teruji `JSON.stringify` exclude). Parsing **defensif** (input JSON tak tepercaya dari endpoint undocumented:
+  field malformed di-skip per-entry, hanya non-objek top-level → `UsageParseError`). Extend `shared/types.ts`
+  (`UsageLimit`/`UsageSnapshot`). Fixtures `test/fixtures/usage/` (3, tiap-nya + entri malformed). Test
+  `usage-parsers.test.ts` (23). **Terverifikasi (Opus sendiri):** build bersih, **117/117 test**, lint clean.
+  **Nit:** I-7 (skema pasti agy GetUserStatus dikonfirmasi saat probe live M3d). Impl = Sonnet, tier-review Opus.
+  **Jalur LIVE (HTTP/creds/LS-port) sengaja OUT — M3d.**
+- **Terakhir diupdate (sebelumnya):** 2026-07-04 (dini hari, otonom via cron) — **M3b SELESAI.** Engine Scheduler: timer
   persisten dari `scheduled_jobs` + recovery saat restart daemon + backoff berjenjang (5m→15m→60m cap). Dibuat:
   `store/repositories/scheduled-jobs.ts` (enqueue/listPending/due/getById/remove/reschedule — parameterized),
   `daemon/scheduler.ts` (`createScheduler` arm/runDue/backoff; timer & clock **di-inject** → fake-timer-testable;
