@@ -2,9 +2,9 @@
 
 > Format Nygard. ADR *Accepted* immutable — revisi = ADR baru yang men-supersede.
 > Status per ADR: **Proposed** (masih bisa berubah) / Accepted / Deprecated / Superseded.
-> Status per 2026-07-03 (malam): **Accepted (locked) = ADR-002…015 kecuali ADR-001** (yakni 002, 003, 004, 005,
-> 006, 007, 008, 009, 010, 011, 012, 013, 014, 015); **Proposed = ADR-001** saja (fixture pesan limit + varian agy
-> TUI saat quota habis — butuh limit/quota asli).
+> Status per 2026-07-03 (malam): **Accepted (locked) = ADR-002…016 kecuali ADR-001** (yakni 002, 003, 004, 005,
+> 006, 007, 008, 009, 010, 011, 012, 013, 014, 015, 016); **Proposed = ADR-001** saja (fixture pesan limit + varian
+> agy TUI saat quota habis — butuh limit/quota asli).
 > Accepted = immutable. ADR-005 & ADR-008 di-lock **termasuk** revisi Telegram 3 Jul (bot token = infra-secret;
 > kelas aksi relay human-in-the-loop). ADR-008 §2 kini **dilengkapi mekanisme** ADR-011/012/013 (Accepted):
 > lib bot = **grammy 1.44.0** (ADR-011), redaksi = **hybrid regex+entropy** (ADR-013).
@@ -330,6 +330,27 @@ solo IPC); **stdin/stdout satu-shot** (tak bisa layani `status` multi-klien sela
 
 ---
 
+## ADR-016: Model-routing workflow — Opus = orkestrator, Sonnet = kuda beban
+**Status:** **Accepted** (locked 2026-07-03 malam) — *immutable; revisi = ADR baru yang men-supersede.*
+**Context:** Set minimal ADR (Bagian 2.2, §atas) mensyaratkan **model routing policy**; slot ini belum terisi.
+Proyek ini **tak memanggil LLM saat runtime** (mensupervisi CLI agent, bukan produk ber-LLM) → "model routing"
+di sini = kebijakan **workflow pengembangan**: model mana mengerjakan jenis task apa, demi hemat token & konteks.
+Terbukti di M1: implementasi mekanis-padat (scaffold+store+CLI) diturunkan ke subagent, sesi utama menjaga desain
+& review → M1 selesai dalam satu putaran dengan konteks Opus tetap ramping.
+**Decision:** **Opus = orkestrator** (desain, keputusan, ADR, tier-review, commit, koordinasi); **Sonnet = kuda beban**
+implementasi via subagent (`Agent` `model: sonnet`) dengan **spec presisi + docs sebagai sumber kebenaran**. Diff
+subagent **wajib** lewat tier-review Opus sebelum commit. **Pengecualian:** slice kecil/subtil (state/exit path,
+~≤30 baris) boleh Opus kerjakan inline bila spawn subagent dingin justru lebih boros token. Juga dicatat di CLAUDE.md §5.
+**Consequences:** (+) hemat token/biaya + konteks Opus ramping → sesi panjang tak cepat penuh; (+) pemisahan peran =
+review lebih jujur (reviewer ≠ penulis, tier-review Step 0). (−) subagent mulai dingin (baca docs tiap spawn) →
+overhead untuk task kecil (karenanya ada pengecualian inline); (−) butuh spec presisi — spec buruk = diff buruk.
+**Alternatives Rejected:** **Semua di Opus** (boros token/konteks) — ditolak untuk task mekanis; **semua di Sonnet
+tanpa review Opus** (langgar tier-review Step 0: penulis me-review diri sendiri) — ditolak; **model termurah untuk
+semua** (kualitas desain/keamanan Tier-1 turun) — ditolak. Budget API/bulan belum ditetapkan (owner Ziffan;
+non-blocking — model langganan, bukan pay-per-token).
+
+---
+
 ## Pending decisions (belum diputuskan)
 
 | Keputusan | Owner | Target |
@@ -358,4 +379,5 @@ solo IPC); **stdin/stdout satu-shot** (tak bisa layani `status` multi-klien sela
 | 2026-07-03 (malam) | **ADR-015 baru + di-LOCK (Accepted)** — menutup pending "format IPC CLI↔daemon". IPC = **Node `net` stream socket** (Unix domain socket Linux/macOS ↔ named pipe Windows via satu API), framing **NDJSON**, socket mode 0600, tanpa TCP/port. `acca status` read-only boleh baca store langsung; perintah mutasi (`resume-now`/`cancel`) wajib lewat IPC. Ditolak: HTTP/TCP localhost (port+exposure+firewall Windows), gRPC (overkill), stdin one-shot. Membuka jalan mulai M1. Dampak: MAP/CONVENTIONS/DATA-MODEL (fondasi M1). |
 | 2026-07-03 (malam) | **ADR-010 di-LOCK (Accepted).** Verifikasi terminal item (d) TODO #5 **lulus**: agy interaktif dibungkus **PTY nyata** (node-pty 1.1.0, Node 24.18.0 Win — winpty passthrough gagal krn stdin non-tty) → LS `GetUserStatus` **200 OK, `quotaInfo` non-nil per model, tanpa csrf, tanpa prompt (0 kuota)** → **opsi #2 terbukti end-to-end**. Skema quota per-model (`remainingFraction` float + `resetTime` ISO-8601; reset window per-kelas-model) + credits plan direkam. Respons memuat PII → feed redaksi ADR-013. node-pty prebuild Node 24 Win terverifikasi (de-risk ADR-003 M1). Residual (c/#3 body-sukses + a/#1 freshness) = impl-tuning M3, non-blocking. ADR-010 Proposed→Accepted; header + TODO #5 (RESEARCH) + GOTCHAS + CONTEXT diperbarui. Proposed tersisa: **hanya ADR-001**. |
 | 2026-07-03 (malam) | **ADR-014 baru + di-LOCK (Accepted).** Strategi continue sesi interaktif hidup: **inject "continue" ke PTY = preferred** (kelas kontrol-auto, tanpa konfirmasi, token literal tetap — injection firewall) dengan **gating berlapis** (proc alive + foreground=agent bukan shell + sesi idle + probe kuota dulu); **fallback resume-by-id** saat proses `exited`; **cwd hilang → BLOCKED**; **gating-gagal pada sesi hidup = surface manual, tak auto-kill** (judgment call, sisi aman). Dependensi (uji hook `StopFailure` TODO #7) sudah selesai. Menutup pending "strategi continue". Catatan: jalur inject agy **provisional** sampai perilaku TUI agy saat quota habis diverifikasi (TODO #2, M3). Dampak: ARCHITECTURE (Detector/§5), MILESTONES M3, CONTEXT. |
+| 2026-07-03 (malam, M1) | **ADR-016 baru + di-LOCK (Accepted).** Mengisi slot wajib **model-routing policy** (Bagian 2.2) yang kosong: workflow pengembangan = **Opus orkestrator / Sonnet kuda beban** (subagent implementasi + tier-review Opus; pengecualian slice kecil inline). Ruang lingkup = proses dev (proyek tak ber-LLM runtime). Terbukti di M1. Juga dicatat CLAUDE.md §5. Budget API/bulan = pending non-blocking (owner Ziffan). Proposed tersisa: **hanya ADR-001**. |
 | 2026-07-03 (malam) | **ADR-011, 012, 013 di-LOCK (Accepted, immutable).** Dua pending penutup diputuskan (owner Ziffan, riset terverifikasi): **(a) lib bot = `grammy` 1.44.0** (MIT, rilis 2026-06-14, 4 dep, long-polling `getUpdates` default outbound-only, TS-first, engines kompatibel Node 24 — ADR-011; ditolak telegraf & node-telegram-bot-api); **(b) pola redaksi = hybrid regex+entropy** ala gitleaks/detect-secrets — ruleset kurasi in-repo (Anthropic/Google/Telegram-token/GitHub/AWS/private-key/JWT/`.env`) + fallback Shannon entropy, modul in-repo, regex/threshold eksak di-tune M-remote dgn test corpus (ADR-013 §2). ADR-012 (authz allowlist) di-lock bersama (policy sudah spesifik). Header status + Pending table di-update (3 baris pending remote → selesai); ADR-008 §2 pointer sibling di-refresh (keputusan ADR-008 tak berubah). Proposed tersisa: **ADR-001, ADR-010**. Dampak lanjut: ARCHITECTURE §3 (+baris lib bot), MILESTONES M-remote (dependensi terpenuhi), CONTEXT. |
