@@ -21,6 +21,9 @@ export type Tool = (typeof TOOLS)[number];
 export const RESET_SOURCES = ['exact', 'heuristic', 'backoff'] as const;
 export type ResetSource = (typeof RESET_SOURCES)[number];
 
+export const JOB_KINDS = ['probe', 'resume'] as const;
+export type JobKind = (typeof JOB_KINDS)[number];
+
 /** Baris tabel `sessions` (DATA-MODEL.md). Waktu = epoch ms (number), bukan Date naif. */
 export interface Session {
   id: string;
@@ -37,4 +40,15 @@ export interface Session {
   created_at: number;
   updated_at: number;
   archived_at: number | null;
+}
+
+/** Baris tabel `scheduled_jobs` (DATA-MODEL.md). Waktu = epoch ms. */
+export interface ScheduledJob {
+  id: number;
+  session_id: string;
+  run_at: number;
+  kind: JobKind;
+  attempts: number;
+  next_backoff_ms: number | null;
+  created_at: number;
 }
