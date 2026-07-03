@@ -304,7 +304,26 @@ Mekanisme mereka terdokumentasi di `docs/antigravity.md` (repo CodexBar) — dua
    plus `accountEmail`, `planName`.
    **⚠️ Caveat kunci untuk kita:** dokumen CodexBar menarget language server **IDE Antigravity**
    (`Antigravity.app`, macOS). Apakah **`agy` CLI** men-spawn language server serupa (dan bagaimana
-   menemukannya di Windows/Linux tanpa `lsof`) **belum diverifikasi** → inti TODO #5 (§6).
+   menemukannya di Windows/Linux tanpa `lsof`) — **✅ TERVERIFIKASI di mesin, 3 Jul 2026 (Windows,
+   agy v1.0.16):**
+   - **YA, `agy` CLI meng-embed language server sendiri saat launch.** Bukti log
+     `~/.gemini/antigravity-cli/log/cli-*.log` (`server.go`): *"Language server listening on random port
+     at `<P1>` for HTTPS (gRPC)"* + *"…`<P2>` for HTTP"* — **dua port random per launch** (gRPC + HTTP).
+     Jadi mekanisme LSP-probe **berlaku lintas OS**, bukan cuma IDE macOS.
+   - **Discovery port di Windows** (tanpa `lsof`, dan **port TIDAK ada di argv** proses agy — beda dari
+     macOS): `Get-NetTCPConnection -State Listen -OwningProcess <agy-pid>` → dua LocalPort milik agy;
+     alternatif parse baris `server.go` di log. **Terbukti bekerja.**
+   - **Beda model auth (penting):** `--csrf_token` **tidak** ada di argv agy Windows (asumsi CodexBar
+     batal di sini). Auth LS→upstream pakai **OAuth token source** dari `~/.gemini/oauth_creds.json`
+     (file **ada**, 1.8 KB); saat agy "not logged in", semua RPC gagal (*"error getting token source:
+     You are not logged into Antigravity"*). Jalur auth klien-lokal→LS (csrf) **belum terpecahkan**
+     (tak di argv; mungkin tak wajib untuk localhost / via handshake) — sisa TODO #5.
+   - Surface RPC internal terkonfirmasi di log: `fetchAdminControls`, `availableModels`, `userInfo`,
+     `ListExperiments`, `load code assist response` — konsisten dgn adanya `GetUserStatus`/quota di LS yang sama.
+   - **Implikasi pilihan probe:** opsi #2 (LS lokal) viable di Windows untuk *discovery port*, tapi
+     terblokir (a) csrf/local-auth belum jelas + (b) butuh agy login. **Opsi #3 (`retrieveUserQuota`
+     langsung dgn `oauth_creds.json`) melewati LS** & pakai kredensial yang sama → kandidat lebih robust
+     lintas-OS. Condong ke #3 (atau #1 fresh-launch) di atas #2 untuk lock ADR.
 2. **Endpoint OAuth remote:** `POST cloudcode-pa.googleapis.com/v1internal:{loadCodeAssist, onboardUser,
    fetchAvailableModels, retrieveUserQuota}` dengan kredensial OAuth Google milik Antigravity.
 
@@ -413,9 +432,12 @@ Utamakan **sumber primer** (docs resmi) di atas blog pihak ketiga — tanggal ce
 >    auto-printed resume cmd. Binary `agy` v1.0.16 terkonfirmasi.
 > 4. (Opsi) Verifikasi endpoint OAuth usage `api/oauth/usage` secara langsung — **ditunda**: butuh baca token
 >    dari kredensial (sensitif); statusLine JSON sudah cukup untuk MVP monitor.
-> 5. **(Baru, 3 Jul 2026)** Probe usage Antigravity: uji 3 opsi §4b di mesin sendiri — (a) freshness snapshot
->    `/usage` saat fresh-launch, (b) probe language-server ala CodexBar **di Windows/Linux** (deteksi proses/port
->    tanpa `lsof` di Windows), (c) bentuk request/respons `v1internal:retrieveUserQuota`. Hasil → lock di ADR.
+> 5. **(Baru, 3 Jul 2026)** Probe usage Antigravity — **maju sebagian (3 Jul siang, §5b):** (b) **terkonfirmasi**
+>    `agy` CLI **meng-embed language server** (dua port random gRPC+HTTP; log `server.go`), port ditemukan di
+>    Windows via `Get-NetTCPConnection -OwningProcess <pid>` (tanpa `lsof`; port tak di argv). **Sisa:** csrf/
+>    local-auth ke LS belum terpecahkan + butuh agy login → condong pilih **opsi #3 `retrieveUserQuota`** (pakai
+>    `oauth_creds.json` yg sudah ada) atau #1 fresh-launch. Masih perlu: (a) uji freshness snapshot `/usage`,
+>    (c) bentuk request/respons `retrieveUserQuota`. Hasil → lock di ADR (Pending, sebelum M3).
 > 6. **(Baru, 3 Jul 2026)** Pantau Claude Code #13354 (auto-continue native) tiap sesi riset — kalau shipped,
 >    revisit positioning (§5c) & scope MVP. *(Re-cek 3 Jul dini hari: masih open, belum ada sinyal implementasi;
 >    CHANGELOG juga nihil auto-continue.)*

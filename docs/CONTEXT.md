@@ -81,9 +81,24 @@
    Sisa kecil: tangkap nilai `error:"rate_limit"` saat limit 5-jam **asli** habis (tak bisa dipaksa).
 3. **Fixture Detector** (TODO #2): konfirmasi lokal korpus §2b saat kena limit sungguhan + varian agy
    (termasuk: TUI agy hidup atau exit saat quota habis?). Bobot turun untuk CC (hook = primer).
-4. **Uji 3 opsi probe usage agy** (TODO #5) → lock pending decision sebelum M3.
+4. **Uji 3 opsi probe usage agy** (TODO #5) → lock sebelum M3. **Maju 3 Jul:** LS embedded terkonfirmasi
+   (opsi #2 port-discovery viable di Win) tapi condong **opsi #3 `retrieveUserQuota`**. Sisa: freshness `/usage`
+   (opsi #1) + bentuk request/respons `retrieveUserQuota` (opsi #3).
 5. Buat DATA-MODEL.md, MAP.md, CONVENTIONS.md, DEPENDENCY-POLICY.md sebelum/awal M1.
 6. Isi angka retensi arsip (Pending di DECISIONS.md, owner Ziffan).
+
+## Uji varian agy (probe usage) 3 Jul 2026 (siang) — TODO #5 maju sebagian (RESEARCH §5b)
+
+- **`agy` CLI meng-embed language server** saat launch (bukti log `server.go`: dua **port random** —
+  gRPC + HTTP). Mekanisme LSP-probe CodexBar **berlaku di Windows**, bukan cuma IDE macOS.
+- **Discovery port di Windows** terbukti: `Get-NetTCPConnection -OwningProcess <agy-pid>` (tanpa `lsof`;
+  **port TIDAK di argv** proses — beda dari macOS). Alternatif: parse log `~/.gemini/antigravity-cli/log/`.
+- **Beda auth:** `--csrf_token` tak di argv; auth LS→upstream via **OAuth token source** (`~/.gemini/oauth_creds.json`,
+  file ada). Csrf klien→LS belum terpecahkan. → **condong pilih opsi #3 `retrieveUserQuota`** (pakai oauth_creds)
+  atau #1 fresh-launch, di atas #2, untuk lock pending decision.
+- **⚠️ Insidental:** sesi agy yg jalan saat uji (PID 4764) **"not logged into Antigravity"** — semua RPC gagal
+  token source. Perlu Ziffan cek: ada proses agy nyangkut/tak-login? (bukan blok riset, tapi anomali mesin.)
+- **Masih terbuka:** perilaku TUI agy saat **quota asli habis** (hidup vs exit) — butuh quota habis, tak bisa dipaksa.
 
 ## Uji hook `StopFailure` 3 Jul 2026 (siang) — TODO #7 ditutup (RESEARCH §2c)
 
