@@ -72,6 +72,20 @@ export function createSessionsRepo(db: DatabaseInstance) {
       ).run({ id, updated_at: nowMs() });
     },
 
+    /** Tandai sesi orphan (proc_state='alive' tapi PID pemiliknya sudah mati — wrapper mati keras
+     * sebelum sempat `markExited`, ISSUES I-3). RUNNING → EXITED; status lain (mis. LIMIT_HIT/
+     * WAITING) dipertahankan supaya continue-engine berikutnya tahu harus resume-by-id
+     * (proc_state='exited'), bukan diam-diam kehilangan info "sedang menunggu reset". */
+    markOrphanExited(id: string): void {
+      db.prepare(
+        `UPDATE sessions
+         SET proc_state = 'exited',
+             status = CASE WHEN status = 'RUNNING' THEN 'EXITED' ELSE status END,
+             updated_at = @updated_at
+         WHERE id = @id`,
+      ).run({ id, updated_at: nowMs() });
+    },
+
     listActive(): Session[] {
       return db
         .prepare<[], Session>(

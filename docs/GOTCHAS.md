@@ -139,10 +139,28 @@ reset diparse dari clock-time output DAN (b) jam target sudah lewat hari-ini DAN
 
 ---
 
+## Daemon / IPC (M3)
+
+### G-14 — Unlink socket unix tanpa syarat SEBELUM `listen` men-"steal" socket daemon hidup
+**Jebakan:** pola umum "hapus file socket stale lalu `listen`" bila dijalankan **tanpa syarat** akan
+meng-`unlink` socket yang **masih dipegang daemon hidup**, lalu `listen` di path sama **berhasil** →
+**dua daemon diam-diam** melayani path yang sama (yang kedua men-hijack). `EADDRINUSE` **tak pernah**
+terpicu di POSIX karena path keburu dibebaskan. Langgar single-instance (ADR-002) + sole-writer (ADR-015).
+Windows named pipe tak kena (tak di-unlink; pipe hilang otomatis saat owner mati) → **bug ini lolos di
+tes Windows tapi aktif di Linux daily-driver.**
+**Dampak:** korupsi state (dua penulis `sessions`), single-instance gagal senyap di Ubuntu.
+**Cara benar:** JANGAN unlink buta. Coba `listen`; bila `EADDRINUSE` di POSIX, **probe via `connect`**:
+ada yang jawab (`connect` sukses) → daemon hidup → propagate (reject); tak ada yang jawab
+(`ECONNREFUSED`) → socket stale → baru unlink + `listen` ulang **sekali** (guard `isRetry` cegah loop).
+**Sumber:** tier-review M3a (4 Jul), `src/daemon/ipc-server.ts`.
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-04 (M3a) | G-14 (unlink socket unix tanpa syarat sebelum listen = steal socket daemon hidup → dua daemon; fix connect-probe stale-vs-live). Dari tier-review M3a. |
 | 2026-07-04 (M2) | G-13 (reset-estimator clock-time next-occurrence tambah `MS_PER_DAY` mentah → meleset ±1j di hari transisi DST; non-blocking, I-4/P3). Dari tier-review M2. |
 | 2026-07-03 (sore) | File dibuat. G-1..G-3 (agy: token stale, log login palsu, PTY wajib), G-4..G-5 (CC: dua format reset, field `error` hook), G-6 (CRLF). Dari riset real-CLI + uji sebelumnya. |
 | 2026-07-03 (malam) | G-7 (LS quota nil print-mode vs terisi interaktif-PTY tanpa prompt), G-8 (winpty passthrough vs ConPTY node-pty), G-9 (respons GetUserStatus memuat PII). Dari verifikasi terminal ADR-010 item (d). |

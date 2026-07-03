@@ -6,13 +6,12 @@
 
 ## Terbuka
 
-### I-3 — Rekonsiliasi tulis-balik sesi orphan (RUNNING basi) [P2, target M3]
-Bila proses wrapper mati keras (SIGKILL / terminal ditutup / crash) sebelum `markExited`, baris
-`sessions` tetap `RUNNING/alive` selamanya. M1 memitigasi di **tampilan** (`status` menandai "(basi)"
-via cek liveness PID — lihat I-1), tapi **tulis-balik** status (mis. → `EXITED`/`FAILED` dengan
-`detect_source`) belum ada. Tempat yang benar = **daemon saat start** (ADR-015; daemon = penulis
-tunggal `sessions`), bukan `status` (read-only). Rekonsiliasi: `SELECT proc_state='alive'` → cek PID →
-mati → tandai + event `status_change`. Aktif saat daemon lahir di M3.
+### I-5 — Jalur stale-socket unlink+retry POSIX belum teruji otomatis [P3, target verifikasi Ubuntu]
+`ipc-server.listen()` membedakan socket **stale** (daemon lama crash) vs daemon **hidup** via
+connect-probe sebelum unlink (fix tier-review M3a — lihat GOTCHAS G-14). Jalur "daemon hidup → reject"
+teruji di Windows (named pipe EADDRINUSE). Jalur **stale-unlink-retry POSIX** (unix socket file
+tertinggal → probe ECONNREFUSED → unlink → listen ulang) = **logic-only**, tak bisa diuji di mesin
+Windows ini. Verifikasi saat sesi Ubuntu 24.04 (barengan gate native prebuild — masih SISA dari M1).
 
 ### I-4 — `reset-estimator` clock-time wrap tak DST-aware saat lewat tengah malam [P3, target M3/M4]
 `resolveClockTime` menambah `MS_PER_DAY` mentah untuk "next occurrence" alih-alih menghitung ulang wall-clock+1
@@ -23,6 +22,16 @@ lintas-tengah-malam jadi penting (kemungkinan saat wiring reset ke scheduler M3 
 ---
 
 ## Tertutup
+
+### I-3 — Rekonsiliasi tulis-balik sesi orphan (RUNNING basi) [P2] ✅
+**Gejala:** wrapper mati keras (SIGKILL/terminal ditutup/crash) sebelum `markExited` → baris `sessions`
+tetap `RUNNING/alive` selamanya. M1 hanya memitigasi di **tampilan** (`status` "(basi)", I-1), tanpa
+tulis-balik.
+**Solusi (M3a):** `daemon/reconcile.ts reconcileOrphans()` dijalankan **saat daemon start** (ADR-015:
+daemon = penulis tunggal `sessions`). Scan `listActive()` → `proc_state='alive'` + PID mati (`isProcessAlive`
+di-inject) → `sessions.markOrphanExited(id)` (RUNNING→EXITED; LIMIT_HIT/WAITING dipertahankan tapi
+`proc_state→exited` supaya continue-engine pilih resume-by-id) + event `status_change`
+`{reason:'orphan_reconciled'}`. Teruji `test/reconcile.test.ts` (4 kasus, API produksi asli).
 
 ### I-1 — `acca status` menampilkan sesi orphan sebagai `RUNNING` (menyesatkan) [P2] ✅
 **Gejala:** setelah wrapper di-interrupt, `#pwy6 claude RUNNING alive pid 25584` bertahan padahal PID 25584

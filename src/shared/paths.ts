@@ -29,3 +29,28 @@ export function dataDir(): string {
 export function dbPath(): string {
   return join(dataDir(), 'acca.db');
 }
+
+/**
+ * Path socket IPC CLI↔daemon (ADR-015 — Node `net`: Unix domain socket / Windows named pipe,
+ * bukan TCP). Prioritas: env `ACCA_SOCKET_PATH` (test) → Windows named pipe tetap →
+ * `$XDG_RUNTIME_DIR/acca/daemon.sock` → fallback `~/.acca/daemon.sock`. Direktori dibuat
+ * otomatis di jalur POSIX (named pipe Windows bukan path filesystem, tak perlu mkdir).
+ */
+export function runtimeSocketPath(): string {
+  const override = process.env.ACCA_SOCKET_PATH;
+  if (override) return override;
+
+  if (process.platform === 'win32') {
+    return '\\\\.\\pipe\\acca-daemon';
+  }
+
+  if (process.env.XDG_RUNTIME_DIR) {
+    const dir = join(process.env.XDG_RUNTIME_DIR, 'acca');
+    mkdirSync(dir, { recursive: true });
+    return join(dir, 'daemon.sock');
+  }
+
+  const dir = join(homedir(), '.acca');
+  mkdirSync(dir, { recursive: true });
+  return join(dir, 'daemon.sock');
+}
