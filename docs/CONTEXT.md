@@ -103,8 +103,16 @@
   LS boot (race cache-refresh, ~12ms **sebelum** `Auth succeeded`) bahkan di sesi sehat. Sinyal auth andal =
   **`server.go … Auth succeeded`**, bukan ada/tidaknya baris "not logged in". → Flag anomali PID 4764 sebelumnya
   kemungkinan **salah baca** (tak sempat cek `Auth succeeded`); tak ada bukti mesin agy bermasalah.
-- **Masih terbuka:** perilaku TUI agy saat **quota asli habis** (hidup vs exit) — butuh quota habis, tak bisa dipaksa;
-  serta menerbitkan RPC `GetUserStatus` live ke port HTTP LS (butuh agy hidup + resolusi csrf) — belum dicoba.
+- **✅ Probe RPC `GetUserStatus` live (Claude jalankan sendiri):** `POST /exa.language_server_pb.
+  LanguageServerService/GetUserStatus` (Connect-JSON, body `{}`) ke port HTTP & HTTPS(-k) → **respons terstruktur
+  (bukan 404)**; **csrf TIDAK diperlukan** di localhost (batalkan penghalang csrf untuk opsi #2). **Tapi print-mode
+  LS balas `GetCascadeModelConfigData() is nil`** → quota belum terisi utk spawn `-p` sesaat; butuh LS sesi
+  interaktif ber-PTY. **Arah desain: hybrid — #2 (LS GetUserStatus) utk sesi interaktif hidup + #3
+  (`retrieveUserQuota` OAuth) utk cek pre-resume standalone.**
+- **Catatan operasional:** agy interaktif **tanpa TTY tak mem-bind LS** (proses hidup tapi 0 port) — LS hanya naik
+  di print-mode (singkat) atau interaktif ber-PTY nyata → supervisor wajib PTY untuk pegang LS sesi hidup.
+- **Masih terbuka:** perilaku TUI agy saat **quota asli habis** (hidup vs exit); `quotaInfo` non-nil dari LS sesi
+  interaktif nyata; bentuk request/respons `retrieveUserQuota` (#3); freshness `/usage` (#1).
 
 ## Uji hook `StopFailure` 3 Jul 2026 (siang) — TODO #7 ditutup (RESEARCH §2c)
 

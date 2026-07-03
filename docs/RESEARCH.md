@@ -330,6 +330,24 @@ Mekanisme mereka terdokumentasi di `docs/antigravity.md` (repo CodexBar) — dua
      baris "not logged in".
    - Surface RPC internal terkonfirmasi di log: `fetchAdminControls`, `availableModels`, `userInfo`,
      `ListExperiments`, `load code assist response` — konsisten dgn adanya `GetUserStatus`/quota di LS yang sama.
+   - **✅ Probe RPC live `GetUserStatus` (Claude, 3 Jul siang) — MEKANISME TERBUKTI, quota nil di print mode:**
+     `POST /exa.language_server_pb.LanguageServerService/GetUserStatus` (header `Content-Type: application/json`
+     + `Connect-Protocol-Version: 1`, body `{}`) ke **kedua** port (HTTP polos & HTTPS/gRPC self-signed `-k`)
+     → **respons Connect-JSON terstruktur** (bukan 404 → endpoint & routing benar). **Kesimpulan kunci:**
+     1. **csrf token TIDAK diperlukan** di localhost — POST tanpa `X-Codeium-Csrf-Token` **diterima** (bukan 401).
+        Ini **membatalkan penghalang csrf** yang dikhawatirkan untuk opsi #2 di Windows.
+     2. **Tapi di print-mode LS, data quota `nil`:** respons `{"code":"unknown","message":"GetCascadeModelConfigData()
+        is nil"}` (HTTP 500). Subtree `cascadeModelConfigData` (tempat `quotaInfo.{remainingFraction,resetTime}`)
+        **belum ter-populate** saat LS di-spawn untuk satu panggilan `-p` → **spawn print sesaat TIDAK cukup**
+        untuk baca quota via GetUserStatus. (Butuh LS sesi interaktif ter-inisialisasi penuh — ber-PTY.)
+     3. Kedua port melayani endpoint Connect sama; HTTPS self-signed (perlu `-k`).
+   - **Implikasi desain (refinement pilihan probe):** opsi #2 (LS lokal) **viable tanpa csrf**, TAPI butuh
+     **agy interaktif hidup ber-PTY** (bukan print-spawn) agar model-config/quota terisi. Karena supervisor
+     memang membungkus agy interaktif via PTY, ia bisa probe **LS milik sesi itu** (temukan port via
+     `Get-NetTCPConnection -OwningProcess <pid>`, panggil GetUserStatus — murah, tanpa csrf). Untuk cek quota
+     **saat tak ada sesi hidup** (sebelum memutuskan resume), #2 gagal → pakai **opsi #3 `retrieveUserQuota`
+     (OAuth langsung)** atau #1 fresh-launch. **Arah desain: hybrid — #2 utk monitor sesi interaktif hidup,
+     #3 utk cek pre-resume standalone.**
    - **Implikasi pilihan probe:** opsi #2 (LS lokal) viable di Windows untuk *discovery port*, tapi
      terblokir (a) csrf/local-auth belum jelas + (b) butuh agy login. **Opsi #3 (`retrieveUserQuota`
      langsung dgn `oauth_creds.json`) melewati LS** & pakai kredensial yang sama → kandidat lebih robust
@@ -442,12 +460,13 @@ Utamakan **sumber primer** (docs resmi) di atas blog pihak ketiga — tanggal ce
 >    auto-printed resume cmd. Binary `agy` v1.0.16 terkonfirmasi.
 > 4. (Opsi) Verifikasi endpoint OAuth usage `api/oauth/usage` secara langsung — **ditunda**: butuh baca token
 >    dari kredensial (sensitif); statusLine JSON sudah cukup untuk MVP monitor.
-> 5. **(Baru, 3 Jul 2026)** Probe usage Antigravity — **maju sebagian (3 Jul siang, §5b):** (b) **terkonfirmasi**
->    `agy` CLI **meng-embed language server** (dua port random gRPC+HTTP; log `server.go`), port ditemukan di
->    Windows via `Get-NetTCPConnection -OwningProcess <pid>` (tanpa `lsof`; port tak di argv). **Sisa:** csrf/
->    local-auth ke LS belum terpecahkan + butuh agy login → condong pilih **opsi #3 `retrieveUserQuota`** (pakai
->    `oauth_creds.json` yg sudah ada) atau #1 fresh-launch. Masih perlu: (a) uji freshness snapshot `/usage`,
->    (c) bentuk request/respons `retrieveUserQuota`. Hasil → lock di ADR (Pending, sebelum M3).
+> 5. **(Baru, 3 Jul 2026)** Probe usage Antigravity — **maju besar (3 Jul siang, §5b):** (b) LS embedded
+>    **terkonfirmasi** (dua port random gRPC+HTTP; port via `Get-NetTCPConnection -OwningProcess <pid>`, tanpa
+>    `lsof`/argv); **RPC `GetUserStatus` live TERBUKTI jalan — csrf TIDAK diperlukan** di localhost; **tapi
+>    quota `nil` di print-mode LS** (`cascadeModelConfigData` belum terisi → butuh LS sesi interaktif ber-PTY).
+>    **Arah: hybrid — #2 (LS GetUserStatus) utk sesi interaktif hidup + #3 (`retrieveUserQuota` OAuth) utk cek
+>    pre-resume.** Masih perlu: (a) freshness snapshot `/usage` (#1), (c) bentuk request/respons
+>    `retrieveUserQuota` (#3), (d) konfirmasi `quotaInfo` non-nil dari LS sesi interaktif nyata. Lock di ADR (sebelum M3).
 > 6. **(Baru, 3 Jul 2026)** Pantau Claude Code #13354 (auto-continue native) tiap sesi riset — kalau shipped,
 >    revisit positioning (§5c) & scope MVP. *(Re-cek 3 Jul dini hari: masih open, belum ada sinyal implementasi;
 >    CHANGELOG juga nihil auto-continue.)*
