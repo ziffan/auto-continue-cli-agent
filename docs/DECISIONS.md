@@ -2,9 +2,11 @@
 
 > Format Nygard. ADR *Accepted* immutable — revisi = ADR baru yang men-supersede.
 > Status per ADR: **Proposed** (masih bisa berubah) / Accepted / Deprecated / Superseded.
-> Status per 2026-07-03: **ADR-003 & ADR-004 = Accepted (locked)**; ADR-001/002/005–009 = Proposed;
-> ADR-010 = Proposed (draft); **ADR-011/012/013 = Proposed (baru — fitur remote-control Telegram)**.
-> Accepted = immutable. ADR-005 & ADR-008 **direvisi 2026-07-03** (masih Proposed) untuk fitur Telegram.
+> Status per 2026-07-03 (sore, lanjutan): **Accepted (locked) = ADR-002, 003, 004, 005, 006, 007, 008, 009**;
+> **Proposed = ADR-001** (fixture limit + varian agy belum diverifikasi), **ADR-010** (verifikasi probe agy sisa),
+> **ADR-011/012/013** (mekanisme remote — menunggu pola redaksi + lib bot). Accepted = immutable.
+> ADR-005 & ADR-008 di-lock **termasuk** revisi Telegram 3 Jul (bot token = infra-secret; kelas aksi relay
+> human-in-the-loop). Untuk ADR-008: **prinsip** dikunci, **mekanisme** (ADR-013) masih Proposed.
 
 Wajib ada (Bagian 2.2): monolith vs services · stack utama · auth · multi-tenancy · deployment ·
 data retention · **model routing policy** · **batas otonomi agent**.
@@ -44,7 +46,7 @@ fallback + varian Antigravity (termasuk perilaku TUI agy saat quota habis) — b
 hanya statusLine/hook (tak bisa deteksi sesi mati); scraping claude.ai (rapuh, dilarang di RESEARCH).
 
 ## ADR-002: Monolith proses tunggal (satu daemon)
-**Status:** Proposed
+**Status:** **Accepted** (locked 2026-07-03) — *immutable; revisi = ADR baru yang men-supersede.*
 **Context:** Solo-user, satu mesin, beban ringan.
 **Decision:** Satu daemon monolitik (CLI + supervisor in-process), bukan microservices.
 **Consequences:** (+) sederhana, mudah deploy sebagai service OS. (−) skalabilitas multi-node = kerja v2+.
@@ -77,7 +79,7 @@ untuk user); Rust (overkill, iterasi lambat untuk solo part-time).
 **Alternatives Rejected:** Postgres (butuh server, berlebihan); file JSON (rawan korupsi, tak transaksional).
 
 ## ADR-005: Auth / kredensial — pakai sesi login mesin
-**Status:** Proposed
+**Status:** **Accepted** (locked 2026-07-03) — *immutable; revisi = ADR baru yang men-supersede. Termasuk rekonsiliasi bot token Telegram = infra-secret (revisi 3 Jul).*
 **Context:** Supervisor membungkus CLI yang sudah login di mesin user.
 **Decision:** **Tidak** menyimpan/mengelola kredensial **akun agent**. Supervisor mewarisi sesi login CLI yang ada.
 **Consequences:** (+) tak ada secret di repo/store (sejalan anti-pattern user). (−) bergantung state login mesin.
@@ -87,7 +89,7 @@ ADR-010) hanya **dibaca**, tak disalin/di-log. Prinsip tetap: tak ada kredensial
 **Alternatives Rejected:** Simpan token akun sendiri (menambah attack surface tanpa manfaat).
 
 ## ADR-006: Single-tenant / single-user (MVP)
-**Status:** Proposed
+**Status:** **Accepted** (locked 2026-07-03) — *immutable; revisi = ADR baru yang men-supersede.*
 **Context:** Persona MVP = solo dev di mesinnya sendiri.
 **Decision:** Single-user, tanpa konsep tenant. Multi-user = v2+ (US-12) dengan desain terpisah, **bukan**
 janji "tinggal extend".
@@ -95,7 +97,7 @@ janji "tinggal extend".
 **Alternatives Rejected:** Multi-tenant dari day-1 (anti-pattern user: single-tenant dengan janji extend).
 
 ## ADR-007: Deployment sebagai service OS
-**Status:** Proposed
+**Status:** **Accepted** (locked 2026-07-03) — *immutable; revisi = ADR baru yang men-supersede.*
 **Context:** Auto-resume butuh host **always-on** (kalau mesin tidur/mati, resume tak jalan — batasan PROJECT.md §1).
 **Decision:** Daemon dijalankan sebagai systemd unit (Linux) / Task Scheduler (Windows); cocok untuk node
 headless 24/7 di LAN (lihat HARDWARE.md — ROG Phone 6 / VPS).
@@ -104,7 +106,7 @@ tertunda sampai bangun — dokumentasikan sebagai batasan.
 **Alternatives Rejected:** Hanya proses foreground (mati saat terminal ditutup).
 
 ## ADR-008: Batas otonomi agent (wajib 2026) — *direvisi 2026-07-03 (fitur Telegram)*
-**Status:** Proposed *(revisi 2026-07-03: tambah jalur relay-instruksi human-in-the-loop untuk remote-control Telegram)*
+**Status:** **Accepted** (locked 2026-07-03) — *immutable; revisi = ADR baru yang men-supersede.* Prinsip human-in-the-loop dikunci; **mekanisme** relay-instruksi (ADR-011/012/013) tetap Proposed sampai pola redaksi + lib bot diputuskan.
 **Context:** Supervisor mengeksekusi perintah CLI otomatis → risiko excessive agency / prompt-injection via transcript.
 Revisi 3 Jul: fitur remote-control Telegram (A+B+C) menambah **satu** kelas aksi baru — meneruskan instruksi user
 dari kanal jarak jauh ke sesi. Ini menggeser garis, jadi digariskan ulang secara sadar (bukan edit diam-diam).
@@ -128,7 +130,7 @@ permukaan (ingress kanal + egress data sensitif) yang wajib ditutup THREAT-MODEL
 gerbang human-in-the-loop, mengubah produk jadi remote-agent otonom dengan threat model jauh lebih besar.
 
 ## ADR-009: Model routing policy
-**Status:** Proposed
+**Status:** **Accepted** (locked 2026-07-03) — *immutable; revisi = ADR baru yang men-supersede.*
 **Context:** App ini **tidak** memanggil LLM sendiri untuk fitur intinya (deteksi = parsing deterministik).
 **Decision:** MVP **tanpa** panggilan LLM internal → budget API $0. Jika kelak butuh (mis. klasifikasi pesan
 error ambigu), catat sebagai ADR baru dengan model + budget eksplisit.
@@ -157,6 +159,12 @@ Token/csrf yang terlihat diperlakukan rahasia (redaksi di log).
 (−) dua adapter dirawat; (−) opsi #2 butuh PTY hidup; opsi #3 pakai endpoint undocumented (rawan berubah) → butuh
 guard + fallback. **Sisa verifikasi sebelum Accepted (TODO #5):** konfirmasi `quotaInfo` non-nil dari LS sesi
 interaktif nyata; bentuk req/resp `retrieveUserQuota`; freshness `/usage`.
+**Refinement 3 Jul 2026 (probe live):** endpoint `retrieveUserQuota` **reachable** (routing benar) tapi
+**token on-disk `oauth_creds.json` stale → 401**; `agy -p` tak menulis ulang file (agy refresh **internal**).
+→ **Konsekuensi lock:** opsi #3 standalone butuh **refresh token sendiri via `oauth2.googleapis.com`**
+(**egress tambahan di luar whitelist NFR saat ini** + client-id Gemini CLI) **atau** ambil token dari LS sesi
+hidup (→ malah condong opsi #2 utk sesi hidup). Bila opsi #3 dipilih saat lock, **NFR §Security egress wajib
++ `oauth2.googleapis.com`**. Body-sukses `retrieveUserQuota` ditunda ke M3 (keputusan user 3 Jul).
 **Alternatives Rejected:** Hanya `/usage` (stale, TUI-only); hanya spawn print-mode utk GetUserStatus (quota nil —
 terbukti); scraping TUI (rapuh); parsing transcript `.pb` protobuf (tak praktis, RESEARCH §4d).
 
@@ -234,7 +242,7 @@ ADR-008); stream output mentah tanpa redaksi/opt-in (bocor rahasia); mem-parse p
 | Lisensi repo (MIT vs proprietary) — terkait rencana komersialisasi | Ziffan | sebelum publik |
 | ~~Mekanisme probe usage Antigravity~~ → **diputuskan: ADR-010 (hybrid)**, tinggal verifikasi sisa sebelum Accepted | — | — |
 | **Strategi continue sesi interaktif yang masih hidup** (inject "continue" ke PTY vs kill→resume-by-id; kebijakan default + gating) — *dependensi uji hook `StopFailure` (TODO #7) sudah **selesai** 3 Jul; siap diputuskan* | Ziffan | sebelum M3 |
-| **THREAT-MODEL.md** (ingress remote + egress sensitif + injection→aksi) — **gate wajib sebelum implementasi tier C** (ADR-013 §5) | Ziffan × Claude | sebelum M-remote (impl B/C) |
+| ~~**THREAT-MODEL.md** (ingress remote + egress sensitif + injection→aksi) — gate wajib tier C (ADR-013 §5)~~ → **dibuat 3 Jul (sore)**; sisa: review final + lock ADR-011/012/013 setelah rantai doc-first rampung | Ziffan × Claude | ✅ draft; lock ADR < M-remote |
 | Pola redaksi rahasia untuk egress output Telegram (regex/entropy; ADR-013 §2) | Ziffan | sebelum M-remote |
 | Lib Telegram bot Node (mis. `grammy` vs `telegraf` vs `node-telegram-bot-api`) + pin versi | Ziffan | awal M-remote |
 
@@ -247,3 +255,5 @@ ADR-008); stream output mentah tanpa redaksi/opt-in (bocor rahasia); mem-parse p
 | 2026-07-03 (dini hari) | ADR-001 (masih Proposed) direvisi lagi: deteksi limit CC primer = **hook `StopFailure`** matcher `rate_limit` (v2.1.78+); eksplisitkan **limit-hit ≠ proses exit** → dua jalur lanjut (inject-PTY vs resume-by-id). Tambah pending: strategi continue sesi hidup. (Sesi interaktif — RESEARCH §2c.) |
 | 2026-07-03 (siang) | **ADR-003 & ADR-004 di-LOCK (Accepted)** — stack TS+Node 24 LTS+node-pty (versi ter-pin) & SQLite/better-sqlite3; diperkuat uji empiris PTY-wajib (§2c/§5b). **ADR-010 baru (Proposed)**: strategi probe usage Antigravity **hybrid** (LS `GetUserStatus` sesi hidup + OAuth `retrieveUserQuota` pre-resume) — dasar uji RPC live §5b. Pending probe ditutup→ADR-010; baris retensi di-retarget (ADR-004 sudah lock); dependensi continue-strategy (TODO #7) ditandai selesai. |
 | 2026-07-03 (sore) | **Fitur remote-control Telegram masuk MVP (tier A+B+C, keputusan user).** Prinsip: **human-in-the-loop, never autonomous** — supervisor me-relay instruksi user, tak pernah mengarang. **ADR-008 direvisi** (masih Proposed): tambah kelas aksi #2 relay-instruksi ber-konfirmasi; **unattended auto-instruction ditolak**. **ADR-005 direvisi**: bot token = infra-secret, bukan kredensial akun. **ADR-011/012/013 baru (Proposed)**: kanal Telegram long-polling / authz allowlist `chat_id` default-deny / relay+egress guardrail (mode `ask` Must, redaksi, injection firewall, THREAT-MODEL gate). Pending: THREAT-MODEL.md, pola redaksi, lib bot. Menyusul (sesi lain): PROJECT (US+batasan), ARCHITECTURE (container Remote Gateway), NFR (egress whitelist), MILESTONES (M-remote), THREAT-MODEL.md. |
+| 2026-07-03 (sore, lock) | **ADR-002, 005, 006, 007, 008, 009 di-LOCK (Accepted)** atas keputusan Ziffan — semua tak punya verifikasi terbuka; prinsipnya matang. ADR-008: prinsip human-in-the-loop dikunci, mekanisme relay (ADR-011/012/013) tetap Proposed sampai pola redaksi + lib bot diputuskan. **Tetap Proposed (sengaja):** ADR-001 (fixture limit + varian agy), ADR-010 (probe agy sisa), ADR-011/012/013 (mekanisme remote). Immutable mulai kini — revisi = ADR baru yang men-supersede. |
+| 2026-07-03 (sore, lanjutan) | **Rantai doc-first Telegram dilanjutkan.** **THREAT-MODEL.md dibuat** (gate ADR-013 §5): aset, trust boundary, STRIDE 4 vektor, matriks kontrol→AC-9..12, residual risk. **ARCHITECTURE**: container **Remote Gateway** + Telegram di C4 L1 + §5 batas otonomi direvisi. **NFR §Security**: `api.telegram.org` masuk whitelist egress (tutup doc-drift) + blok kontrol remote wajib. **MILESTONES**: **M-remote** disisipkan (tier A/B/C, security-review gate, dependensi THREAT-MODEL). Sisa (sesi lain): redraw flow §4 + wireframe §5 PROJECT; putuskan pola redaksi + lib bot; lalu lock ADR-011/012/013. |

@@ -54,10 +54,40 @@ Tiga sumber usage untuk Claude Code, dari paling resmi:
      dan tak bisa untuk sesi yang sudah mati (perkuat pemisahan ADR-001).
    - Field terkait lain: `exceeds_200k_tokens` (konteks, bukan rate limit).
 2. **Endpoint OAuth usage (tak terdokumentasi, community-discovered #13585):**
-   `GET https://api.anthropic.com/api/oauth/usage` →
-   `{ "five_hour": { "utilization": 42.0, "resets_at": "..." }, "seven_day": { ... } }`.
-   Butuh OAuth token dari kredensial mesin → **sensitif & tak terdokumentasi**; pakai dengan hati-hati,
-   bisa berubah tanpa notice. Bagus untuk **monitor daemon standalone** yang tidak berada di dalam sesi.
+   `GET https://api.anthropic.com/api/oauth/usage`. Butuh OAuth token dari kredензial mesin → **sensitif &
+   tak terdokumentasi**; pakai dengan hati-hati, bisa berubah tanpa notice. Bagus untuk **monitor daemon
+   standalone** yang tidak berada di dalam sesi. **✅ VERIFIKASI LIVE (3 Jul 2026, akun Pro, mesin ini —
+   TODO #4 ditutup):** `GET` dengan header `Authorization: Bearer <accessToken>` (dibaca dari
+   `~/.claude/.credentials.json` → `claudeAiOauth.accessToken`) + `anthropic-beta: oauth-2025-04-20`
+   → **200 OK**, `content-type: application/json`. **Skema NYATA lebih kaya dari asumsi lama** (dan **beda
+   dari statusLine**):
+   ```jsonc
+   {
+     "five_hour":  { "utilization": 52.0, "resets_at": "2026-07-03T14:19:59.58+00:00",
+                     "limit_dollars": null, "used_dollars": null, "remaining_dollars": null },
+     "seven_day":  { "utilization": 55.0, "resets_at": "2026-07-05T04:59:59.58+00:00", ... },
+     "seven_day_opus": null, "seven_day_sonnet": null, "seven_day_cowork": null, /* + bucket per-model null lain */
+     "extra_usage": { "is_enabled": false, "monthly_limit": null, ... },
+     "limits": [
+       { "kind": "session",       "group": "session", "percent": 52, "severity": "normal", "is_active": false, "resets_at": "…", "scope": null },
+       { "kind": "weekly_all",    "group": "weekly",  "percent": 55, "severity": "normal", "is_active": false, "resets_at": "…", "scope": null },
+       { "kind": "weekly_scoped", "group": "weekly",  "percent": 62, "severity": "normal", "is_active": true,  "resets_at": "…",
+         "scope": { "model": { "display_name": "Fable" } } }
+     ],
+     "spend": { "used": { "amount_minor": 0, "currency": "USD", "exponent": 2 }, "enabled": false, ... }
+   }
+   ```
+   **Koreksi/temuan material vs §2 poin 1 (statusLine):**
+   - **`resets_at` = ISO-8601 string dengan offset** (BUKAN Unix epoch seperti statusLine). Adapter harus
+     parse dua format berbeda per-sumber.
+   - **`utilization` = pecahan** (52.0), 0–100 (konsisten dgn statusLine `used_percentage`).
+   - **Array `limits[]`** = sinyal jauh lebih kaya: `kind` (`session|weekly_all|weekly_scoped`), **`severity`**
+     (`normal|…` — kandidat sinyal proximity/proaktif US-13), **`is_active`** (window mana yang sedang mengikat),
+     dan **`scope.model`** (cap **per-model** mingguan — mis. Fable 62%). Tak ada di statusLine.
+   - `spend.used.amount_minor` = **integer minor-unit** (uang **bukan float** — sejalan ADR-004).
+   - **Implikasi ADR-001:** jalur **monitor daemon-standalone TERBUKTI** (tak perlu sesi hidup) & memberi
+     sinyal lebih kaya dari statusLine → kandidat sumber utama Usage Probe CC. Caveat: undocumented, bisa berubah
+     → guard + fallback ke statusLine. `amount_minor`/currency siap dipakai bila kelak tampilkan spend.
 3. **API response headers (429 saat benar-benar kena limit):** `error.type = "rate_limit_error"` +
    `retry-after` (detik); header `anthropic-ratelimit-unified-status`, `-reset`, `-*-remaining`,
    `-unified-representative-claim` (window otoritatif). Ini muncul di titik limit tercapai.
@@ -253,11 +283,15 @@ pre-resume** (dasar uji §5b). Tiga opsi kandidat aslinya:
 
 | Tool | Binary | Versi | Catatan |
 |---|---|---|---|
-| Claude Code | `C:\Users\ziffa\.local\bin\claude.exe` | **2.1.199** | ≥2.1.80 → `rate_limits` ada di statusLine JSON |
+| Claude Code | `C:\Users\ziffa\.local\bin\claude.exe` | **2.1.200** | ≥2.1.80 → `rate_limits` ada di statusLine JSON; `api/oauth/usage` 200 OK (§2) |
 | Antigravity CLI | `C:\Users\ziffa\AppData\Local\agy\bin\agy.exe` | **1.0.16** | ≥1.0.4 → `--conversation <id>` resume |
 | Gemini CLI | `...\npm\gemini.ps1` | 0.42.0 | terpisah; bukan target MVP |
 
-> **Re-cek versi 3 Jul 2026** (dari 2.1.198→**2.1.199** & agy 1.0.15→**1.0.16**, keduanya patch bump):
+> **Re-cek versi 3 Jul 2026 (sore):** CC **2.1.199→2.1.200** (agy tetap 1.0.16). Changelog 2.1.200 belum
+> terbit di raw GitHub (patch sangat baru); entri 2.1.199 hanya retry 429 transient (sudah tercatat). **Tak ada
+> perubahan spek-kritis:** StopFailure hook, skema `rate_limits`, `api/oauth/usage` (justru **diverifikasi 200 OK
+> di 2.1.200 ini**, §2), resume, limit≠exit **tetap**; **auto-continue native belum ada** → risiko #4 belum terpicu.
+> **Re-cek versi 3 Jul 2026 (siang)** (dari 2.1.198→**2.1.199** & agy 1.0.15→**1.0.16**, keduanya patch bump):
 > changelog kedua-nya diverifikasi **tak mengubah fakta spek-kritis** — StopFailure hook (≥2.1.78),
 > skema statusLine `rate_limits` (≥2.1.80), limit≠exit, dan resume (`--resume`/`--conversation`) **tetap**;
 > **auto-continue native belum ada** di CC (risiko #4 belum terpicu). Catatan koroboratif (bukan perubahan spek):
@@ -459,15 +493,27 @@ Utamakan **sumber primer** (docs resmi) di atas blog pihak ketiga — tanggal ce
 >    Claude Code karena jalur deteksi primer kini hook `StopFailure` (§2c); fixture = fallback + agy.
 > 3. ~~Resume Antigravity CLI~~ ✅ **ditutup** (§4b): `agy --conversation <id>` (bukan `-c`) +
 >    auto-printed resume cmd. Binary `agy` v1.0.16 terkonfirmasi.
-> 4. (Opsi) Verifikasi endpoint OAuth usage `api/oauth/usage` secara langsung — **ditunda**: butuh baca token
->    dari kredensial (sensitif); statusLine JSON sudah cukup untuk MVP monitor.
+> 4. ~~(Opsi) Verifikasi endpoint OAuth usage `api/oauth/usage` secara langsung~~ ✅ **DITUTUP (3 Jul 2026,
+>    CC 2.1.200):** **200 OK** dgn Bearer token dari `~/.claude/.credentials.json` + `anthropic-beta:
+>    oauth-2025-04-20`; skema nyata **lebih kaya dari statusLine** (array `limits[]` dgn `kind`/`severity`/
+>    `is_active`/`scope.model`; `resets_at` = **ISO-8601**, bukan epoch; `spend.amount_minor` integer) — detail §2
+>    poin 2. **Jalur monitor daemon-standalone CC terbukti** (perkuat ADR-001). Token redaksi, tak di-log.
 > 5. **(Baru, 3 Jul 2026)** Probe usage Antigravity — **maju besar (3 Jul siang, §5b):** (b) LS embedded
 >    **terkonfirmasi** (dua port random gRPC+HTTP; port via `Get-NetTCPConnection -OwningProcess <pid>`, tanpa
 >    `lsof`/argv); **RPC `GetUserStatus` live TERBUKTI jalan — csrf TIDAK diperlukan** di localhost; **tapi
 >    quota `nil` di print-mode LS** (`cascadeModelConfigData` belum terisi → butuh LS sesi interaktif ber-PTY).
 >    **Arah: hybrid — #2 (LS GetUserStatus) utk sesi interaktif hidup + #3 (`retrieveUserQuota` OAuth) utk cek
->    pre-resume.** Masih perlu: (a) freshness snapshot `/usage` (#1), (c) bentuk request/respons
->    `retrieveUserQuota` (#3), (d) konfirmasi `quotaInfo` non-nil dari LS sesi interaktif nyata. Lock di ADR (sebelum M3).
+>    pre-resume.** **Maju (3 Jul 2026):** (c) endpoint `POST cloudcode-pa.googleapis.com/v1internal:
+>    retrieveUserQuota` **reachable** (bukan 404 → routing benar; Bearer + JSON body diterima), **TAPI** token
+>    on-disk `~/.gemini/oauth_creds.json` **stale → 401 UNAUTHENTICATED**. **Temuan operasional material:** `agy -p`
+>    berhasil (`pong`) namun **TIDAK menulis ulang** `oauth_creds.json` (expiry on-disk tetap 12 Jun) → **agy
+>    refresh token INTERNAL**. Konsekuensi opsi #3: probe standalone **wajib token segar** — butuh (i) refresh
+>    sendiri via `oauth2.googleapis.com` (→ **egress tambahan di luar whitelist NFR saat ini** + butuh client-id
+>    Gemini CLI) ATAU (ii) ambil token dari LS sesi hidup (→ malah condong ke opsi #2 utk sesi hidup). **Bentuk
+>    respons sukses `retrieveUserQuota` masih belum tertangkap** (perlu token valid). Masih perlu: (a) freshness
+>    snapshot `/usage` (#1), (c) **respons sukses** retrieveUserQuota (**ditunda ke M3 atas keputusan user 3 Jul** —
+>    butuh refresh token via `oauth2.googleapis.com`; ditangkap nanti saat wrapper pegang token sesi hidup),
+>    (d) `quotaInfo` non-nil dari LS sesi interaktif ber-PTY nyata. Lock di ADR (sebelum M3).
 > 6. **(Baru, 3 Jul 2026)** Pantau Claude Code #13354 (auto-continue native) tiap sesi riset — kalau shipped,
 >    revisit positioning (§5c) & scope MVP. *(Re-cek 3 Jul dini hari: masih open, belum ada sinyal implementasi;
 >    CHANGELOG juga nihil auto-continue.)*
