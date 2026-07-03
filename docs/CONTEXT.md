@@ -6,8 +6,17 @@
 
 ## Status saat ini
 
-- **Fase:** M0 — Perencanaan (Doc-First) **≈ selesai**. Belum ada kode fitur. **Fondasi M1 siap — coding bisa mulai sesi depan.**
-- **Terakhir diupdate:** 2026-07-03 (malam) — **(a)** lock **ADR-011/012/013** (grammy 1.44.0 + redaksi hybrid
+- **Fase:** **M1 — Fondasi + Process Wrapper SELESAI & terverifikasi terminal nyata** (merge ke `main` @ `5cb1577`).
+  Berikutnya: **M2 — Detector + Reset Estimator**.
+- **Terakhir diupdate:** 2026-07-03 (malam, M1) — **M1 SELESAI.** Scaffold TS/ESM (pin eksak: node-pty 1.1.0 +
+  better-sqlite3 12.11.1 + commander 14 + vitest), store SQLite (WAL+FK, migrasi skema penuh 4 tabel, repo
+  sessions/events/meta), `acca run -- <cli>` spawn via node-pty + `acca status`. **Terverifikasi di terminal nyata
+  (Windows):** `claude` interaktif terluncur di bawah wrapper → RUNNING→EXITED → wrapper balik ke shell bersih;
+  `status` jujur menandai sesi orphan `(basi)`. 9/9 test hijau, lint bersih, native prebuild Node 24 Win. Fix saat
+  smoke: `which()` resolve PATH/PATHEXT (G-12), `process.exit` pasca-exit (I-2), liveness `status` (I-1). Implementasi
+  = subagent Sonnet, di-tier-review Opus. Commits `591c1c9`→`5cb1577`. **Sisa:** I-3 (tulis-balik orphan → daemon M3),
+  verifikasi native **Ubuntu 24.04** (weekday).
+- **Terakhir diupdate (sebelumnya):** 2026-07-03 (malam) — **(a)** lock **ADR-011/012/013** (grammy 1.44.0 + redaksi hybrid
   regex+entropy), **ADR-014** (strategi continue sesi hidup: inject-PTY preferred + gating), **ADR-010** (verifikasi
   terminal item (d) **lulus** — LS `GetUserStatus` interaktif ber-PTY balas quotaInfo non-nil), **ADR-015** (IPC Node
   `net` socket/pipe NDJSON); **(b)** buat fondasi M1: **DATA-MODEL, MAP, CONVENTIONS, DEPENDENCY-POLICY**; **(c)** node-pty
