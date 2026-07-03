@@ -1,0 +1,10 @@
+{
+  "session_id": "9f2c8a10-0000-4000-8000-000000000003",
+  "transcript_path": "/tmp/fake/.claude/projects/-tmp-fake/9f2c8a10.jsonl",
+  "cwd": "/tmp/fake",
+  "prompt_id": "fd5eb115-0000-0000-0000-000000000003",
+  "effort": { "level": "high" },
+  "hook_event_name": "StopFailure",
+  "error": "server_error",
+  "last_assistant_message": "An internal server error occurred while processing the request."
+}

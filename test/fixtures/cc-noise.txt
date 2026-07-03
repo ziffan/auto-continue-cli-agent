@@ -1,0 +1,141 @@
+# Realistic CC/coding-session noise corpus — false-positive guard (AC: 0/100 non-none).
+# Includes a handful of adversarial prose lines that mention "usage limit" / "rate limit" /
+# "resets at" WITHOUT forming the canonical matched phrases — all lines here MUST classify none.
+$ npm install
+npm WARN deprecated inflight@1.0.6: This module is not supported, and leaks memory
+added 342 packages, and audited 343 packages in 12s
+found 0 vulnerabilities
+$ npm run build
+> auto-continue-cli-agent@0.1.0 build
+> tsc && node scripts/copy-migrations.js
+src/adapters/claude.ts(12,3): error TS2322: Type 'string' is not assignable to type 'Tool'.
+Found 1 error in src/adapters/claude.ts:12
+Fixing the type mismatch by narrowing the union before assignment in the adapter record.
+$ git diff --stat
+ src/adapters/claude.ts | 12 ++++++++----
+ src/adapters/types.ts  |  8 ++++++++
+ 2 files changed, 16 insertions(+), 4 deletions(-)
+diff --git a/src/adapters/claude.ts b/src/adapters/claude.ts
+index 1234567..89abcde 100644
+--- a/src/adapters/claude.ts
++++ b/src/adapters/claude.ts
+@@ -1,6 +1,10 @@
+-import type { Adapter, SpawnSpec } from './types.js';
++import type { Adapter, DetectionResult, DetectSignal, SpawnSpec } from './types.js';
+ export const claudeAdapter: Adapter = {
+   tool: 'claude',
+Reading the existing test file to match the style already used elsewhere in this repo.
+Reading src/adapters/types.ts (63 lines) before extending the Adapter interface.
+Adding a `detect` method to the Adapter interface, matching the shape used by claude.ts.
+Running vitest in watch mode to check that the new detector test passes locally.
+ ✓ test/detector.test.ts (12 tests) 45ms
+ ✓ test/reset-estimator.test.ts (18 tests) 62ms
+Test Files  2 passed (2)
+     Tests  30 passed (30)
+Now preparing to commit the change with a descriptive message referencing the milestone.
+$ git commit -m "M2: add detector + reset-estimator"
+[m2-detector 8b5ba69] M2: add detector + reset-estimator
+ 4 files changed, 210 insertions(+)
+Here is a summary of what changed in this session: implemented the Detector module that
+classifies StopFailure hook signals, output text, and exit codes into limit/overload/none.
+The reset-estimator resolves a ResetHint into a concrete epoch-ms timestamp using a precedence
+chain: exact epoch seconds, ISO timestamp, relative hours, clock time with timezone, then
+falls back to heuristic window estimates or exponential backoff when nothing else is usable.
+Docs note: our rate limit policy allows generous headroom before the gateway throttles clients,
+and the dashboard exposes a usage limit meter so users can see consumption trending upward.
+See docs/RESEARCH.md for background on rate limit detection patterns and the usage limit corpus
+that seeded our regression fixtures — none of that prose should trip the detector itself.
+Cache entries resets at midnight per the cron schedule configured in scripts/cron.ts.
+This variable name resets at is a lint nit — should be resetAt per the camelCase convention.
+Configured the alert threshold for when a usage limit warning should fire in the dashboard,
+which is a soft notification and not the same thing as a hard stop from the CLI itself.
+The support runbook mentions that if an engineer manually hits the rate limit dashboard button,
+it just refreshes the graph — no relation to the CLI's own throttling behavior at all.
+$ node --version
+v24.4.0
+$ tsc --noEmit
+No errors found.
+Reviewing docs/CONVENTIONS.md again to double check the epoch-ms UTC requirement for reset_at.
+Time internal representation must remain epoch ms UTC per the conventions doc; adapters convert
+from source-specific formats (epoch seconds vs ISO-8601) at the boundary, never storing local time.
+$ ls src/daemon
+detector.ts
+reset-estimator.ts
+process-wrapper.ts
+supervisor.ts
+Adding a unit test for the clock-time timezone resolution using America/New_York as the case.
+ ✓ resolves 3pm America/New_York to the correct UTC instant accounting for DST
+Checking the DST boundary case around the second Sunday in March for US Eastern time.
+The test asserts the computed epoch matches a hand-verified UTC offset for that specific date.
+$ npm run lint
+> auto-continue-cli-agent@0.1.0 lint
+> eslint .
+(no problems found)
+Writing the reset estimator now, following the precedence order from the milestone spec exactly.
+Every code path is a pure function; `now` is always injected, never read from Date.now() directly.
+$ npm test -- --run
+ ✓ test/proc.test.ts (2 tests)
+ ✓ test/store.test.ts (5 tests)
+ ✓ test/detector.test.ts (14 tests)
+ ✓ test/reset-estimator.test.ts (16 tests)
+Test Files  4 passed (4)
+     Tests  37 passed (37)
+Reading through the diff one more time before committing, checking for any `any` types that slipped in.
+None found — every unknown value is narrowed via a type guard before use, per the lint config.
+$ git status
+On branch m2-detector
+Changes not staged for commit:
+  modified:   src/adapters/claude.ts
+  modified:   src/adapters/types.ts
+Untracked files:
+  src/daemon/detector.ts
+  src/daemon/reset-estimator.ts
+Verifying the `noUncheckedIndexedAccess` compiler flag doesn't break the regex capture handling.
+Every `match[n]` access is guarded with an explicit `!== undefined` check before it is used further.
+Refactoring the timezone offset helper to share the `partsToMap` utility between both functions.
+This keeps the Intl.DateTimeFormat parsing logic in exactly one place, per the DRY convention.
+The build pipeline copies SQL migrations into dist/ via scripts/copy-migrations.js after tsc.
+Double-checking that the detector never imports from src/store — M2 is a pure engine only.
+grep -rn "from '../store" src/daemon/detector.ts src/daemon/reset-estimator.ts
+(no matches)
+Good — confirms the module boundary: detection is pure classification, no side effects at all.
+Session wrap-up: updating docs/CONTEXT.md to note the M2 slice is complete and ready for review.
+$ node scripts/copy-migrations.js
+Copied 3 migration file(s) to dist/store/migrations
+Final check: running the full test suite one more time before handing off to the orchestrator.
+ ✓ All 37 tests passed in 1.2s
+Looking at the wrapper's handling of stdout chunks — each chunk is buffered until a newline.
+The PTY wrapper forwards raw bytes to the detector's `output` signal one line at a time.
+This matters because a limit message could theoretically straddle two PTY write() calls.
+For now we assume line-buffered delivery from node-pty, matching observed behavior on both OSes.
+Reviewing GOTCHAS.md G-4 again: statusLine epoch seconds vs api/oauth/usage ISO-8601 string.
+Both are "resets_at" in their respective payloads but the types differ — parse per-source.
+Note to self: the support team's internal wiki page title is "Understanding Rate Limits at Acme".
+It explains billing tiers and has nothing to do with our CLI's own usage limit detection logic.
+A customer asked whether the tool respects their own API rate limit dashboards — yes, indirectly.
+$ eslint --fix src/daemon/reset-estimator.ts
+(no problems found)
+Checking prettier formatting is consistent with the rest of the adapters directory.
+$ npx prettier --check src/adapters/patterns.ts
+Checking formatting...
+All matched files use Prettier code style!
+Writing fixtures now: cc-limit.txt, cc-overload.txt, cc-stopfailure/*.json, cc-noise.txt.
+The noise fixture is the false-positive guard — every line here should classify as none.
+Some lines quote what a real limit message looks like without actually being one, on purpose.
+For example, a teammate might paste a changelog snippet and ask what it means in practice.
+Any literal canonical trigger phrase must never appear verbatim within this noise corpus.
+Rewording: a teammate might ask what "usage limit" messages generally look like in the CLI.
+Another engineer replies that the wording changed across releases, per RESEARCH.md's table.
+Also double-checking the "quota" wording doesn't accidentally match the agy-only pattern set.
+The agy-specific patterns look for the word quota paired with exhausted, reached, or exceeded,
+plus a separate phrase for weekly allowances running out — worded differently on purpose here.
+Neither of those phrasings appears anywhere in this Claude Code noise corpus, by construction.
+$ node dist/cli/index.js status
+No active sessions.
+$ node dist/cli/index.js run -- claude --help
+Usage: claude [options] [command] [prompt]
+  -c, --continue        Continue the most recent conversation
+  -r, --resume [id]     Resume a conversation, optionally by id
+Wrapping up the detector implementation and moving on to the reset-estimator's tz logic.
+The Intl.DateTimeFormat trick avoids pulling in a full timezone database dependency like
+luxon or date-fns-tz, which keeps the dependency footprint small per the dependency policy.

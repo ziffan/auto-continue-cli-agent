@@ -14,6 +14,12 @@ via cek liveness PID — lihat I-1), tapi **tulis-balik** status (mis. → `EXIT
 tunggal `sessions`), bukan `status` (read-only). Rekonsiliasi: `SELECT proc_state='alive'` → cek PID →
 mati → tandai + event `status_change`. Aktif saat daemon lahir di M3.
 
+### I-4 — `reset-estimator` clock-time wrap tak DST-aware saat lewat tengah malam [P3, target M3/M4]
+`resolveClockTime` menambah `MS_PER_DAY` mentah untuk "next occurrence" alih-alih menghitung ulang wall-clock+1
+hari di zona target → meleset ±1 jam di ~2 hari transisi DST/tahun (detail GOTCHAS G-13). Non-blocking: jalur
+clock-scrape = fallback-of-fallback; sumber exact andal = ISO dari usage-probe. Perbaiki bila presisi reset
+lintas-tengah-malam jadi penting (kemungkinan saat wiring reset ke scheduler M3 / tampilan M4).
+
 ---
 
 ## Tertutup

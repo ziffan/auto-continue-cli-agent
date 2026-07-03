@@ -1,0 +1,15 @@
+# Overload firewall corpus. Baris HTTP-error (429/5xx/529, overloaded_error) WAJIB klasifikasi
+# kind:'overload' (NEVER 'limit'). Baris berisi "Retrying" (retry internal CC, dalam kurung)
+# WAJIB klasifikasi kind:'none' — guard, bukan overload/limit. test/detector.test.ts membedakan
+# via keyword "Retrying" pada baris (lihat komentar di sana).
+API Error: 429
+API Error: 500
+API Error: 502
+API Error: 503
+API Error: 504
+API Error: 529
+overloaded_error
+Request failed: overloaded_error - please wait and retry
+(esc to interrupt · Retrying in 3s…)
+(ctrl+c to cancel · Retrying…)
+(Retrying request, attempt 2/5)
