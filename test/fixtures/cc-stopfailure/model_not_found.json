@@ -1,0 +1,10 @@
+{
+  "session_id": "fd5eb115-0000-4000-8000-000000000004",
+  "transcript_path": "/tmp/fake/.claude/projects/-tmp-fake/fd5eb115.jsonl",
+  "cwd": "/tmp/fake",
+  "prompt_id": "fd5eb115-0000-0000-0000-000000000004",
+  "effort": { "level": "high" },
+  "hook_event_name": "StopFailure",
+  "error": "model_not_found",
+  "last_assistant_message": "There's an issue with the selected model (...)."
+}

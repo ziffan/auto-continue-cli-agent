@@ -1,0 +1,14 @@
+# Korpus kanonik pesan usage-limit Claude Code (RESEARCH §2b). Satu baris = satu kasus AC-1;
+# setiap baris WAJIB terklasifikasi kind:'limit'. Termasuk varian separator `·` + timezone eksplisit.
+5-hour limit reached - resets 3pm (UTC)
+10-hour limit reached - resets 11am (UTC)
+Claude usage limit reached. Resets at 2pm
+Claude usage limit reached. Your limit will reset at 3pm (America/New_York)
+You're out of extra usage · resets 3pm
+You're out of extra usage · resets 3pm (Europe/Dublin)
+Please try again in 5 hours
+Please try again in 12 hours
+You've hit your limit · resets 3pm (Europe/Dublin)
+Hit your limit · resets 5pm (UTC)
+Rate limit hit. Resets at 4pm
+Rate limit hit. Resets at 4pm (America/New_York)

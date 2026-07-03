@@ -123,12 +123,27 @@ terapkan `PATHEXT` di Windows). Path yang sudah absolut/mengandung separator dil
 target berupa `.cmd`/`.bat` (bukan kasus `claude`/`agy` yang `.exe`), ConPTY tak bisa mengeksekusinya langsung —
 perlu `cmd.exe /c` (belum diperlukan; PATHEXT memprioritaskan `.EXE`). **Sumber:** smoke M1 interaktif, 3 Jul (Windows 11).
 
+## Detector / Reset Estimator (M2)
+
+### G-13 — `reset-estimator` clock-time "next occurrence" bisa meleset ±1 jam di hari transisi DST
+**Jebakan:** saat `resolveClockTime` harus wrap ke "besok" (jam target sudah lewat hari ini), ia menambah
+**`MS_PER_DAY` (86.400.000 ms) ke instant UTC**, bukan menghitung ulang wall-clock+1-hari di zona target.
+Di ~2 hari transisi DST/tahun, menambah tepat 24 jam ms bisa mendaratkan wall-clock di jam berbeda (23/25 jam),
+padahal hasil tetap ditandai `source:'exact'`.
+**Dampak:** minor — jalur ini (scrape "resets 3pm (America/New_York)" dari output) = **fallback-of-fallback**;
+sumber `exact` yang andal = ISO-8601 dari `api/oauth/usage`/LS (tanpa ambiguitas zona). Edge hanya kena bila (a)
+reset diparse dari clock-time output DAN (b) jam target sudah lewat hari-ini DAN (c) kebetulan hari transisi DST.
+**Cara benar (bila kelak perlu presisi):** hitung ulang tanggal+1 di zona (`getDatePartsInZone` untuk besok) lalu
+`resolveWallClockToUtc`, bukan tambah `MS_PER_DAY` mentah. Dilacak I-4 (P3). Untuk M2 diterima apa adanya.
+**Sumber:** tier-review M2 (4 Jul), `src/daemon/reset-estimator.ts`.
+
 ---
 
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-04 (M2) | G-13 (reset-estimator clock-time next-occurrence tambah `MS_PER_DAY` mentah → meleset ±1j di hari transisi DST; non-blocking, I-4/P3). Dari tier-review M2. |
 | 2026-07-03 (sore) | File dibuat. G-1..G-3 (agy: token stale, log login palsu, PTY wajib), G-4..G-5 (CC: dua format reset, field `error` hook), G-6 (CRLF). Dari riset real-CLI + uji sebelumnya. |
 | 2026-07-03 (malam) | G-7 (LS quota nil print-mode vs terisi interaktif-PTY tanpa prompt), G-8 (winpty passthrough vs ConPTY node-pty), G-9 (respons GetUserStatus memuat PII). Dari verifikasi terminal ADR-010 item (d). |
 | 2026-07-03 (malam, M1) | G-10 (`tsc` tak menyalin migrasi SQL ke `dist/` — perlu `scripts/copy-migrations.js`), G-11 (npm `allow-scripts` memblokir postinstall native default, perlu `npm approve-scripts` + reinstall bersih; node-pty Windows fallback ke `prebuilds/`). Dari implementasi + verifikasi gate M1 foundation. |

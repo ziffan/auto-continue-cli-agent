@@ -6,9 +6,22 @@
 
 ## Status saat ini
 
-- **Fase:** **M1 — Fondasi + Process Wrapper SELESAI & terverifikasi terminal nyata** (merge ke `main` @ `5cb1577`).
-  Berikutnya: **M2 — Detector + Reset Estimator**.
-- **Terakhir diupdate:** 2026-07-03 (malam, M1) — **M1 SELESAI.** Scaffold TS/ESM (pin eksak: node-pty 1.1.0 +
+- **Fase:** **M2 — Detector + Reset Estimator SELESAI & tier-reviewed (Tier-1 APPROVE)** — merge ke `main`.
+  Berikutnya: **M3 — Scheduler + Usage Probe + Auto-continue**.
+- **Terakhir diupdate:** 2026-07-04 (dini hari, otonom via cron) — **M2 SELESAI.** Mesin deteksi murni +
+  estimasi reset, tervalidasi fixtures (belum di-wire ke sesi live — itu jatah M3, sesuai acceptance MILESTONES).
+  Dibuat: `adapters/types.ts` (+tipe deteksi & method `detect()`), `adapters/patterns.ts` (korpus regex + helper),
+  `claude.ts`/`antigravity.ts` `detect()`, `daemon/detector.ts` (`classify(tool,signal)` + `DetectorError`),
+  `daemon/reset-estimator.ts` (`estimateReset` presedensi exact→heuristik→backoff + resolusi jam/tz DST-correct),
+  `test/fixtures/` (cc-limit 12, cc-overload 11 +3 guard Retrying, agy-limit 4 provisional, cc-noise 138 +adversarial,
+  cc-stopfailure 5 payload), `test/detector.test.ts` + `test/reset-estimator.test.ts`. **Klasifikasi:** CC hook
+  `error==rate_limit`→limit, `overloaded`/`server_error`→overload, lain→none; output guard Retrying→overload→limit;
+  **overload firewall** (429/5xx/529 TAK PERNAH limit). **Terverifikasi (Opus jalankan sendiri):** build bersih,
+  **71/71 test**, lint exit 0; fixtures non-trivial + prosa adversarial lolos 0 false-positive dari 138 baris.
+  Impl = subagent Sonnet, tier-review Tier-1 line-by-line oleh Opus (pola orkestrator). **Nits (non-blocking):**
+  DST clock-wrap (I-4/G-13). agy corpus provisional (RESEARCH TODO #2, butuh limit asli). **Sisa dari M1:** I-3
+  (tulis-balik orphan → daemon M3), verifikasi native Ubuntu 24.04 (weekday).
+- **Terakhir diupdate (sebelumnya):** 2026-07-03 (malam, M1) — **M1 SELESAI.** Scaffold TS/ESM (pin eksak: node-pty 1.1.0 +
   better-sqlite3 12.11.1 + commander 14 + vitest), store SQLite (WAL+FK, migrasi skema penuh 4 tabel, repo
   sessions/events/meta), `acca run -- <cli>` spawn via node-pty + `acca status`. **Terverifikasi di terminal nyata
   (Windows):** `claude` interaktif terluncur di bawah wrapper → RUNNING→EXITED → wrapper balik ke shell bersih;

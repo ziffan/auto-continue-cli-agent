@@ -1,0 +1,6 @@
+# PROVISIONAL: korpus agy belum diverifikasi dari terminal nyata (RESEARCH §6 TODO #2).
+# Pola konservatif seputar quota/limit habis — revisi begitu korpus real tertangkap dari sesi nyata.
+Your weekly limit has been reached, please wait for the reset window.
+Quota exhausted for this session — try again after the quota resets.
+Quota reached: daily allowance used up, resets in 5 hours.
+Quota exceeded for model gemini-pro; weekly limit applies.
