@@ -111,6 +111,18 @@ fallback bila `build/Release` kosong (postinstall `node-pty` hanya menyalin `con
 `require('node-pty').spawn(...)` benar-benar jalan (diverifikasi lewat spawn+echo nyata). **Sumber:** verifikasi
 gate M1, 3 Jul (Windows 11, Node 24.18.0).
 
+### G-12 — node-pty (Windows) tak resolve PATH/PATHEXT — butuh path absolut executable
+**Jebakan:** `pty.spawn('claude', …)` di Windows gagal dengan `File not found:` **walau** `where.exe claude`
+menemukannya (di sini `C:\Users\ziffa\.local\bin\claude.exe`). node-pty/ConPTY **tidak** mencari `PATH` dan
+**tidak** menerapkan `PATHEXT` (tak menambah `.exe`) seperti shell / `child_process({shell:true})`. `child_process`
+resolusi PATH berbeda dari node-pty — jangan asumsikan sama.
+**Dampak:** wrapper `acca run -- <cli>` tak bisa meluncurkan CLI target dengan nama telanjang; muncul sebagai
+spawn-failure (di kita → sesi `FAILED`, bukan orphan — benar, tapi CLI tak jalan).
+**Cara benar:** resolusi nama → path absolut sebelum `pty.spawn` (`src/shared/which.ts`: cari di `PATH`,
+terapkan `PATHEXT` di Windows). Path yang sudah absolut/mengandung separator dilewati apa adanya. Catatan: bila
+target berupa `.cmd`/`.bat` (bukan kasus `claude`/`agy` yang `.exe`), ConPTY tak bisa mengeksekusinya langsung —
+perlu `cmd.exe /c` (belum diperlukan; PATHEXT memprioritaskan `.EXE`). **Sumber:** smoke M1 interaktif, 3 Jul (Windows 11).
+
 ---
 
 ## Change Log
@@ -120,3 +132,4 @@ gate M1, 3 Jul (Windows 11, Node 24.18.0).
 | 2026-07-03 (sore) | File dibuat. G-1..G-3 (agy: token stale, log login palsu, PTY wajib), G-4..G-5 (CC: dua format reset, field `error` hook), G-6 (CRLF). Dari riset real-CLI + uji sebelumnya. |
 | 2026-07-03 (malam) | G-7 (LS quota nil print-mode vs terisi interaktif-PTY tanpa prompt), G-8 (winpty passthrough vs ConPTY node-pty), G-9 (respons GetUserStatus memuat PII). Dari verifikasi terminal ADR-010 item (d). |
 | 2026-07-03 (malam, M1) | G-10 (`tsc` tak menyalin migrasi SQL ke `dist/` — perlu `scripts/copy-migrations.js`), G-11 (npm `allow-scripts` memblokir postinstall native default, perlu `npm approve-scripts` + reinstall bersih; node-pty Windows fallback ke `prebuilds/`). Dari implementasi + verifikasi gate M1 foundation. |
+| 2026-07-03 (malam, M1 smoke) | G-12 (node-pty Windows tak resolve PATH/PATHEXT — butuh path absolut; resolver `src/shared/which.ts`). Ditemukan saat smoke interaktif `acca run -- claude`. |

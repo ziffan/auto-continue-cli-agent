@@ -1,5 +1,7 @@
+import { isAbsolute } from 'node:path';
 import * as pty from 'node-pty';
 import { genSessionId } from '../shared/ids.js';
+import { which } from '../shared/which.js';
 import type { Tool } from '../shared/types.js';
 import type { EventsRepo } from '../store/repositories/events.js';
 import type { SessionsRepo } from '../store/repositories/sessions.js';
@@ -44,7 +46,14 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
 
   let ptyProcess;
   try {
-    ptyProcess = pty.spawn(spec.file, spec.args, {
+    // node-pty (Windows) tak resolve PATH/PATHEXT — butuh path absolut (G-12).
+    // Path yang sudah absolut/mengandung separator dipakai apa adanya (mis. process.execPath di test).
+    const looksLikePath = isAbsolute(spec.file) || spec.file.includes('/') || spec.file.includes('\\');
+    const resolvedFile = looksLikePath ? spec.file : which(spec.file);
+    if (resolvedFile === null) {
+      throw new Error(`Executable tak ditemukan di PATH: ${spec.file}`);
+    }
+    ptyProcess = pty.spawn(resolvedFile, spec.args, {
       name: 'xterm-256color',
       cols,
       rows,
