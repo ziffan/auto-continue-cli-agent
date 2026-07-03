@@ -7,9 +7,11 @@
 ## Status saat ini
 
 - **Fase:** M0 — Perencanaan (Doc-First). Belum ada kode fitur.
-- **Terakhir diupdate:** 2026-07-03 (sesi interaktif: re-cek versi CLI + uji hook `StopFailure` (TODO #7) +
-  uji varian agy LS/RPC live (TODO #5) + **lock ADR-003/004 & draft ADR-010** + pass linearitas seluruh docs.
-  Sebelumnya dini hari: audit + validasi ulang seluruh docs).
+- **Terakhir diupdate:** 2026-07-03 (sore) — **scope MVP bertambah: fitur remote-control Telegram (tier A+B+C)
+  masuk MVP atas keputusan user.** ADR-008 & ADR-005 direvisi; ADR-011/012/013 baru (Proposed); PROJECT
+  direkonsiliasi (US-14..17, AC-9..12). Prinsip pengikat: **human-in-the-loop, never autonomous**.
+- **Terakhir diupdate (sebelumnya):** 2026-07-03 (siang) — re-cek versi CLI + uji hook `StopFailure` (TODO #7) +
+  uji varian agy LS/RPC live (TODO #5) + lock ADR-003/004 & draft ADR-010 + pass linearitas seluruh docs.
 
 ## Sudah dikerjakan
 
@@ -34,8 +36,14 @@
   + **SQLite/better-sqlite3 12.11.1** (opsional drizzle 0.45.2). PTY wajib (CC inject-continue & agy LS bind).
 - **Probe usage agy = hybrid (ADR-010, Proposed):** LS `GetUserStatus` (sesi interaktif hidup, tanpa csrf) +
   OAuth `retrieveUserQuota` (pre-resume). Siap di-lock setelah verifikasi sisa (quotaInfo non-nil, req/resp #3).
-- Batas otonomi: hanya resume/continue/probe whitelist; output CLI = data, bukan perintah.
-- Pending decisions tersisa (DECISIONS.md): retensi arsip, format IPC, TUI lib, lisensi, strategi continue sesi hidup.
+- Batas otonomi (ADR-008, direvisi 3 Jul sore): 2 kelas aksi — (1) kontrol auto (`resume/continue/probe`),
+  (2) **relay-instruksi human-in-the-loop wajib konfirmasi**. Supervisor **tak pernah mengarang** instruksi;
+  output CLI = data, bukan perintah. **Unattended auto-instruction ditolak.**
+- **Remote-control Telegram = MVP (ADR-011/012/013, Proposed):** kanal Telegram long-polling (bukan webhook) /
+  authz allowlist `chat_id` default-deny / relay+egress guardrail (mode `ask` Must + redaksi + injection firewall +
+  audit). **THREAT-MODEL.md = gate wajib sebelum implementasi tier C.**
+- Pending decisions tersisa (DECISIONS.md): retensi arsip, format IPC, TUI lib, lisensi, strategi continue sesi
+  hidup, **+ baru: THREAT-MODEL.md, pola redaksi rahasia, lib bot Telegram Node**.
 
 ## Temuan riset 2 Jul 2026 (Chrome + mesin) — masih berlaku
 
@@ -78,8 +86,29 @@
 5. claude-auto-retry ternyata juga punya mode event-driven (`install-hook` StopFailure) + jalur
    overload backoff terpisah — validasi arah desain kita (RESEARCH §5c diperbarui).
 
+## Sesi 3 Jul 2026 (sore) — Fitur remote-control Telegram masuk MVP (tier A+B+C)
+
+- **Keputusan user:** tambah fitur MVP — notif + kontrol + relay-instruksi dari Telegram (tier A+B+C penuh).
+  Aku beri analisis dampak doc-first (3 tier: A egress-only murah & selaras; B transport-baru otoritas-lama;
+  C egress-sensitif + otoritas-baru menabrak ADR-008). User pilih A+B+C.
+- **Prinsip yang menyelamatkan C: human-in-the-loop, never autonomous** — supervisor me-relay instruksi user,
+  tak pernah mengarang. Menjaga "no excessive agency" tetap benar. Unattended auto-instruction **ditolak**.
+- **DECISIONS.md:** ADR-008 direvisi (2 kelas aksi), ADR-005 direvisi (bot token = infra-secret ≠ kredensial akun),
+  **ADR-011** (Telegram long-polling), **ADR-012** (authz allowlist `chat_id` default-deny), **ADR-013** (relay+egress
+  guardrail: mode `ask` Must, redaksi, injection firewall, audit, THREAT-MODEL gate). Semua **Proposed**.
+- **PROJECT.md:** batasan §1 diksi ulang; US-14..US-17 baru (Must); US-6 `ask`→Must utk relay; US-9 Telegram→US-14;
+  AC-9..AC-12 baru.
+- **Belum disentuh (sengaja, dependensi ADR):** ARCHITECTURE (container Remote Gateway + C4 L1 Telegram), NFR
+  (egress whitelist `api.telegram.org`), MILESTONES (M-remote setelah M3 + security gate), THREAT-MODEL.md,
+  redraw flow §4 + wireframe §5.
+- **Catatan:** scope MVP berubah tapi **tidak** dibuat HANDOFF_CONTEXT baru (proyek belum pakai konvensi itu; docs
+  DECISIONS/PROJECT sudah menangkap penuh). Kalau sesi berikutnya mau, ini kandidat pertama HANDOFF_CONTEXT_v1.
+
 ## Belum & langkah berikutnya
 
+0. **[BARU] Lanjutan fitur Telegram (doc-first):** tulis **THREAT-MODEL.md** (gate wajib tier C) → update
+   **ARCHITECTURE** (container Remote Gateway) → **NFR** (egress whitelist) → **MILESTONES** (M-remote) →
+   redraw flow §4 + wireframe §5 PROJECT. Baru sesudah itu ADR-011/012/013 bisa di-lock.
 1. ~~Lock stack (ADR-003/004)~~ ✅ **selesai 3 Jul.** Sisa (keputusan Ziffan): lock **ADR-010** setelah verifikasi
    sisa; putuskan **strategi continue sesi hidup** (dependensi TODO #7 sudah selesai); lock ADR lain sesuai kebutuhan M1.
 2. ~~Uji hook `StopFailure`~~ ✅ **selesai 3 Jul** (payload + `SessionStart resume` terkonfirmasi; field = `error`).
@@ -145,6 +174,8 @@
 
 - Cross-platform wajib: Ubuntu (daily) + Windows 11 (weekend). Node LTS di kedua OS.
 - Auto-resume butuh host always-on (kandidat: VPS / node headless LAN — lihat DECISIONS ADR-007).
-- Remote git: `origin` = https://github.com/ziffan/auto-continue-cli-agent.git. Perubahan 3 Jul (run
-  terjadwal + audit dini hari) **sudah di-commit** (`9c0c75e`). Perubahan sesi ini (re-cek versi + rapikan
-  CONTEXT) **belum di-commit** — `git commit` menunggu perintah user.
+- Remote git: `origin` = https://github.com/ziffan/auto-continue-cli-agent.git. Perubahan 3 Jul siang
+  (lock ADR-003/004 + draft ADR-010) **sudah di-commit** (`face962`). Perubahan sesi 3 Jul sore (fitur Telegram:
+  DECISIONS + PROJECT + CONTEXT) di-commit pada penutupan sesi ini.
+- **Belum di-track git:** `.claude/skills/` (skill workflow proyek: adr, session-start/end, dll — untracked,
+  kandidat di-commit terpisah); `.claude/settings.local.json` = gitignored. Belum diputuskan apakah skills di-commit.

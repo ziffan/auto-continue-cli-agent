@@ -45,9 +45,13 @@ Biaya utamanya **waktu wall-clock yang menganggur** dan **beban kognitif jaga te
 **Batasan (yang TIDAK dikerjakan di MVP).**
 
 - **Tidak** menambah/mem-bypass limit usage. Ini penjadwal, bukan quota-cracker.
-- **Tidak** memulai sesi baru berisi instruksi arbitrer secara otonom — hanya me-resume sesi yang
-  sudah ada (batas otonomi & keamanan; lihat `DECISIONS.md`).
-- **Tidak** GUI/dashboard web di MVP — CLI + notifikasi lokal dulu (web menyusul, lihat `MILESTONES.md`).
+- **Tidak** memulai/melanjutkan sesi berisi instruksi arbitrer secara **otonom**. Supervisor tak pernah
+  *mengarang* instruksi. Aksi auto dibatasi `resume/continue`/`probe`; instruksi apa pun dari user (termasuk
+  via Telegram) = **human-in-the-loop, wajib konfirmasi** — supervisor hanya me-relay, bukan mengarang
+  (batas otonomi & keamanan; ADR-008/013).
+- **Tidak** GUI/dashboard web di MVP. UX MVP = CLI + notifikasi/kontrol lokal **dan** kanal remote **Telegram**
+  (notif keluar + kontrol `status/resume/cancel` + relay-instruksi ber-konfirmasi; ADR-011/012/013). Dashboard
+  web = Later (US-10).
 - **Tidak** dukung agent selain Claude Code & Antigravity CLI di MVP (OpenCode = Later).
 - **Tidak** menyimpan/mengirim kredensial akun; supervisor memakai sesi login yang sudah ada di mesin.
 - **Tidak** menjamin resume saat mesin mati/tidur (butuh always-on host; lihat NFR & Failure Modes).
@@ -110,14 +114,50 @@ usage/quota, *so that* aku tidak perlu memelototi terminal.
 *As a* solo orchestrator, *I want* notifikasi saat sesi kena limit dan saat berhasil di-resume, *so that* aku tetap update tanpa jaga layar.
 - Given supervisor berjalan,
   When sesi berpindah ke `LIMIT_HIT` atau `RESUMED` atau `FAILED`,
-  Then supervisor mengirim notifikasi lokal (desktop/CLI; channel eksternal = Nice).
+  Then supervisor mengirim notifikasi lokal (desktop/CLI) **dan** ke Telegram (US-14) — kanal remote = primer
+  untuk kasus "user jauh dari mesin" (persona §2).
+
+### Remote-control Telegram — Must (MVP)
+
+> Fitur ini masuk MVP atas keputusan user (3 Jul 2026). Prinsip pengikat: **human-in-the-loop, never autonomous**
+> (ADR-008). Semua perintah remote hanya dari `chat_id` terotorisasi (ADR-012). Detail guardrail: ADR-011/012/013.
+
+**US-14 — Notifikasi ke Telegram** *(tier A; mempromosikan US-9 utk Telegram)*
+*As a* solo orchestrator, *I want* notifikasi peristiwa (LIMIT_HIT/RESUMED/FAILED) sampai ke Telegram-ku, *so that* aku tahu status walau jauh dari mesin.
+- Given supervisor berjalan dengan bot Telegram terkonfigurasi,
+  When sesi berpindah status penting,
+  Then supervisor mengirim pesan ke `chat_id` terotorisasi (egress hanya ke `api.telegram.org`).
+
+**US-15 — Kontrol dari Telegram** *(tier B)*
+*As a* solo orchestrator, *I want* menjalankan `status`, `resume-now <id>`, `cancel <id>` dari Telegram, *so that* aku bisa mengendalikan supervisor tanpa akses terminal.
+- Given pesan perintah dari `chat_id` **terotorisasi** (ADR-012),
+  When perintah termasuk whitelist kontrol (`status`/`resume-now`/`cancel`),
+  Then supervisor mengeksekusinya (otoritas sama dengan CLI lokal, tak ada yang baru) & membalas hasilnya;
+  pesan dari pengirim tak terotorisasi di-drop + di-audit.
+
+**US-16 — Lihat output agent dari Telegram** *(tier C — egress sensitif)*
+*As a* solo orchestrator, *I want* mengintip output sesi dari Telegram, *so that* aku bisa menilai kondisi agent dari jauh.
+- Given sesi ter-supervise & user meng-**opt-in** stream output untuk sesi itu,
+  When user meminta cuplikan output,
+  Then supervisor mengirim potongan yang **sudah diredaksi rahasia** + **size-capped**, diberi label
+  **"data tak tepercaya"** (ADR-013); default (tanpa opt-in) = tidak stream.
+
+**US-17 — Kirim instruksi dari Telegram (ber-konfirmasi)** *(tier C — otoritas paling sensitif)*
+*As a* solo orchestrator, *I want* mengirim instruksi ke sesi agent dari Telegram, *so that* aku bisa mengarahkan kerja dari jauh — **tetap dengan gerbang konfirmasi**.
+- Given instruksi dari `chat_id` terotorisasi,
+  When supervisor menerimanya,
+  Then instruksi di-**queue** + di-echo balik → **wajib konfirmasi eksplisit** user (mode `ask`) → baru di-inject
+  ke PTY; **tanpa konfirmasi tak ada inject**. Tak ada aksi yang diturunkan dari *isi* output agent (injection
+  firewall, ADR-013). Setiap langkah di-audit (`events`).
 
 ### Nice (v1)
 
-- **US-6** Konfirmasi opsional sebelum resume (mode "ask") vs full-auto.
+- **US-6** Mode konfirmasi "ask" vs full-auto. *(Untuk **resume** = tetap Nice. Untuk **relay-instruksi remote**
+  (US-17), mode `ask` **naik jadi Must** — konfirmasi wajib, bukan opsional; ADR-008/013.)*
 - **US-7** Retry berjenjang dengan backoff saat probe pasca-reset masih kosong (mis. kuota mingguan habis).
 - **US-8** Riwayat & log interupsi/resume yang bisa ditelusuri (`acca log`).
-- **US-9** Channel notifikasi eksternal (Telegram/ntfy/email) — dengan izin eksplisit user.
+- **US-9** Channel notifikasi eksternal (ntfy/email) — dengan izin eksplisit user. *(Kanal **Telegram** dipromosikan
+  ke Must sebagai US-14; ntfy/email tetap Nice.)*
 
 ### Later (v2+)
 
@@ -201,6 +241,13 @@ Checklist test milestone (detail Given/When/Then ada di tiap story §3):
 - [ ] AC-6 Probe pasca-reset kosong → backoff & jadwal ulang, tidak spam-resume. (US-2, US-7)
 - [ ] AC-7 State timer bertahan lintas restart supervisor (recover & lanjut). (US-3, flow §4)
 - [ ] AC-8 Tidak pernah resume di working directory yang salah (status BLOCKED bila cwd hilang). (batasan §1)
+- [ ] AC-9 Notifikasi peristiwa sampai ke Telegram `chat_id` terotorisasi; egress hanya `api.telegram.org`. (US-14)
+- [ ] AC-10 Perintah kontrol (`status/resume/cancel`) dari `chat_id` terotorisasi jalan; **sender tak terotorisasi di-drop + di-audit** (default-deny). (US-15, ADR-012)
+- [ ] AC-11 Instruksi remote **tak pernah** di-inject tanpa konfirmasi eksplisit; tanpa `chat_id` terotorisasi = ditolak. (US-17, ADR-008/013)
+- [ ] AC-12 Output ke Telegram teredaksi rahasia + size-capped + opt-in; **tak ada aksi diturunkan dari isi output** (injection firewall). (US-16, ADR-013)
+
+> Catatan: AC-9..AC-12 diuji di **M-remote** dengan **security-review gate**; prasyarat **THREAT-MODEL.md** (ADR-013 §5).
+> Flow §4 & wireframe §5 (interaksi Telegram) + container Remote Gateway (ARCHITECTURE) menyusul sesi berikutnya.
 
 ---
 
@@ -210,3 +257,4 @@ Checklist test milestone (detail Given/When/Then ada di tiap story §3):
 |---|---|---|
 | 2026-07-02 | Draft awal (6 artefak discovery Bagian 2.1). | Ziffan × Claude |
 | 2026-07-03 | US-1 + flow §4 direvisi pasca temuan hook `StopFailure` & nuansa "limit-hit ≠ proses exit": sumber sinyal deteksi diperluas, langkah 9 bercabang inject-PTY (proses hidup) vs resume-by-id (proses mati). (RESEARCH §2c) | Claude (validasi sesi 3 Jul) |
+| 2026-07-03 (sore) | **Fitur remote-control Telegram masuk MVP (tier A+B+C, keputusan user).** Batasan §1 diksi ulang (human-in-the-loop, never autonomous); US-5 rujuk Telegram; **US-14..US-17 baru (Must)** — notif/kontrol/lihat-output/instruksi-ber-konfirmasi; US-6 mode `ask` naik Must utk relay-instruksi; US-9 Telegram→US-14 (ntfy/email tetap Nice); AC-9..AC-12 baru. Dasar: ADR-008 (revisi) + ADR-011/012/013 (baru). Flow/wireframe/ARCHITECTURE/NFR/MILESTONES/THREAT-MODEL = sesi berikutnya. | Ziffan × Claude |
