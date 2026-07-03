@@ -118,6 +118,35 @@ yang belum tercatat di dokumen ini sebelumnya:
   membedakan **overload sementara (429/5xx/529 — CC punya internal retry sendiri) vs usage limit** —
   dua kasus yang wajib ditangani berbeda (overload = backoff pendek, bukan tunggu window reset).
 
+**✅ Verifikasi empiris (3 Jul 2026, mesin sendiri, Claude Code v2.1.199, Windows — TODO #7 ditutup).**
+Hook dipasang via `--settings <file>` (isolasi, tak mengotori config global) memanggil skrip node yang
+mencatat stdin. `StopFailure` dipicu deterministik dengan `--model` bogus (error `model_not_found` — biaya ~nol;
+`rate_limit` asli belum bisa dipaksa, lihat caveat). Payload stdin **nyata** yang diterima hook `StopFailure`:
+
+```json
+{ "session_id": "...", "transcript_path": "...\\<id>.jsonl", "cwd": "...",
+  "prompt_id": "fd5eb115-...", "effort": { "level": "high" },
+  "hook_event_name": "StopFailure",
+  "error": "model_not_found",
+  "last_assistant_message": "There's an issue with the selected model (...)." }
+```
+
+**Koreksi material vs docs resmi (docs kurang tepat untuk versi ini):**
+1. **Field tipe error = `error`, BUKAN `error_type`.** Detector wajib baca `error` (nilai matcher, mis. `rate_limit`).
+2. **Bonus field `last_assistant_message`** = teks error user-facing → langsung berguna sebagai fixture/log
+   & pembeda tambahan (bukan hanya taxonomy `error`).
+3. Ada field `prompt_id` (UUID prompt) + `effort.level` — tak ada `error_type`/subtype.
+4. **`StopFailure` fire di print mode** (`-p`) juga, bukan cuma interaktif — memperluas cakupan detektor.
+
+`SessionStart` **terverifikasi**: `source:"startup"` di sesi baru; **`source:"resume"` saat `claude --resume <id>`**
+(payload: `session_id, transcript_path, cwd, hook_event_name, source` — tanpa `prompt_id`). Resume jalan
+(`pong`, exit 0, `session_id` sama) → konfirmasi jalur RESUMED. Matcher exact-match `a|b|c` bekerja: nilai
+`model_not_found` cocok dengan pola gabungan.
+
+**Caveat tersisa:** nilai `error:"rate_limit"` **belum** diobservasi langsung (butuh limit 5-jam asli habis) —
+tapi mekanisme + nama field + shape payload sudah terkunci; tinggal konfirmasi nilai string saat limit nyata.
+Harness uji tersimpan di scratchpad (`hooktest/`, non-repo).
+
 **Perilaku proses saat usage-limit (nuansa penting yang mengoreksi asumsi implisit dokumen lama):**
 
 | Mode sesi | Saat limit habis | Sinyal deteksi | Cara lanjut |
@@ -390,7 +419,8 @@ Utamakan **sumber primer** (docs resmi) di atas blog pihak ketiga — tanggal ce
 > 6. **(Baru, 3 Jul 2026)** Pantau Claude Code #13354 (auto-continue native) tiap sesi riset — kalau shipped,
 >    revisit positioning (§5c) & scope MVP. *(Re-cek 3 Jul dini hari: masih open, belum ada sinyal implementasi;
 >    CHANGELOG juga nihil auto-continue.)*
-> 7. **(Baru, 3 Jul 2026 dini hari)** Uji empiris hook `StopFailure` di mesin sendiri: pasang hook matcher
->    `rate_limit`, konfirmasi ia fire saat usage-limit di sesi interaktif + bentuk payload-nya (field apa
->    saja yang diterima hook di stdin) — dasar desain marker/IPC Detector (§2c). Sekalian uji
->    `SessionStart` matcher `resume` sebagai konfirmasi RESUMED.
+> 7. ~~Uji empiris hook `StopFailure` di mesin sendiri~~ ✅ **ditutup 3 Jul 2026** (v2.1.199, §2c): hook fire
+>    (via `model_not_found` sbg proxy) + payload terkunci — **field tipe = `error` (bukan `error_type`)** +
+>    bonus `last_assistant_message`; fire di print mode; `SessionStart` `source:"resume"` terkonfirmasi.
+>    **Sisa:** observasi nilai `error:"rate_limit"` saat limit 5-jam **asli** habis (tak bisa dipaksa;
+>    tangkap saat terjadi). Harness di scratchpad `hooktest/`.

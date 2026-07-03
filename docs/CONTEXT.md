@@ -77,13 +77,24 @@
 ## Belum & langkah berikutnya
 
 1. **Lock ADR** (Proposed → Accepted) — terutama stack (ADR-003/004) sebelum M1. (Keputusan Ziffan.)
-2. **Uji hook `StopFailure` di mesin sendiri** (RESEARCH §6 TODO #7): payload + fire saat usage-limit;
-   sekalian `SessionStart` matcher `resume` untuk konfirmasi RESUMED.
+2. ~~Uji hook `StopFailure`~~ ✅ **selesai 3 Jul** (payload + `SessionStart resume` terkonfirmasi; field = `error`).
+   Sisa kecil: tangkap nilai `error:"rate_limit"` saat limit 5-jam **asli** habis (tak bisa dipaksa).
 3. **Fixture Detector** (TODO #2): konfirmasi lokal korpus §2b saat kena limit sungguhan + varian agy
    (termasuk: TUI agy hidup atau exit saat quota habis?). Bobot turun untuk CC (hook = primer).
 4. **Uji 3 opsi probe usage agy** (TODO #5) → lock pending decision sebelum M3.
 5. Buat DATA-MODEL.md, MAP.md, CONVENTIONS.md, DEPENDENCY-POLICY.md sebelum/awal M1.
 6. Isi angka retensi arsip (Pending di DECISIONS.md, owner Ziffan).
+
+## Uji hook `StopFailure` 3 Jul 2026 (siang) — TODO #7 ditutup (RESEARCH §2c)
+
+- Hook dipasang via `--settings <file>` (isolasi), dipicu deterministik dgn `--model` bogus (`model_not_found`).
+  **Payload `StopFailure` nyata terkunci** (v2.1.199, Windows). **Koreksi material vs docs:**
+  - Field tipe error = **`error`** (BUKAN `error_type` seperti docs) → Detector wajib baca `error`.
+  - Bonus **`last_assistant_message`** (teks user-facing) → fixture/log langsung; plus `prompt_id`, `effort.level`.
+  - **`StopFailure` fire di print mode `-p` juga**, tak cuma interaktif.
+- `SessionStart` terverifikasi: `source:"startup"` (baru) & **`source:"resume"`** (`--resume`); resume jalan (exit 0).
+- **Sisa:** nilai `error:"rate_limit"` asli belum diobservasi (butuh limit 5-jam habis; tangkap saat terjadi).
+- Harness uji di scratchpad `hooktest/` (non-repo).
 
 ## Re-cek versi CLI 3 Jul 2026 (siang) — tak ada perubahan spek
 
