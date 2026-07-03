@@ -1,15 +1,20 @@
 import type { Command } from 'commander';
 import { closeDb, openDb } from '../../store/db.js';
 import { createSessionsRepo } from '../../store/repositories/sessions.js';
+import { isProcessAlive } from '../../shared/proc.js';
 import type { Session } from '../../shared/types.js';
 
 const COLUMNS = ['#id', 'tool', 'status', 'proc', 'pid', 'cwd', 'updated'] as const;
 
 function toRow(session: Session): string[] {
+  // Sesi 'alive' yang PID-nya sudah mati = orphan (wrapper mati keras sebelum markExited,
+  // ISSUES I-1/I-3). Tandai di tampilan; jangan menulis DB (status = read-only).
+  const stale =
+    session.proc_state === 'alive' && session.pid !== null && !isProcessAlive(session.pid);
   return [
     `#${session.id}`,
     session.tool,
-    session.status,
+    stale ? `${session.status} (basi)` : session.status,
     session.proc_state,
     session.pid === null ? '-' : String(session.pid),
     session.cwd,

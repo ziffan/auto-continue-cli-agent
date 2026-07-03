@@ -28,9 +28,13 @@ export function registerRunCommand(program: Command): void {
         );
 
         const exitCode = await waitForExit;
-        process.exitCode = exitCode;
-      } finally {
         closeDb(db);
+        // Keluar eksplisit: handle ConPTY node-pty (Windows) bisa menahan event-loop walau
+        // child sudah exit → tanpa ini wrapper tak balik ke shell prompt (ISSUES I-2).
+        process.exit(exitCode);
+      } catch (err) {
+        closeDb(db);
+        throw err; // jalur spawn-gagal → ditangani index.ts (exit 1); tak ada pty menggantung.
       }
     });
 }
