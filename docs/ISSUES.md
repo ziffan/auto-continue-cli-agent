@@ -6,6 +6,14 @@
 
 ## Terbuka
 
+### I-7 — Skema pasti agy `GetUserStatus` (wrapper + field label model) belum terkonfirmasi [P3, target M3d probe live]
+`parseAgyUserStatus` (M3c) menoleransi respons dibungkus `userStatus` ATAU flat, dan mencoba beberapa nama
+field label model (`model`/`modelName`/`displayName`/`label`) dengan fallback posisional `model-<i>` — karena
+skema persis (nama pembungkus + field identitas model) **tak terekam** di RESEARCH/ADR-010 (hanya
+`quotaInfo.{remainingFraction,resetTime}` yang terverifikasi live 3 Jul). Konfirmasi bentuk asli saat jalur
+probe LIVE di-wire (M3d, butuh sesi agy interaktif ber-PTY), lalu rapikan parser ke skema nyata + tambah
+fixture dari respons asli. Non-blocking (parser sudah defensif + test-covered).
+
 ### I-6 — Adapter `setTimer` produksi wajib menangkap rejection `runDue` [P2, target M3d wiring]
 `daemon/scheduler.ts` memanggil `setTimer(runDue, delay)` dengan `runDue` async. `setTimeout` (adapter
 nyata nanti) **mengabaikan** Promise yang dikembalikan; per-job error sudah ditangkap di dalam `runDue`,

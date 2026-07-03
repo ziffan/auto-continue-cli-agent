@@ -52,3 +52,21 @@ export interface ScheduledJob {
   next_backoff_ms: number | null;
   created_at: number;
 }
+
+/** Satu window/limit usage ternormalisasi (lintas-tool). `usedFraction` 0..1 (dinormalisasi:
+ * CC pakai percent/utilization 0..100 → /100; agy pakai remainingFraction 0..1 → 1 - remaining). */
+export interface UsageLimit {
+  kind: string; // CC: 'session'|'weekly_all'|'weekly_scoped'; agy: nama model
+  usedFraction: number; // 0..1 (terpakai). Display/monitor only — bukan aritmetika uang (ADR-004).
+  resetAt: number | null; // epoch ms UTC (null bila sumber tak beri)
+  scope?: string; // CC weekly_scoped: display_name model; agy: nama model
+  isActive?: boolean; // CC: window yang sedang mengikat (limits[].is_active)
+}
+
+/** Snapshot usage ternormalisasi lintas-tool (Usage Probe — M3c). `capturedAt` = `now` di-inject
+ * oleh pemanggil, bukan `Date.now()` langsung (testability + kontrak eksplisit). */
+export interface UsageSnapshot {
+  tool: Tool;
+  limits: UsageLimit[];
+  capturedAt: number; // epoch ms saat di-parse (now di-inject)
+}
