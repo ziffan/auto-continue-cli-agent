@@ -60,6 +60,11 @@ Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file 
 - Semua diff subagent melewati skill **tier-review** sebelum commit.
 - Keputusan struktural: skill **adr**. Locked decision tidak di-relitigasi.
 - Task implementasi = atomic vertical slice (skill **vertical-slice**).
+- **Pola model-routing: Opus = orkestrator, Sonnet = kuda beban.** Opus (sesi utama) memegang desain,
+  keputusan, tier-review, commit; **turunkan implementasi mekanis-padat ke subagent Sonnet** (`Agent`
+  `model: sonnet`) dengan spec presisi + docs sebagai sumber kebenaran, lalu review diff-nya. Tujuan:
+  hemat token Opus + jaga konteks sesi utama ramping. Slice kecil/subtil (state/exit path, ~≤30 baris)
+  boleh Opus kerjakan inline bila spawn dingin justru lebih boros. Diff Tier-1 tetap wajib tier-review Opus.
 
 ## 6. Konvensi cepat
 
