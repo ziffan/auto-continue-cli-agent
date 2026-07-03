@@ -6,6 +6,15 @@
 
 ## Terbuka
 
+### I-6 — Adapter `setTimer` produksi wajib menangkap rejection `runDue` [P2, target M3d wiring]
+`daemon/scheduler.ts` memanggil `setTimer(runDue, delay)` dengan `runDue` async. `setTimeout` (adapter
+nyata nanti) **mengabaikan** Promise yang dikembalikan; per-job error sudah ditangkap di dalam `runDue`,
+tapi bila `arm()` di blok `finally` melempar (mis. `listPending()` gagal karena DB error/closed) → jadi
+**unhandledRejection** yang bisa mematikan daemon. Engine benar untuk test (harness `await runDue`). Saat
+wiring nyata (M3d): adapter `setTimer` produksi WAJIB bungkus rejection, mis.
+`(fn, ms) => setTimeout(() => { void Promise.resolve(fn()).catch(logDaemonError); }, ms)`, atau buat
+`runDue` menelan error `arm()`. Non-blocking sampai scheduler benar-benar di-wire ke `supervisor`.
+
 ### I-5 — Jalur stale-socket unlink+retry POSIX belum teruji otomatis [P3, target verifikasi Ubuntu]
 `ipc-server.listen()` membedakan socket **stale** (daemon lama crash) vs daemon **hidup** via
 connect-probe sebelum unlink (fix tier-review M3a — lihat GOTCHAS G-14). Jalur "daemon hidup → reject"

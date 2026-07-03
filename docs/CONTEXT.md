@@ -6,9 +6,21 @@
 
 ## Status saat ini
 
-- **Fase:** **M3 sedang berjalan (dipecah jadi slice).** **M3a — Daemon + IPC + rekonsiliasi orphan SELESAI &
-  tier-reviewed** (merge `main`). Berikutnya slice M3: **M3b Scheduler** → M3c Usage-Probe parser → M3d Continue-logic.
+- **Fase:** **M3 sedang berjalan (dipecah jadi slice).** M3a (Daemon+IPC+orphan) ✅ · **M3b (Scheduler) ✅** —
+  keduanya tier-reviewed & merge `main`. Berikutnya slice M3: **M3c Usage-Probe parser** → M3d Continue-logic
+  (di sini scheduler + detector + probe di-wire ke daemon; jalur inject/resume live = butuh keputusan/limit asli).
   **Hard-stop** di jalur yang butuh limit asli / inject sesi live / keputusan user.
+- **Terakhir diupdate:** 2026-07-04 (dini hari, otonom via cron) — **M3b SELESAI.** Engine Scheduler: timer
+  persisten dari `scheduled_jobs` + recovery saat restart daemon + backoff berjenjang (5m→15m→60m cap). Dibuat:
+  `store/repositories/scheduled-jobs.ts` (enqueue/listPending/due/getById/remove/reschedule — parameterized),
+  `daemon/scheduler.ts` (`createScheduler` arm/runDue/backoff; timer & clock **di-inject** → fake-timer-testable;
+  re-entry guard; dispatch probe/resume **di-suntik**, belum di-wire ke supervisor — "engine first" seperti M2).
+  Extend `shared/types.ts` (`JOB_KINDS`/`JobKind`/`ScheduledJob`). Test: `scheduled-jobs.test.ts` (7, CRUD+FK),
+  `scheduler.test.ts` (7 — recovery-dari-persistence asli, backoff escalation state-dependent, dispatch-order,
+  throw→retry+onError, enqueue-re-arm, stop). **Terverifikasi (Opus sendiri):** build bersih, **94/94 test**, lint
+  clean. **Nit dicatat:** I-6 (adapter `setTimer` produksi wajib tangkap rejection `runDue` saat wiring M3d).
+  Impl = subagent Sonnet, tier-review Tier-1 Opus.
+- **Terakhir diupdate (sebelumnya):** 2026-07-04 (dini hari, otonom via cron) — **M3a SELESAI.** Daemon lifecycle + IPC (ADR-015)
 - **Terakhir diupdate:** 2026-07-04 (dini hari, otonom via cron) — **M3a SELESAI.** Daemon lifecycle + IPC (ADR-015)
   + rekonsiliasi orphan (menutup I-3). Dibuat: `daemon/ipc-protocol.ts` (NDJSON codec murni), `ipc-server.ts`
   (Node `net` socket/named-pipe, per-request terisolasi, mode 0600 POSIX, **single-instance via connect-probe
