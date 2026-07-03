@@ -22,7 +22,7 @@ auto-continue-cli-agent/
 │   │   └── ipc-server.ts    #   Node `net` socket/pipe, NDJSON (ADR-015)
 │   ├── adapters/            # per-tool: kontrak detectLimit/parseReset/resumeCmd/probeUsage
 │   │   ├── types.ts         #   interface Adapter
-│   │   ├── claude-code.ts
+│   │   ├── claude.ts        #   nama file = nilai enum `tool` ('claude'), bukan 'claude-code'
 │   │   └── antigravity.ts   #   LS GetUserStatus + retrieveUserQuota (ADR-010)
 │   ├── remote/              # Remote Gateway Telegram (grammy — ADR-011/012/013) (M-remote)
 │   │   ├── bot.ts           #   long-polling getUpdates (outbound-only)
@@ -45,6 +45,10 @@ auto-continue-cli-agent/
 - `cli/` **tak** akses store langsung untuk mutasi → lewat `daemon/ipc-server` (ADR-015). Read-only `status`
   boleh `store/` langsung (baca `meta.daemon_heartbeat_at` untuk liveness).
 - `daemon/` satu-satunya penulis `sessions`/`scheduled_jobs`; `events` append-only dari mana pun via repo.
+  **Pengecualian bootstrap M1** (daemon/IPC belum ada — ADR-015 baru dibangun M3): proses `acca run` **adalah**
+  wrapper pemilik sesinya sendiri, jadi ia menulis `sessions` (RUNNING→EXITED/FAILED) langsung via repo. Aturan
+  "penulis tunggal = daemon" berlaku penuh sejak M3 saat mutasi lewat `daemon/ipc-server`; `acca run` lalu jadi
+  klien daemon, bukan penulis langsung.
 - `adapters/` = satu-satunya tempat perintah tool-spesifik (resume/probe). Core **tak** hardcode `claude`/`agy`.
 - `remote/` masuk supervisor lewat **IPC lokal yang sama** seperti CLI (otoritas identik — ADR-012);
   `remote/redact.ts` wajib di jalur egress output (ADR-013).

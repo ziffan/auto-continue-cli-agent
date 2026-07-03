@@ -80,6 +80,37 @@ parse integer. `api/oauth/usage` juga punya array `limits[]` lebih kaya (severit
 **Cara benar:** bila diff noise mengganggu nanti, pertimbangkan `.gitattributes` (`*.md text eol=lf`).
 Untuk sekarang: aman diabaikan. **Sumber:** observasi session-end 3 Jul.
 
+## Build / M1 foundation
+
+### G-10 — `tsc` tak menyalin file non-`.ts` (migrasi SQL) ke `dist/`
+**Jebakan:** `store/migrations/*.sql` dibaca via `fs.readdirSync`/`readFileSync` relatif ke posisi modul
+saat runtime (`import.meta.url`). `tsc` **hanya** mengkompilasi `.ts` → `dist/store/migrations/` tak pernah
+tercipta di build output, walau ada di `src/`.
+**Dampak:** `acca` hasil build (`dist/cli/index.js`) crash `ENOENT: no such file or directory, scandir
+'dist/store/migrations'` saat `openDb()` pertama kali dipanggil — lolos `tsc --noEmit`/type-check karena ini
+bukan error tipe, hanya kentara saat smoke-run binary hasil build.
+**Cara benar:** tambahkan langkah salin aset non-TS setelah `tsc` (`scripts/copy-migrations.js`, dipanggil dari
+`npm run build`: `tsc && node scripts/copy-migrations.js`). Pola ini berlaku untuk aset non-`.ts` apa pun yang
+dibaca via path relatif runtime (fixture, template, dll) — bukan cuma migrasi. **Sumber:** smoke-test M1, 3 Jul.
+
+### G-11 — npm `allow-scripts` (lavamoat-style) memblokir postinstall native default
+**Jebakan:** repo/environment ini punya `allow-scripts` aktif secara default (`npm warn allow-scripts ...
+packages have install scripts not yet covered`) — `npm install` **tidak** otomatis menjalankan install/postinstall
+script `better-sqlite3` & `node-pty` (dan `esbuild` punya postinstall juga). Native module ter-install tapi
+belum tentu "siap pakai" tanpa langkah approve eksplisit.
+**Dampak:** gate DEPENDENCY-POLICY ("`require()` + operasi minimal jalan") bisa false-negative-terlihat-OK
+padahal script belum jalan — mesti diverifikasi manual (require+operasi), jangan asumsikan `npm install` sukses
+= script jalan.
+**Cara benar:** `npm approve-scripts <pkg1> <pkg2> ...` untuk paket native tepercaya yang dipakai (bukan
+blanket-allow — CONVENTIONS/DEPENDENCY-POLICY), lalu **reinstall bersih** (`rm -rf node_modules && npm install`)
+karena `npm install` yang "up to date" tidak me-retrigger script pada tree yang sudah ada. Hasil approve tersimpan
+di `package.json` field `allowScripts` (ter-commit, jadi approve berikutnya deterministik). Setelah itu tetap
+verifikasi eksplisit: `node-pty` di Windows memuat native `.node` dari **`prebuilds/<platform>-<arch>/`** sebagai
+fallback bila `build/Release` kosong (postinstall `node-pty` hanya menyalin `conpty.dll`/`OpenConsole.exe`, bukan
+`.node` files) — jadi `build/Release` boleh terlihat "kosong" dan itu **normal**, bukan tanda gagal; yang penting
+`require('node-pty').spawn(...)` benar-benar jalan (diverifikasi lewat spawn+echo nyata). **Sumber:** verifikasi
+gate M1, 3 Jul (Windows 11, Node 24.18.0).
+
 ---
 
 ## Change Log
@@ -88,3 +119,4 @@ Untuk sekarang: aman diabaikan. **Sumber:** observasi session-end 3 Jul.
 |---|---|
 | 2026-07-03 (sore) | File dibuat. G-1..G-3 (agy: token stale, log login palsu, PTY wajib), G-4..G-5 (CC: dua format reset, field `error` hook), G-6 (CRLF). Dari riset real-CLI + uji sebelumnya. |
 | 2026-07-03 (malam) | G-7 (LS quota nil print-mode vs terisi interaktif-PTY tanpa prompt), G-8 (winpty passthrough vs ConPTY node-pty), G-9 (respons GetUserStatus memuat PII). Dari verifikasi terminal ADR-010 item (d). |
+| 2026-07-03 (malam, M1) | G-10 (`tsc` tak menyalin migrasi SQL ke `dist/` — perlu `scripts/copy-migrations.js`), G-11 (npm `allow-scripts` memblokir postinstall native default, perlu `npm approve-scripts` + reinstall bersih; node-pty Windows fallback ke `prebuilds/`). Dari implementasi + verifikasi gate M1 foundation. |

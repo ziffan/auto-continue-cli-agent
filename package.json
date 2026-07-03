@@ -1,0 +1,44 @@
+{
+  "name": "auto-continue-cli-agent",
+  "version": "0.1.0",
+  "description": "Supervisor lokal untuk memonitor usage & auto-continue sesi Claude Code / Antigravity CLI",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "acca": "dist/cli/index.js"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "tsc && node scripts/copy-migrations.js",
+    "dev": "tsx src/cli/index.ts",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "better-sqlite3": "12.11.1",
+    "commander": "14.0.2",
+    "node-pty": "1.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "24.10.1",
+    "@typescript-eslint/eslint-plugin": "8.47.0",
+    "@typescript-eslint/parser": "8.47.0",
+    "eslint": "9.39.1",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "14.0.0",
+    "prettier": "3.6.2",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vitest": "3.2.6"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true,
+    "node-pty@1.1.0": true
+  }
+}
