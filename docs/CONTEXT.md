@@ -6,8 +6,23 @@
 
 ## Status saat ini
 
-- **Fase:** **M2 — Detector + Reset Estimator SELESAI & tier-reviewed (Tier-1 APPROVE)** — merge ke `main`.
-  Berikutnya: **M3 — Scheduler + Usage Probe + Auto-continue**.
+- **Fase:** **M3 sedang berjalan (dipecah jadi slice).** **M3a — Daemon + IPC + rekonsiliasi orphan SELESAI &
+  tier-reviewed** (merge `main`). Berikutnya slice M3: **M3b Scheduler** → M3c Usage-Probe parser → M3d Continue-logic.
+  **Hard-stop** di jalur yang butuh limit asli / inject sesi live / keputusan user.
+- **Terakhir diupdate:** 2026-07-04 (dini hari, otonom via cron) — **M3a SELESAI.** Daemon lifecycle + IPC (ADR-015)
+  + rekonsiliasi orphan (menutup I-3). Dibuat: `daemon/ipc-protocol.ts` (NDJSON codec murni), `ipc-server.ts`
+  (Node `net` socket/named-pipe, per-request terisolasi, mode 0600 POSIX, **single-instance via connect-probe
+  stale-vs-live** — bukan unlink buta, lihat G-14), `ipc-client.ts` (`sendCommand` + `DaemonNotRunningError`),
+  `reconcile.ts` (`reconcileOrphans` — I-3), `supervisor.ts` (`createSupervisor` start/stop/heartbeat +
+  `DaemonAlreadyRunningError`), `cli/commands/daemon.ts` (`acca daemon` entrypoint tipis timer/sinyal). Extend:
+  `paths.ts` (`runtimeSocketPath`), `sessions.ts` (`markOrphanExited`), `meta.ts` (`setHeartbeat`/`getHeartbeat`).
+  **Tier-1 (Opus): temuan MAJOR** — `listen()` unlink socket POSIX tanpa syarat → men-steal socket daemon hidup
+  di Linux (dua daemon senyap, langgar single-instance ADR-002/sole-writer ADR-015); **diperbaiki inline** (probe
+  connect bedakan stale vs hidup). **Terverifikasi (Opus sendiri):** build bersih, **80/80 test**, lint clean;
+  single-instance path teruji di Windows (named pipe EADDRINUSE). **Sisa:** jalur stale-unlink-retry POSIX =
+  logic-only (I-5, verifikasi Ubuntu); graceful SIGINT/SIGTERM Windows tak teruji interaktif (match pola `run.ts`).
+  Impl = subagent Sonnet, tier-review Tier-1 Opus.
+- **Terakhir diupdate (sebelumnya):** 2026-07-04 (dini hari, otonom via cron) — **M2 SELESAI.**
 - **Terakhir diupdate:** 2026-07-04 (dini hari, otonom via cron) — **M2 SELESAI.** Mesin deteksi murni +
   estimasi reset, tervalidasi fixtures (belum di-wire ke sesi live — itu jatah M3, sesuai acceptance MILESTONES).
   Dibuat: `adapters/types.ts` (+tipe deteksi & method `detect()`), `adapters/patterns.ts` (korpus regex + helper),
