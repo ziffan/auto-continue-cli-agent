@@ -122,10 +122,23 @@ Pola real-world yang dideteksi `claude-auto-retry` (README-nya, MIT — dipakai 
 | Try again | `Please try again in 5 hours` |
 | Hit your limit | `You've hit your limit · resets 3pm (Europe/Dublin)` |
 | Rate limit | `Rate limit hit. Resets at 4pm` |
+| **Session limit (NYATA)** | `You've hit your session limit · resets 7:30am (Asia/Jakarta)` |
 
-Catatan: format berubah antar versi (varian lama pakai kalimat panjang + timezone eksplisit; varian
-baru pakai `·` separator); waktu reset kadang tanpa timezone. **Status: kandidat** — TODO #2 (§6) tetap
-terbuka sampai tertangkap dari terminal sendiri; jadikan tabel ini korpus awal fixture + test regresi.
+**✅ TERKONFIRMASI LOKAL (4 Jul 2026, limit 5-jam ASLI — TODO #2 sebagian tertutup untuk CC).** Saat limit
+5-jam benar-benar habis (~07:18–07:20 WIB), transcript sesi (`~/.claude/projects/<enc>/<id>.jsonl`) menyimpan
+pesan sebagai **synthetic assistant message** — entri `isApiErrorMessage:true`, `model:"<synthetic>"`,
+`stop_reason:"stop_sequence"`, content = teks limit persis. Format nyata: **`You've hit your session limit ·
+resets 7:30am (Asia/Jakarta)`**. **Koreksi material vs korpus komunitas:** pesan nyata menyisipkan qualifier
+**"session"** (dan kemungkinan "weekly") antara "your" dan "limit" → pola detektor kontigu `hit your limit`
+**LOLOS** (false-negative); pola diperbaiki jadi `hit your (?:\w+ )?limit` (GOTCHAS G-15). **`limit ≠ exit`
+terverifikasi di limit nyata:** proses interaktif tetap hidup, lanjut sendiri setelah reset 7:30 (validasi
+premis auto-continue §2c). **Belum tertangkap:** nilai hook `error:"rate_limit"` (transcript hanya simpan
+pesan render, bukan objek API error mentah — butuh hook `StopFailure` terpasang; jalur M3d). **Warning proaktif
+90%/75%** yang muncul di terminal = **UI-only, TIDAK di-persist** ke transcript → jangan di-scrape; sinyalnya
+sudah tersedia via usage-probe (`used_percentage`/`percent`, parser M3c) → hitung proximity sendiri. Threshold
+**90% (5-jam) & 75% (mingguan)** = default Claude Code sendiri, kandidat default US-13 (lihat ISSUES I-8).
+Catatan: format tetap bisa berubah antar versi (varian `·` separator, waktu kadang tanpa tz) → tabel ini +
+fixture asli = korpus regresi. Sisa TODO #2: varian **Antigravity** saat quota habis (belum tertangkap).
 
 ## 2c. Hook `StopFailure` + perilaku proses saat limit *(temuan baru, 3 Jul 2026 dini hari — docs resmi hooks + CHANGELOG)*
 

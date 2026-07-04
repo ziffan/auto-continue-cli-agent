@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { classify } from '../src/daemon/detector.js';
+import { estimateReset } from '../src/daemon/reset-estimator.js';
 import type { DetectKind, StopFailureSignal } from '../src/adapters/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -144,5 +145,28 @@ describe('unknown tool', () => {
     expect(() => classify('nope' as unknown as 'claude', { type: 'output', text: 'x' })).toThrow(
       /tool tidak dikenal/i,
     );
+  });
+});
+
+describe('Pesan limit ASLI (terkonfirmasi lokal 4 Jul 2026, limit 5-jam nyata)', () => {
+  // Regression guard: format nyata "hit your SESSION limit" sempat LOLOS detektor (qualifier
+  // "session" menyisip; pola lama "hit your limit" kontigu tak match). Fixture asli dari transcript.
+  const real = "You've hit your session limit · resets 7:30am (Asia/Jakarta)";
+
+  it('terklasifikasi limit + reset hint terparse (jam + IANA tz)', () => {
+    const r = classify('claude', { type: 'output', text: real });
+    expect(r.kind).toBe('limit');
+    expect(r.source).toBe('output');
+    expect(r.resetHint?.clockTime).toBe('7:30am');
+    expect(r.resetHint?.timezone).toBe('Asia/Jakarta');
+  });
+
+  it('reset hint → estimateReset exact (7:30am Asia/Jakarta = 00:30Z)', () => {
+    const r = classify('claude', { type: 'output', text: real });
+    const now = Date.UTC(2026, 6, 4, 0, 20, 0); // ~07:20 Jakarta, saat limit kena
+    const est = estimateReset(r.resetHint, { now, detectedAt: now });
+    expect(est.source).toBe('exact');
+    // 7:30am Asia/Jakarta (UTC+7) = 00:30Z hari sama; > now (00:20Z) → hari ini, tak wrap.
+    expect(est.resetAt).toBe(Date.UTC(2026, 6, 4, 0, 30, 0));
   });
 });

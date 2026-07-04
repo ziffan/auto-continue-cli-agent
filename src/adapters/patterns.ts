@@ -26,8 +26,11 @@ const CC_LIMIT_PATTERNS: RegExp[] = [
   /\b\d+-hour limit reached\b/i,
   /\busage limit reached\b/i,
   /\bout of extra usage\b/i,
-  /\byou'?ve hit your limit\b/i,
-  /\bhit your limit\b/i,
+  // Varian NYATA (terkonfirmasi lokal 4 Jul 2026 dari limit 5-jam asli): "You've hit your session
+  // limit · resets 7:30am (Asia/Jakarta)". Claude Code menyisipkan qualifier ("session"/"weekly")
+  // antara "your" dan "limit" → pola wajib izinkan satu kata opsional, bukan "hit your limit" kontigu
+  // (kalau kontigu, pesan asli LOLOS = false-negative). Mencakup juga "you've hit your limit". G-15, RESEARCH §2b.
+  /\bhit your (?:\w+ )?limit\b/i,
   /\brate limit hit\b/i,
   /\bplease try again in \d+ hours?\b/i,
 ];
