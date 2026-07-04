@@ -36,16 +36,19 @@ const CC_LIMIT_PATTERNS: RegExp[] = [
 ];
 
 /**
- * PROVISIONAL: korpus agy belum diverifikasi dari terminal nyata (RESEARCH §6 TODO #2).
+ * VERIFIED (4 Jul 2026 — limit 5-jam agy ASLI, G-19 / FINDINGS F4/F10): TUI menampilkan
+ * `⚠ Individual quota reached. Please upgrade your subscription to increase your limits.
+ * Resets in <Xm Ys>.` + baris `Error ID: <uuid>`. agy TETAP HIDUP setelah pesan (limit ≠ exit).
  * Antigravity tak punya hook/transcript JSONL seperti CC (transcript = protobuf, RESEARCH §4d)
- * — hanya output/exit-code yang bisa diperiksa. Pola dijaga minimal & konservatif; revisi begitu
- * korpus asli tertangkap dari sesi nyata.
+ * — hanya output/exit-code yang bisa diperiksa; catatan: `agy -p` print-mode stdout KOSONG saat
+ * limit (G-18) → deteksi teks hanya dari rendering TUI interaktif.
+ *
+ * Pattern #1 = frasa inti TERVERIFIKASI (anchor). #2 = generalisasi konservatif dari token nyata
+ * "quota reached" (mencakup exhausted/exceeded bila wording sedikit bergeser). Varian wording lain
+ * (mis. limit MINGGUAN) BELUM tertangkap → sengaja tak ditebak: sinyal exhaustion agy yang lebih
+ * andal daripada teks TUI = LS-probe `remainingFraction` absent (G-17) + credit habis/off (G-16).
  */
-const AGY_LIMIT_PATTERNS: RegExp[] = [
-  /\bquota\s+(?:exhausted|reached|exceeded)\b/i,
-  /\bweekly limit\b/i,
-  /\bquota\b[^.\n]{0,40}\bresets\b/i,
-];
+const AGY_LIMIT_PATTERNS: RegExp[] = [/\bindividual quota reached\b/i, /\bquota\s+(?:reached|exhausted|exceeded)\b/i];
 
 /** Jam dinding + timezone opsional dalam kurung: "3pm (UTC)" / "2:30pm (America/New_York)". */
 const CLOCK_TIME_PATTERN = /(\d{1,2}(?::\d{2})?\s*[ap]m)(?:\s*\(([^)]+)\))?/i;
@@ -97,7 +100,7 @@ export function matchLimit(text: string): { evidence: string; resetHint?: ResetH
   return null;
 }
 
-/** Cocokkan pola usage-limit Antigravity (PROVISIONAL — lihat komentar AGY_LIMIT_PATTERNS). */
+/** Cocokkan pola usage-limit Antigravity (VERIFIED 4 Jul — lihat komentar AGY_LIMIT_PATTERNS). */
 export function matchAgyLimit(text: string): { evidence: string; resetHint?: ResetHint } | null {
   for (const pattern of AGY_LIMIT_PATTERNS) {
     const match = pattern.exec(text);

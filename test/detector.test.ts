@@ -40,11 +40,45 @@ describe('AC-1: Claude Code limit corpus (cc-limit.txt) → kind:"limit"', () =>
   });
 });
 
-describe('AC-1: Antigravity provisional corpus (agy-limit.txt) → kind:"limit"', () => {
+describe('AC-1: Antigravity VERIFIED corpus (agy-limit.txt, real 4 Jul) → kind:"limit"', () => {
   it.each(agyLimitLines)('classifies "%s" as limit', (line) => {
     const result = classify('antigravity', { type: 'output', text: line });
     expect(result.kind).toBe('limit');
     expect(result.source).toBe('output');
+  });
+
+  // Guard against regressing the corpus back to the invented provisional lines: the real signal
+  // is "Individual quota reached" (G-19); the old guessed wording must be gone.
+  it('corpus is the real message, not the old provisional guesses', () => {
+    expect(agyLimitLines.some((l) => /individual quota reached/i.test(l))).toBe(true);
+    expect(agyLimitLines.some((l) => /daily allowance|weekly limit has been reached/i.test(l))).toBe(false);
+  });
+});
+
+describe('Pesan limit agy ASLI (terkonfirmasi 4 Jul 2026, kuota 5-jam Gemini habis — G-19)', () => {
+  // Sumber: scratchpad agy-REAL-limit-message.txt. agy TETAP HIDUP di prompt setelah pesan ini
+  // (limit != exit) → jalur continue = alive/inject (ADR-014). Reset "59m14s" = relatif; sumber
+  // reset andal = resetTime absolut dari LS probe (bukan scrape teks ini), jadi tak ada resetHint.
+  const real = '⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 59m14s.';
+
+  it('terklasifikasi limit dgn evidence frasa terverifikasi', () => {
+    const r = classify('antigravity', { type: 'output', text: real });
+    expect(r.kind).toBe('limit');
+    expect(r.source).toBe('output');
+    expect(r.evidence).toMatch(/individual quota reached/i);
+  });
+
+  it('tak mengarang resetHint dari format relatif "59m14s" (reset andal = LS probe)', () => {
+    const r = classify('antigravity', { type: 'output', text: real });
+    expect(r.resetHint).toBeUndefined();
+  });
+
+  it('baris "Error ID: <uuid>" sendiri BUKAN sinyal limit (hanya uuid)', () => {
+    const r = classify('antigravity', {
+      type: 'output',
+      text: 'Error ID: 3f9a2c1e-0b7d-4e2a-9c1f-8a6b5d4e3c2b',
+    });
+    expect(r.kind).toBe('none');
   });
 });
 
