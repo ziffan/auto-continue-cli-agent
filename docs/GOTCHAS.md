@@ -56,6 +56,43 @@ yang butuh `isatty(stdin)==true`. node-pty 1.1.0 prebuild jalan di Node 24.18.0 
 **Cara benar:** perlakukan output jalur ini **sensitif** — modul redaksi ADR-013 (hybrid regex+entropy) + jangan
 tulis mentah ke repo/log. Saat dokumentasi, rekam **skema** (nama field) + angka quota, bukan PII. **Sumber:** 3 Jul malam; ADR-013.
 
+### G-16 — Toggle credit CLI agy = `useG1Credits` (BEDA dari IDE `useAiCredits`) + fallthrough senyap
+**Jebakan:** menonaktifkan AI Credits di `~/.gemini/config/config.json` (`useAiCredits:false`, dipakai IDE) **TIDAK**
+mematikan pemakaian credit oleh **CLI** — `agy` CLI punya key sendiri **`useG1Credits`** di
+`~/.gemini/antigravity-cli/settings.json`. Bila `true`, saat kuota 5-jam habis agy **diam-diam meluncur ke AI Credits**
+(overage berbayar) **tanpa pesan limit, sesi tetap hidup** → "5-jam limit-hit" jadi **soft** (tak terlihat sbg stop).
+**Dampak:** (a) biaya overage tak terduga; (b) supervisor **tak** akan melihat sesi-mati bersih untuk agy selama credit ada
+→ deteksi limit agy tak boleh bergantung sesi-berhenti. **Cara benar:** untuk memaksa hard-stop, credit harus off; set
+`useG1Credits:false` (catatan: agy **menghapus** key ini saat launch — kontrol andal kemungkinan via console/server
+Antigravity, bukan file). Detektor agy: perlakukan limit sebagai **kombinasi** `remainingFraction` absent (G-17) **dan**
+credit habis/off, bukan sesi-exit. **Sumber:** eksperimen limit agy ASLI 4 Jul (FINDINGS F9/F12); observasi −44 credit.
+
+### G-17 — Sinyal exhaustion 5-jam agy = field `remainingFraction` HILANG (absent), bukan 0
+**Jebakan:** saat pool 5-jam Gemini benar-benar habis, LS `GetUserStatus` **menghapus field `remainingFraction`** dari
+`quotaInfo` semua varian Gemini (hanya `resetTime` tersisa) — **bukan** menyetelnya ke 0. Parser yang membaca
+`m.remainingFraction` mentah → `undefined` → `undefined.toFixed()`/aritmetika **crash**.
+**Dampak:** `parseAgyUserStatus` (M3c) & probe live (M3d.4) bisa crash tepat saat sinyal terpenting (exhaustion).
+**Cara benar:** `remainingFraction` absent pada model target = **exhausted** (perlakukan 0/blokir), jangan crash.
+Progresi teramati: `0.2565 → 0.117 → 0.0055 → [absent]`. **Sumber:** FINDINGS F8, 4 Jul.
+
+### G-18 — `agy -p` (child_process) MENGGANTUNG bila stdin tak di-EOF; print-mode KOSONG saat limit; skip-permissions kontraproduktif
+**Jebakan (a):** `cp.execFile('agy', ['-p', prompt, ...])` tanpa menutup stdin child → agy print-mode **blok baca stdin**
+→ timeout (output 0). **(b)** `--dangerously-skip-permissions` di print-mode → agy coba pakai tool (agentic) → lambat/hang.
+**(c)** saat kuota habis, `agy -p` = **stdout KOSONG, exit 0** — pesan limit **TIDAK** muncul di print-mode (hanya di rendering TUI interaktif).
+**Dampak:** probe/burner agy print-mode hang atau salah-baca "sukses" saat justru limit.
+**Cara benar:** `child.stdin.end()` segera setelah spawn; **jangan** skip-permissions (batasi "jawab teks, tanpa tool");
+deteksi limit agy **jangan** dari stdout print-mode — pakai rendering TUI (pola `Individual quota reached`, G-19) atau
+probe LS (G-17). **Sumber:** FINDINGS F5/F6/F11, 4 Jul.
+
+### G-19 — Pesan limit agy TUI ASLI + agy tetap HIDUP (limit≠exit) + tak boleh sesi konkuren
+**Jebakan/Fakta:** pesan limit agy interaktif (kuota 5-jam=0, credit off) =
+`⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in <Xm Ys>.` + baris `Error ID: <uuid>`.
+Setelah pesan, agy **TETAP HIDUP** di prompt (footer `? for shortcuts` balik) — **limit≠exit** (seperti CC) → jalur
+**inject-continue** ADR-014 viable untuk agy. Reset ditampilkan **relatif** ("Resets in 59m14s"), korelasi `resetTime`
+absolut LS. **Juga:** agy **tak mendukung sesi print konkuren** (state `~/.gemini`/LS/token di-share → hang) → burner/probe wajib sekuensial.
+**Dampak:** fixture detektor agy = pola `Individual quota reached` (bukan tebakan); gating continue agy = alive-path.
+**Cara benar:** korpus detektor agy pakai pesan ASLI ini; jangan spawn banyak sesi agy serentak. **Sumber:** FINDINGS F4/F10/F11, 4 Jul (`agy-REAL-limit-message.txt`).
+
 ## Claude Code
 
 ### G-4 — Dua format `resets_at` berbeda per-sumber usage
@@ -173,6 +210,7 @@ ada yang jawab (`connect` sukses) → daemon hidup → propagate (reject); tak a
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-04 (limit agy asli) | G-16 (`useG1Credits` CLI vs IDE `useAiCredits` + fallthrough credit senyap), G-17 (`remainingFraction` absent = exhausted, jangan crash), G-18 (agy `-p` stdin-EOF + print kosong saat limit + skip-permissions kontraproduktif), G-19 (pesan limit TUI agy ASLI `Individual quota reached` + limit≠exit + tak konkuren). Dari eksperimen limit 5-jam agy ASLI (FINDINGS F4-F12). |
 | 2026-07-04 (M2-fix) | G-15 (pesan limit CC nyata "hit your **session** limit" → pola kontigu false-negative, diperbaiki `hit your (?:\w+ )?limit`; warning proaktif 90/75 = UI-only, hitung proximity dari usage-probe). Dari limit 5-jam ASLI tertangkap di transcript sesi. |
 | 2026-07-04 (M3a) | G-14 (unlink socket unix tanpa syarat sebelum listen = steal socket daemon hidup → dua daemon; fix connect-probe stale-vs-live). Dari tier-review M3a. |
 | 2026-07-04 (M2) | G-13 (reset-estimator clock-time next-occurrence tambah `MS_PER_DAY` mentah → meleset ±1j di hari transisi DST; non-blocking, I-4/P3). Dari tier-review M2. |

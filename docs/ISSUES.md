@@ -14,13 +14,14 @@ seven_day** — meniru default Claude Code sendiri; agy: `1-remainingFraction` p
 indikator "perkiraan sisa" dini. Basis fitur US-13 (prediksi proaktif, backlog) + indikator proximity di
 `acca status` (M4). Wire saat Usage-Probe live + Notifier ada (M4).
 
-### I-7 — Skema pasti agy `GetUserStatus` (wrapper + field label model) belum terkonfirmasi [P3, target M3d probe live]
-`parseAgyUserStatus` (M3c) menoleransi respons dibungkus `userStatus` ATAU flat, dan mencoba beberapa nama
-field label model (`model`/`modelName`/`displayName`/`label`) dengan fallback posisional `model-<i>` — karena
-skema persis (nama pembungkus + field identitas model) **tak terekam** di RESEARCH/ADR-010 (hanya
-`quotaInfo.{remainingFraction,resetTime}` yang terverifikasi live 3 Jul). Konfirmasi bentuk asli saat jalur
-probe LIVE di-wire (M3d, butuh sesi agy interaktif ber-PTY), lalu rapikan parser ke skema nyata + tambah
-fixture dari respons asli. Non-blocking (parser sudah defensif + test-covered).
+### I-7 — Skema agy `GetUserStatus` teramati dari respons asli (4 Jul) — tinggal rapikan parser [P3, target M3d.4]
+**Update 4 Jul (eksperimen limit agy):** respons asli teramati (scratchpad probe.log). Bentuk nyata:
+`cascadeModelConfigData.clientModelConfigs[]` (flat, **tanpa** pembungkus `userStatus`), tiap entri punya field
+**`model`** = **display name** (mis. `"Gemini 3.1 Pro (High)"`, bukan slug), plus `quotaInfo.{remainingFraction,
+resetTime}`. **Penting (G-17):** saat exhausted, **`remainingFraction` HILANG** dari entri (hanya `resetTime`) —
+parser wajib perlakukan absent = exhausted (0), jangan crash `undefined`. Plan/credit di
+`planStatus.planInfo` + `userTier.availableCredits[].creditAmount`. Sisa (non-blocking): rapikan `parseAgyUserStatus`
+(M3c) ke skema nyata + tambah fixture dari respons asli (M3d.4/M3d.8). Parser sudah defensif + test-covered.
 
 ### I-6 — Adapter `setTimer` produksi wajib menangkap rejection `runDue` [P2, target M3d wiring]
 `daemon/scheduler.ts` memanggil `setTimer(runDue, delay)` dengan `runDue` async. `setTimeout` (adapter

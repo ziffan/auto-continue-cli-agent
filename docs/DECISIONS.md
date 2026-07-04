@@ -2,9 +2,9 @@
 
 > Format Nygard. ADR *Accepted* immutable — revisi = ADR baru yang men-supersede.
 > Status per ADR: **Proposed** (masih bisa berubah) / Accepted / Deprecated / Superseded.
-> Status per 2026-07-03 (malam): **Accepted (locked) = ADR-002…016 kecuali ADR-001** (yakni 002, 003, 004, 005,
-> 006, 007, 008, 009, 010, 011, 012, 013, 014, 015, 016); **Proposed = ADR-001** saja (fixture pesan limit + varian
-> agy TUI saat quota habis — butuh limit/quota asli).
+> Status per 2026-07-04: **SEMUA ADR Accepted (locked) = ADR-001…016.** ADR-001 di-**Accept 4 Jul** setelah
+> verifikasi terakhir tertutup: pesan limit CC ASLI (4 Jul pagi) + **pesan limit agy TUI ASLI + varian quota-habis
+> (4 Jul, `Individual quota reached`, limit≠exit, `remainingFraction` absent)**. **Tak ada lagi ADR Proposed.**
 > Accepted = immutable. ADR-005 & ADR-008 di-lock **termasuk** revisi Telegram 3 Jul (bot token = infra-secret;
 > kelas aksi relay human-in-the-loop). ADR-008 §2 kini **dilengkapi mekanisme** ADR-011/012/013 (Accepted):
 > lib bot = **grammy 1.44.0** (ADR-011), redaksi = **hybrid regex+entropy** (ADR-013).
@@ -15,7 +15,10 @@ data retention · **model routing policy** · **batas otonomi agent**.
 ---
 
 ## ADR-001: Pisahkan "monitor usage" (jalur resmi) dari "deteksi sesi mati" (wrapper)
-**Status:** Proposed
+**Status:** **Accepted** (locked 2026-07-04) — *immutable; revisi = ADR baru yang men-supersede.* Di-Accept setelah
+dua verifikasi terakhir tertutup dgn limit ASLI: **(CC, 4 Jul pagi)** pesan `You've hit your session limit` + limit≠exit;
+**(agy, 4 Jul)** pesan TUI `Individual quota reached` + limit≠exit + sinyal exhaustion LS (`remainingFraction` absent) +
+nuansa credit-fallthrough. Arsitektur dua-jalur (monitor resmi vs deteksi+continue) terbukti end-to-end kedua CLI.
 **Context:** Koreksi riset (RESEARCH.md §2, verifikasi Chrome 2 Jul 2026): usage Claude Code **kini**
 diekspos ke statusLine JSON (v2.1.80, isu #18121) + ada endpoint OAuth usage (undocumented). Asumsi awal
 "tak terekspos ke hook" batal. Namun statusLine hanya hidup selama sesi jalan → tak bisa mendeteksi sesi
@@ -44,8 +47,12 @@ dan payload-nya belum diuji empiris (RESEARCH §6 TODO #7); (−) sisa verifikas
 fallback + varian Antigravity (termasuk perilaku TUI agy saat quota habis) — butuh observasi terminal nyata.
 *(Progres 4 Jul 2026: pesan limit CC **nyata tertangkap lokal** dari limit 5-jam asli — `You've hit your
 session limit · resets 7:30am (Asia/Jakarta)`, fixture + fix false-negative merged (M2-fix). `limit≠exit`
-terverifikasi di limit nyata. **Tetap Proposed** — sisa: varian **agy** saat quota habis + nilai hook
-`error:"rate_limit"` (butuh hook terpasang). RESEARCH §2b, GOTCHAS G-15.)*
+terverifikasi di limit nyata. RESEARCH §2b, GOTCHAS G-15.)*
+*(**Penutup 4 Jul 2026 — varian agy DITUTUP → ADR di-Accept:** kuota 5-jam agy dihabiskan terkontrol → pesan TUI
+ASLI `⚠ Individual quota reached … Resets in <Xm Ys>.` + Error ID; **agy limit≠exit** (tetap hidup di prompt);
+sinyal exhaustion LS = `remainingFraction` **absent** (G-17); limit agy **soft** bila credit ada (fallthrough, G-16);
+print-mode `-p` stdout kosong saat limit (G-18/19). Sisa non-blocking: nilai hook CC `error:"rate_limit"` (butuh hook
+terpasang, jalur M3d). RESEARCH §2b, GOTCHAS G-16..G-19, scratchpad FINDINGS F4-F12.)*
 *(Skema statusLine `rate_limits` & resume kedua CLI sudah terkonfirmasi — lihat RESEARCH.md §2/§4b/§4c.)*
 **Alternatives Rejected:** Hanya wrapper+scraping transcript untuk usage (tak perlu lagi — ada jalur resmi);
 hanya statusLine/hook (tak bisa deteksi sesi mati); scraping claude.ai (rapuh, dilarang di RESEARCH).
@@ -302,9 +309,13 @@ usage pasca-reset** konfirmasi kuota tersedia dulu (flow §4 langkah 8); (v) tok
 aman — literal tetap + gating berlapis + kelas kontrol-auto yang sudah di-whitelist (ADR-008); (+) tak pernah
 meng-auto-destroy sesi hidup. (−) **judgment call: gating-gagal = manual, bukan auto-recover** → beberapa kasus butuh
 tangan user (disengaja, sisi aman; bisa di-revisit bila terlalu sering). (−) inject **PTY-driver-specific** (gating
-foreground/idle rapuh terhadap perubahan TUI CLI → butuh test + fixture footer). (−) **Antigravity belum terverifikasi**:
-perilaku TUI agy saat quota habis (hidup vs exit) + keystroke "continue" yang tepat = **TODO #2 varian agy**; untuk agy,
-jalur inject **provisional** sampai diverifikasi di M3 — sampai itu, default agy condong resume-by-id.
+foreground/idle rapuh terhadap perubahan TUI CLI → butuh test + fixture footer).
+*(**Verifikasi agy ditutup 4 Jul 2026 — anotasi, keputusan tak berubah:** perilaku TUI agy saat quota 5-jam habis
+**terverifikasi ASLI = TETAP HIDUP di prompt** (limit≠exit, seperti CC) setelah pesan `Individual quota reached` →
+**jalur inject-continue agy tak lagi provisional, viable** (kelas `alive`). Nuansa penting: limit agy **soft** bila
+AI Credits aktif (fallthrough senyap tanpa stop — G-16) → gating agy harus konfirmasi exhaustion via probe LS
+(`remainingFraction` absent, G-17) **dan** credit off, bukan hanya "sesi berhenti". Keystroke continue agy = TBD saat
+impl M3d.7 (agy hidup di prompt → kandidat "continue"/Enter, uji di M3d). RESEARCH §2b, GOTCHAS G-16..G-19.)*
 **Alternatives Rejected:** **Selalu kill→resume-by-id** (mental model lebih simpel) — ditolak: buang konteks in-memory,
 lebih lambat (re-load transcript + startup baru), dan mubazir untuk sesi yang masih hidup; **auto-kill saat gating gagal**
 — ditolak: berisiko menghancurkan kerja tak ter-persist / mengetik ke shell yang salah; **inject tanpa gating foreground/idle**
@@ -373,6 +384,7 @@ non-blocking — model langganan, bukan pay-per-token).
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-04 | **ADR-001 di-ACCEPT (locked)** — verifikasi terakhir tertutup dgn limit ASLI kedua CLI: CC (`You've hit your session limit`, 4 Jul pagi) + **agy** (kuota 5-jam dihabiskan terkontrol → pesan TUI `⚠ Individual quota reached … Resets in <Xm Ys>` + Error ID; **agy limit≠exit** tetap hidup; sinyal exhaustion LS `remainingFraction` **absent**; limit agy **soft** bila credit aktif = fallthrough senyap; print-mode kosong saat limit). **Tak ada lagi ADR Proposed — set ADR lengkap-terkunci.** **ADR-014 dianotasi** (keputusan tak berubah): jalur inject-continue agy **tak lagi provisional** (agy hidup di prompt saat limit). Header status + ADR-001 status + progres diperbarui. Dampak docs: GOTCHAS G-16..G-19, RESEARCH §2b/§4b, MILESTONES M3d.4/M3d.8, CONTEXT. Sumber: scratchpad FINDINGS F4-F12. |
 | 2026-07-02 | ADR-001..009 draft (Proposed); ADR-001 direvisi pasca temuan statusLine v2.1.80. |
 | 2026-07-03 | ADR-001 (masih Proposed) direvisi: opsi probe Antigravity diperluas + catatan `/usage` stale & tak ada exit code khusus rate-limit (run riset terjadwal — RESEARCH §2b/§4b/§5b–c). Pending decisions diberi owner+target; tambah pending probe Antigravity. |
 | 2026-07-03 (dini hari) | ADR-001 (masih Proposed) direvisi lagi: deteksi limit CC primer = **hook `StopFailure`** matcher `rate_limit` (v2.1.78+); eksplisitkan **limit-hit ≠ proses exit** → dua jalur lanjut (inject-PTY vs resume-by-id). Tambah pending: strategi continue sesi hidup. (Sesi interaktif — RESEARCH §2c.) |

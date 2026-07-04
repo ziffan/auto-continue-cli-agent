@@ -36,6 +36,89 @@ daemon. **Catatan agy:** jalur inject provisional — verifikasi perilaku TUI ag
 **Selesai bila:** AC-3, AC-6, AC-7, AC-8 lulus. Integration test end-to-end: simulasi LIMIT_HIT → tunggu →
 probe → resume di cwd benar (uji juga kasus cwd hilang → BLOCKED).
 
+### M3 — pecahan slice (status)
+M3 dieksekusi sebagai sub-slice. **M3a** (Daemon lifecycle + IPC ADR-015 + reconcile orphan) ✅ ·
+**M3b** (Scheduler timer persisten + backoff + recovery) ✅ · **M3c** (Usage-Probe **parser** murni) ✅ —
+ketiganya **engine murni**, tier-reviewed, merged `main`. Sisa = **M3d (wiring live + continue-engine)** di bawah.
+**M3d = HARD-STOP OTONOM** (outward-facing: sentuh sesi live + jaringan + creds; butuh limit/quota asli;
+keputusan user) → dirancang di sini, **dieksekusi dengan user hadir**, bukan otonom.
+
+> Batas scope-file M3d: banyak slice menyentuh `daemon/supervisor.ts` sebagai titik integrasi → slice
+> ber-supervisor **diserialkan** (bukan paralel). Slice adapter-probe (M3d.3/M3d.4) & fixture (M3d.8) =
+> file terpisah → boleh paralel. Semua slice M3d **Tier 1** (state-machine / egress / creds / inject PTY).
+
+### M3d.1 — Wire Detector ke sesi live (deteksi LIMIT_HIT nyata)
+**Slice**: supervisor memasang Detector (`classify()`) ke stream output PTY sesi hidup (+ hook `StopFailure` utk CC);
+sinyal limit → status `LIMIT_HIT` + `proc_state` + event `status_change`, tanpa aksi diturunkan dari *isi* output.
+**Scope file**: `daemon/supervisor.ts`, `daemon/process-wrapper.ts` (baru/atau `cli/run-core.ts` wiring), `store/repositories/sessions.ts`. Pakai `daemon/detector.ts` apa adanya.
+**Di luar scope**: `adapters/*`, `scheduler.ts`, `continue.ts`.
+**Kriteria selesai**: sesi live + sinyal limit fixture (di-feed ke stream / hook) → baris `sessions` transisi `LIMIT_HIT` + event tercatat; overload (429/5xx) TIDAK memicu (overload firewall). Empty/tak-ada-sinyal = tetap RUNNING.
+**Bukti**: test hijau (paste) transisi state + non-trigger overload; log run.
+**Tier review**: **1** (state machine + jalur deteksi security-sensitive; injection firewall).
+
+### M3d.2 — Enqueue reset+probe saat LIMIT_HIT (estimator → scheduler)
+**Slice**: transisi `LIMIT_HIT` → hitung `reset_at` (`reset-estimator`, tandai sumber) → enqueue `scheduled_jobs` kind=`probe` (scheduler); recovery timer saat restart daemon.
+**Scope file**: `daemon/supervisor.ts`, `store/repositories/scheduled-jobs.ts` (pakai), `daemon/scheduler.ts` (pakai), `reset-estimator.ts` (pakai).
+**Di luar scope**: adapter probe live, continue.
+**Kriteria selesai (AC-7)**: LIMIT_HIT → row `scheduled_jobs.run_at` benar + `reset_source`; restart daemon → job pending re-armed (uji dgn fake timer + persistence asli). Tutup **I-6** (adapter `setTimer` produksi bungkus rejection).
+**Bukti**: test hijau recovery-dari-persistence + estimator precedence.
+**Tier review**: **1** (persistensi timer/state).
+
+### M3d.3 — Live probe Claude Code (`api/oauth/usage` HTTP, egress whitelist)
+**Slice**: `adapters/claude.ts probeUsage()` baca `~/.claude/.credentials.json` (Bearer + `anthropic-beta`) → GET `api/oauth/usage` → `parseClaudeOAuthUsage` → `UsageSnapshot`. Egress **hanya** `api.anthropic.com` (guard).
+**Scope file**: `adapters/claude.ts`, `shared/` http+egress-guard kecil (baru), `adapters/usage.ts` (pakai).
+**Di luar scope**: `antigravity.ts`, supervisor, continue.
+**Kriteria selesai**: HTTP nyata → `usedFraction`/`resetAt` (dua format `resets_at` G-4 tertangani); creds **hanya dibaca** (tak di-log/disalin); egress non-whitelist ditolak (test guard). Error/401/timeout → `UsageProbeError`, bukan crash.
+**Bukti**: log run probe nyata (angka, **tanpa** token/PII) + test egress-guard + test parser.
+**Tier review**: **1** (egress jaringan + baca creds).
+
+### M3d.4 — Live probe Antigravity (LS `GetUserStatus`, port sesi hidup)
+**Slice**: `adapters/antigravity.ts probeUsage()` temukan port LS dari PID sesi hidup **lintas-OS** (Win `Get-NetTCPConnection`; Linux `/proc`/`ss`) → `POST GetUserStatus` (Connect-JSON, tanpa csrf) → `parseAgyUserStatus`. Redaksi PII (G-9).
+**Scope file**: `adapters/antigravity.ts`, `shared/` port-discovery lintas-OS (baru), `adapters/usage.ts` (pakai).
+**Di luar scope**: `claude.ts`, supervisor, continue.
+**Kriteria selesai**: sesi agy live ber-PTY → `quotaInfo` per-model (I-7 skema dikonfirmasi dari respons asli). **Tangani `remainingFraction` ABSENT = exhausted** (G-17, jangan crash `undefined`). **Catat caveat F1** (fraksi cached-at-init → snapshot, bukan real-time) + **`useG1Credits` credit-fallthrough** (G-16: limit agy soft bila credit aktif → probe wajib cek exhaustion=absent DAN credit) di komentar/docs. PII tak bocor ke log/events. Print-mode `-p` **tak** untuk deteksi limit (stdout kosong, G-18).
+**Bukti**: log run (angka per-model, tanpa PII) + test parser + test redaksi.
+**Tier review**: **1** (jaringan + PII + creds).
+
+### M3d.5 — Gate probe→resume/backoff saat reset (scheduler dispatch)
+**Slice**: job `probe` jatuh tempo → `probeUsage()`; kuota tersedia → enqueue job `resume`; kosong → backoff reschedule (scheduler) + notif "perkiraan". Tak spam-resume.
+**Scope file**: `daemon/supervisor.ts` (dispatch scheduler→probe→keputusan), `scheduler.ts` (pakai).
+**Di luar scope**: adapter internals (M3d.3/4), continue internals (M3d.6/7).
+**Kriteria selesai (AC-6)**: probe kosong → backoff berjenjang + jadwal ulang (tak resume); probe berisi → enqueue resume sekali. Uji fake-timer.
+**Bukti**: test hijau kedua cabang.
+**Tier review**: **1** (keputusan aksi-auto + state machine).
+
+### M3d.6 — Continue-engine: resume-by-id (proc `exited`) di cwd asli (ADR-014 §3-4)
+**Slice**: sesi `exited` + kuota ok → jalankan resume di **cwd asli** (`claude --resume <id>` / `agy --conversation <id>`) via PTY; **cwd hilang → `BLOCKED`** (jangan resume di tempat salah).
+**Scope file**: `daemon/continue.ts` (baru), `adapters/{claude,antigravity}.ts resumeCmd()` (pakai), `daemon/supervisor.ts` (panggil).
+**Di luar scope**: jalur inject-PTY (M3d.7).
+**Kriteria selesai (AC-3, AC-8)**: exited → resume spawn di cwd benar → status `RESUMED`; cwd hilang/berubah → `BLOCKED` + notif, **tak** resume.
+**Bukti**: integration test (cwd benar + cwd hilang→BLOCKED); log run.
+**Tier review**: **1** (spawn proses + korektness cwd = AC-8).
+
+### M3d.7 — Continue-engine: inject "continue" ke PTY hidup + gating (ADR-014 §1-2, preferred)
+**Slice**: sesi `alive` + **gating LULUS** (proc alive = child kita · foreground = agent bukan shell · sesi idle bukan mid-turn · probe kuota ok) → inject **literal tetap** `"continue"\n` ke PTY. **Gating GAGAL → surface manual, TAK auto-kill.** Token **tak pernah** dari isi output (injection firewall).
+**Scope file**: `daemon/continue.ts`, `shared/proc.ts` (foreground/idle detection lintas-OS — reuse spike burn2 sesi ini: idle marker footer, foreground=agent), `daemon/supervisor.ts` (panggil).
+**Di luar scope**: resume-by-id (M3d.6), remote.
+**Kriteria selesai**: alive+idle+foreground=agent → inject "continue" → lanjut; drop-to-shell ATAU mid-turn ATAU proc≠child → **tak inject**, di-surface; token = literal (uji tak ada aksi dari output).
+**Bukti**: test gating tiap cabang (lulus + 3 gagal) + test literal-only.
+**Tier review**: **1** (inject PTY = paling security-sensitive; injection firewall + literal token).
+
+### M3d.8 — Fixture limit agy ASLI ke korpus detektor (observasi 4 Jul SUDAH ada → tinggal encode)
+**Slice**: observasi limit agy ASLI **sudah tertangkap 4 Jul** (`agy-REAL-limit-message.txt`: `⚠ Individual quota
+reached. Please upgrade your subscription to increase your limits. Resets in <Xm Ys>.` + Error ID; agy **tetap hidup**;
+`remainingFraction` absent). Tinggal: encode fixture pesan ke korpus detektor agy (ganti 4 fixture provisional) + fixture
+respons LS exhausted (field absent); set jalur continue agy = **alive/inject** (ADR-014 sudah dianotasi verified). Detector agy corpus provisional→verified.
+**Scope file**: `adapters/patterns.ts` (korpus agy), `test/fixtures/agy-limit*`, `test/detector.test.ts`.
+**Di luar scope**: supervisor, adapter probe.
+**Kriteria selesai**: detector klasifikasi fixture limit agy ASLI benar; ADR-001 (bagian agy) bisa naik **Accepted**; ADR-014 catatan agy diperbarui dari observasi.
+**Bukti**: test hijau fixture agy asli; ADR/GOTCHAS diperbarui.
+**Tier review**: **1** (korektness deteksi).
+
+> **Urutan eksekusi M3d:** M3d.1→M3d.2→M3d.5 (rantai supervisor, serial) ; M3d.3 ∥ M3d.4 ∥ M3d.8 (file terpisah) ;
+> M3d.6→M3d.7 (continue, serial, setelah probe siap). M3d.8 memanfaatkan eksperimen sesi ini → bisa duluan.
+> Semua Tier-1 → tier-review Opus wajib. Fixture/observasi live = sumber kebenaran, bukan asumsi.
+
 ## M4 — Notifikasi + Monitor UX
 **Slice:** notifikasi desktop/CLI pada transisi LIMIT_HIT/RESUMED/FAILED; `acca status` TUI lengkap
 (usage best-effort + indikator "perkiraan" + loading/empty/error state); `acca log`.

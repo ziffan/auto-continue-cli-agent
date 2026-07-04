@@ -138,7 +138,19 @@ pesan render, bukan objek API error mentah — butuh hook `StopFailure` terpasan
 sudah tersedia via usage-probe (`used_percentage`/`percent`, parser M3c) → hitung proximity sendiri. Threshold
 **90% (5-jam) & 75% (mingguan)** = default Claude Code sendiri, kandidat default US-13 (lihat ISSUES I-8).
 Catatan: format tetap bisa berubah antar versi (varian `·` separator, waktu kadang tanpa tz) → tabel ini +
-fixture asli = korpus regresi. Sisa TODO #2: varian **Antigravity** saat quota habis (belum tertangkap).
+fixture asli = korpus regresi.
+
+**✅ TERKONFIRMASI LOKAL (4 Jul 2026, limit 5-jam Gemini ASLI — TODO #2 varian Antigravity DITUTUP).** Kuota
+5-jam agy (pool Gemini) dihabiskan via burn terkontrol (probe LS memantau `remainingFraction`: `0.2565→0.117→
+0.0055→[absent]`). Fakta terkunci: **(1) Pesan limit TUI agy ASLI (interaktif, credit off):**
+`⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in <Xm Ys>.` +
+baris `Error ID: <uuid>` (reset **relatif** di pesan ↔ absolut `resetTime` LS). **(2) `limit ≠ exit` utk agy juga:**
+setelah pesan, agy **TETAP HIDUP** di prompt (footer `? for shortcuts` balik) — validasi jalur inject-continue
+ADR-014 utk agy. **(3) Sinyal exhaustion LS:** field `remainingFraction` **HILANG/absent** (bukan 0) saat habis
+(GOTCHAS G-17). **(4) Limit agy = SOFT bila credit ada:** saat 5-jam=0 dgn `useG1Credits:true`, agy **fallthrough
+senyap ke AI Credits** (−44 teramati) tanpa pesan, sesi jalan terus → hard-stop hanya saat credit off (G-16). **(5)
+Print-mode `agy -p` saat limit = stdout KOSONG exit 0** (pesan hanya di TUI interaktif — G-18/G-19). Fixture ASLI
+→ korpus detektor agy (ganti 4 fixture provisional). **Sumber:** eksperimen 4 Jul; scratchpad `FINDINGS.md` F4-F12.
 
 ## 2c. Hook `StopFailure` + perilaku proses saat limit *(temuan baru, 3 Jul 2026 dini hari — docs resmi hooks + CHANGELOG)*
 
@@ -200,8 +212,9 @@ Harness uji tersimpan di scratchpad (`hooktest/`, non-repo).
 
 Basis: mekanisme inti claude-auto-retry (kirim "continue" ke pane hidup — hanya mungkin karena proses
 tak exit saat limit; §5c), premis #13354, dan semantik `StopFailure` ("turn ends", bukan "process exits").
-**Belum diverifikasi untuk Antigravity** — perilaku TUI agy saat quota habis (tetap hidup vs exit) =
-bagian TODO #2 varian agy (§6).
+**✅ Diverifikasi untuk Antigravity (4 Jul 2026):** saat quota 5-jam habis (credit off), agy **TETAP HIDUP** di
+prompt setelah pesan `Individual quota reached` (limit≠exit, seperti CC) → jalur inject-continue viable (§2b, G-19).
+Bila credit ada, agy fallthrough senyap ke credit (tak stop) — G-16.
 
 ## 3. Claude Code — resume sesi
 
@@ -296,10 +309,18 @@ pre-resume** (dasar uji §5b; #2 terbukti end-to-end — quotaInfo non-nil, TODO
 
 | Tool | Binary | Versi | Catatan |
 |---|---|---|---|
-| Claude Code | `C:\Users\ziffa\.local\bin\claude.exe` | **2.1.200** | ≥2.1.80 → `rate_limits` ada di statusLine JSON; `api/oauth/usage` 200 OK (§2) |
+| Claude Code | `C:\Users\ziffa\.local\bin\claude.exe` | **2.1.200** (release terbaru **2.1.201**) | ≥2.1.80 → `rate_limits` ada di statusLine JSON; `api/oauth/usage` 200 OK (§2). Binary on-disk yang dibungkus supervisor = **2.1.200**; runtime sesi = 2.1.201 (updater belum tulis-ulang binary standalone) |
 | Antigravity CLI | `C:\Users\ziffa\AppData\Local\agy\bin\agy.exe` | **1.0.16** | ≥1.0.4 → `--conversation <id>` resume |
 | Gemini CLI | `...\npm\gemini.ps1` | 0.42.0 | terpisah; bukan target MVP |
 
+> **Re-cek versi 4 Jul 2026:** release CC terbaru = **2.1.201** (delta dari 2.1.200 = **satu baris**: "Sonnet 5
+> sessions no longer use the mid-conversation system role for harness reminders" — perubahan harness-prompt Sonnet 5,
+> **tak menyentuh** StopFailure/`rate_limits`/`api/oauth/usage`/resume/limit≠exit). **Risiko #4 tetap belum terpicu**
+> (nol menyinggung auto-continue/resume-on-limit). Catatan: binary on-disk `claude.exe` masih **2.1.200** (yang
+> akan dibungkus supervisor), runtime sesi = 2.1.201. Bonus (validasi desain, bukan spek): changelog **2.1.200**
+> penuh fix daemon background-agent yang paralel dengan M3a — *stale `daemon.lock` + PID di-reuse OS* (≈ G-14),
+> *orphan cleanup rusak*, *socket auth token stripped saat restart* → upstream mengonfirmasi single-instance +
+> stale-socket + orphan-cleanup memang jebakan nyata (tak butuh aksi kita).
 > **Re-cek versi 3 Jul 2026 (sore):** CC **2.1.199→2.1.200** (agy tetap 1.0.16). Changelog 2.1.200 belum
 > terbit di raw GitHub (patch sangat baru); entri 2.1.199 hanya retry 429 transient (sudah tercatat). **Tak ada
 > perubahan spek-kritis:** StopFailure hook, skema `rate_limits`, `api/oauth/usage` (justru **diverifikasi 200 OK

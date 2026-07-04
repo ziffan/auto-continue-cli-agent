@@ -13,7 +13,23 @@
   inject "continue"/resume-by-id ke sesi CLI nyata (ADR-014, gating). **M3d = HARD-STOP OTONOM** — outward-facing
   (sentuh sesi live + jaringan) + butuh limit/quota asli (ADR-001, TODO #2 verifikasi TUI agy) + keputusan user
   → **di-surface ke user, tak dikerjakan sendiri.**
-- **Terakhir diupdate:** 2026-07-04 (pagi, tutup sesi) — **Run otonom 2:35 AM tuntas: 4 slice merged
+- **Terakhir diupdate:** 2026-07-04 (sesi siang, tutup) — **3 hasil besar:**
+  **(A) Cek delta CC 2.1.201** — satu baris harness-prompt Sonnet 5, **nol dampak spek-kritis**, risiko #4 aman;
+  binary on-disk masih 2.1.200. Disinkron RESEARCH §4c.
+  **(B) Design M3d** — dipecah **8 slice vertikal** (semua Tier-1) di MILESTONES + urutan eksekusi + scope-file.
+  **(C) 🎯 LIMIT agy ASLI TERTANGKAP → ADR-001 di-ACCEPT (tak ada lagi ADR Proposed).** Kuota 5-jam Gemini
+  dihabiskan terkontrol (burn print-mode sekuensial via node-pty). Temuan (scratchpad `FINDINGS.md` F1-F12,
+  ringkas di GOTCHAS G-16..G-19 + RESEARCH §2b/§4b): pesan TUI ASLI `⚠ Individual quota reached … Resets in
+  <Xm Ys>` + Error ID; **agy limit≠exit** (tetap hidup di prompt → inject-continue viable, ADR-014 dianotasi
+  verified); sinyal exhaustion LS = `remainingFraction` **absent** (bukan 0); **limit agy SOFT** bila AI Credits
+  aktif (fallthrough senyap — toggle CLI `useG1Credits` ≠ IDE `useAiCredits`); print-mode `-p` stdout **kosong**
+  saat limit. **Biaya:** 44 AI Credits (2500→2456, hanya window awal saat `useG1Credits:true`; guard hentikan) +
+  1× window 5-jam Gemini (reset 05:48Z). **Docs diupdate:** GOTCHAS, RESEARCH, DECISIONS (ADR-001 Accepted +
+  ADR-014 anotasi), MILESTONES (M3d.4/M3d.8), CONTEXT. **Catatan config user:** `~/.gemini/antigravity-cli/
+  settings.json` `useG1Credits` di-set false (agy hapus key saat launch); credit-off andal mungkin butuh
+  server-side Antigravity. **Next:** eksekusi M3d (mulai M3d.1 wire detector, atau M3d.8 encode fixture agy ASLI
+  — sudah tersedia). M3d = HARD-STOP otonom (butuh user hadir).
+- **Terakhir diupdate (sebelumnya):** 2026-07-04 (pagi, tutup sesi) — **Run otonom 2:35 AM tuntas: 4 slice merged
   (M2 · M3a · M3b · M3c)**, semua tier-reviewed Opus + gate dijalankan sendiri, pushed ke `main` (`4216920`).
   Bug MAJOR ditangkap & diperbaiki di M3a (unlink-steal socket POSIX → G-14). Berhenti terjadwal di **M3d**
   (wiring live = outward-facing + limit asli + keputusan user). **Skill baru dibuat:** `.claude/skills/autonomous-run/`
