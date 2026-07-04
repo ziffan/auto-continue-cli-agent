@@ -1,6 +1,8 @@
 import { isAbsolute } from 'node:path';
 import * as pty from 'node-pty';
+import { createLimitWatcher } from '../daemon/limit-watcher.js';
 import { genSessionId } from '../shared/ids.js';
+import { nowMs } from '../shared/time.js';
 import { which } from '../shared/which.js';
 import type { Tool } from '../shared/types.js';
 import type { EventsRepo } from '../store/repositories/events.js';
@@ -73,8 +75,23 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
 
   deps.sessions.setPid(id, ptyProcess.pid);
 
+  // M3d.1 — seam Detector→sesi live: engine murni (tak akses store/IPC, ADR-008/013), transisi
+  // state dilakukan di sini oleh pemanggil saat `onLimit` menyala (sekali, latched).
+  const watcher = createLimitWatcher({
+    tool: spec.tool,
+    onLimit: (result) => {
+      deps.sessions.markLimitHit(id, { source: result.source ?? 'output', detectedAt: nowMs() });
+      deps.events.append({
+        session_id: id,
+        type: 'status_change',
+        payload: { to: 'LIMIT_HIT', source: result.source, evidence: result.evidence?.slice(0, 200) },
+      });
+    },
+  });
+
   const dataSub = ptyProcess.onData((data: string) => {
     process.stdout.write(data);
+    watcher.feedOutput(data);
   });
 
   let restoreStdin: (() => void) | undefined;

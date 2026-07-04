@@ -86,6 +86,17 @@ export function createSessionsRepo(db: DatabaseInstance) {
       ).run({ id, updated_at: nowMs() });
     },
 
+    /** Transisi RUNNING → LIMIT_HIT saat Detector menandai limit pada sesi HIDUP (limit != exit,
+     *  ADR-014/RESEARCH §2c) → proc_state DIBIARKAN 'alive'. Guard `status='RUNNING'` = idempoten
+     *  (sinyal limit berulang tak menulis ulang) + tak meng-clobber EXITED/FAILED (mis. race exit). */
+    markLimitHit(id: string, opts: { source: string; detectedAt: number }): void {
+      db.prepare(
+        `UPDATE sessions
+         SET status = 'LIMIT_HIT', detected_at = @detectedAt, detect_source = @source, updated_at = @updatedAt
+         WHERE id = @id AND status = 'RUNNING'`,
+      ).run({ id, source: opts.source, detectedAt: opts.detectedAt, updatedAt: nowMs() });
+    },
+
     listActive(): Session[] {
       return db
         .prepare<[], Session>(
