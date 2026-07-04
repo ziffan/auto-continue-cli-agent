@@ -42,10 +42,13 @@ M3 dieksekusi sebagai sub-slice. **M3a** (Daemon lifecycle + IPC ADR-015 + recon
 ketiganya **engine murni**, tier-reviewed, merged `main`. Sisa = **M3d (wiring live + continue-engine)** di bawah.
 **M3d = HARD-STOP OTONOM** (outward-facing: sentuh sesi live + jaringan + creds; butuh limit/quota asli;
 keputusan user) → dirancang di sini, **dieksekusi dengan user hadir**, bukan otonom.
-**Progres M3d (4 Jul, branch `m3d-wiring-live`):** **M3d.8 ✅** (`a1470b4`) · **M3d.1 ✅** (`8d0a8b1`) ·
-**M3d.2 ✅** (`fc60cd8`, tutup I-6) — Tier-1, 141/141 test, smoke live e2e (LIMIT_HIT→reset_at→probe job).
-Sisa: **M3d.3 ∥ M3d.4** (probe live — creds+jaringan+sesi agy live, go-ahead user), **M3d.5** (dispatch),
-**M3d.6→M3d.7** (continue-engine). Catatan integrasi: ISSUES I-10 (cross-process gap) + I-11 (dispatch placeholder).
+**Progres M3d (4 Jul):** **M3d.8 ✅** (`a1470b4`) · **M3d.1 ✅** (`8d0a8b1`) · **M3d.2 ✅** (`fc60cd8`, tutup I-6) —
+Tier-1, smoke live e2e (LIMIT_HIT→reset_at→probe job).
+**M3d.3–M3d.7 ✅ ENGINE (rebuild `3db7fa6`)** — percobaan Haiku di-revert (tag `haiku-m3d-attempt`, alasan: require-ESM,
+Linux port-discovery salah, SpawnSpec tanpa cwd, inject-spin, 0 test); ditulis ulang testable (semua I/O di-inject),
+**184/184 test**, Tier-1 review Opus. **I-11 CLOSED** (realDispatch). **Sisa M3 = actuation seams (I-12, bukan engine):**
+inject-continue butuh IPC wrapper↔daemon; resume-by-id butuh spawn fresh-wrapper; live-verify agy port-discovery di
+Ubuntu. Catatan integrasi tersisa: I-10 (cross-process re-arm).
 
 > Batas scope-file M3d: banyak slice menyentuh `daemon/supervisor.ts` sebagai titik integrasi → slice
 > ber-supervisor **diserialkan** (bukan paralel). Slice adapter-probe (M3d.3/M3d.4) & fixture (M3d.8) =

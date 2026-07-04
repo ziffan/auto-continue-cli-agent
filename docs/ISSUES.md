@@ -6,6 +6,19 @@
 
 ## Terbuka
 
+### I-12 — Actuation seams M3d: inject-continue & resume-by-id belum meng-aksi (engine-only) [P2, target wiring wrapper↔daemon]
+Rebuild M3d.3–7 (`3db7fa6`) menyelesaikan **keputusan** (probe→resume/backoff, gating, spec resume) tapi
+**actuation-nya sengaja ditunda** — supervisor bukan pemilik proses PTY:
+1. **inject-continue (alive):** `checkInjectGating` selalu dapat `ptyFd: undefined` → emit `inject_deferred`/
+   `invalid_pty_fd` → `'done'`. Butuh **IPC wrapper↔daemon** supaya daemon minta wrapper (pemegang fd PTY)
+   menulis `"continue\n"` ke sesi hidupnya. Berkaitan erat dgn I-10 (cross-process).
+2. **resume-by-id (exited):** dispatch hanya emit `resume_ready` + `SpawnSpec` (bawa cwd) — **tak spawn**.
+   Butuh jalur spawn fresh-wrapper PTY di `spec.cwd`.
+3. **live-verify agy port-discovery:** algoritma inode-correlation Linux hanya diuji fixture; belum ditembak
+   proses `agy` LS nyata (butuh Ubuntu native + sesi agy live ber-PTY). Windows `Get-NetTCPConnection` juga
+   belum di-smoke live.
+Sampai seams ini di-wire, engine M3d benar & teruji tapi **belum menutup loop auto-continue end-to-end**.
+
 ### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13]
 Claude Code menampilkan warning ~90% (window 5-jam) & ~75% (mingguan) di terminal, tapi itu **UI-only,
 tak di-persist** (G-15) → jangan scrape. Sinyalnya sudah tersedia via usage-probe: `usedFraction` (parser
@@ -23,7 +36,11 @@ parser wajib perlakukan absent = exhausted (0), jangan crash `undefined`. Plan/c
 `planStatus.planInfo` + `userTier.availableCredits[].creditAmount`. Sisa (non-blocking): rapikan `parseAgyUserStatus`
 (M3c) ke skema nyata + tambah fixture dari respons asli (M3d.4/M3d.8). Parser sudah defensif + test-covered.
 
-### I-11 — Placeholder dispatch scheduler daemon backoff-spin sampai M3d.5 [P3, target M3d.5]
+### I-11 — Placeholder dispatch scheduler daemon backoff-spin sampai M3d.5 [P3] ✅ (M3d.5 rebuild `3db7fa6`)
+**RESOLVED:** `realDispatch` di `supervisor.ts` mengganti placeholder — probe→enqueue-resume / backoff / masih-limit
+retry / error retry nyata; jalur resume-alive kini `'done'` (bukan `'retry'`) sehingga **tak ada lagi backoff-spin
+tak berujung**. Cabang-cabang ini ditutup test `test/supervisor-dispatch.test.ts` (7 kasus). Catatan historis di bawah.
+
 `supervisor.ts` mem-wire scheduler dengan **dispatch placeholder** (`deps.dispatch ?? …`) yang mengembalikan
 `'retry'` + emit event `job_dispatch_pending` — karena `probeUsage()`/resume nyata baru ada di M3d.5. Efek: bila
 daemon **benar-benar jalan** dgn job `probe` pending, scheduler memicunya → 'retry' → reschedule backoff

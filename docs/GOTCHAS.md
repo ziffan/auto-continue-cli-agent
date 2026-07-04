@@ -220,12 +220,33 @@ sebelum `classify()`. `daemon/limit-watcher.ts` memakai `/\x1b\[[0-9;?]*[a-zA-Z]
 `eslint-disable no-control-regex`). Cakupan = CSI (warna/kursor); OSC (`\x1b]…\x07`) & charset (`\x1b(B`) belum
 di-strip — perluas bila observasi live menunjukkan frasa terpotong olehnya. **Sumber:** smoke M3d.1 (4 Jul), `src/daemon/limit-watcher.ts`.
 
+### G-21 — `require()` di modul ESM = ReferenceError runtime (lolos `tsc`, mati saat dipanggil)
+**Jebakan:** proyek ini TS/ESM murni (`"type":"module"`, output ESM). Menulis `const x = require('node:fs')` di
+kode sumber **lolos `tsc`** (karena `@types/node` mendeklarasikan `require` global untuk konteks CommonJS) tapi
+`require` **tak terdefinisi** saat modul dijalankan sebagai ESM → `ReferenceError: require is not defined`. Lebih
+berbahaya: bila pemanggilnya di jalur yang **belum pernah dieksekusi test** (mis. fungsi placeholder yang di-comment
+di call-site), build + seluruh test hijau **menyembunyikan** bom waktu ini. (Ditemukan di kerja Haiku yang di-revert:
+`injectToPty` pakai `require('node:fs').writeSync`.) **Cara benar:** SELALU `import { writeSync } from 'node:fs'` di
+atas file. Tak pernah `require` di `src/`. **Sumber:** review M3d rebuild (4 Jul).
+
+### G-22 — Port→PID discovery Linux WAJIB korelasi inode; jangan grep `/proc/net/tcp` global
+**Jebakan:** untuk menemукan port yang di-listen sebuah PID (agy LS), `cat /proc/net/tcp | grep <pola>` **SALAH** —
+tabel itu **global** (semua proses), tak terkorelasi PID; dan alamat lokal disimpan **little-endian hex** (127.0.0.1 =
+`0100007F`, **bukan** `0A000000`/dll), state LISTEN = `0A`. (Kerja Haiku yang di-revert melakukan persis dua kesalahan
+ini → mengembalikan sampah/nihil.) **Cara benar (korelasi inode):** (1) baca `/proc/<pid>/fd/*` → `readlink` → kumpul
+inode dari `socket:[<inode>]`; (2) parse `/proc/net/tcp` **dan** `/proc/net/tcp6`, ambil baris `st==='0A'` (LISTEN)
+yang `inode`-nya (kolom idx 9) ada di set inode PID; (3) port = `parseInt(localAddr.split(':')[1], 16)`. Dengan
+korelasi inode+state ini **tak perlu** filter `127.0.0.1` sama sekali. Windows lebih mudah — `Get-NetTCPConnection
+-OwningProcess <pid> -State Listen` sudah terkorelasi PID oleh OS. **Live-verify di Ubuntu belum dilakukan** (I-12).
+**Sumber:** M3d.4 rebuild (4 Jul), `src/shared/port-discovery.ts`.
+
 ---
 
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-04 (M3d rebuild) | G-21 (`require()` di ESM = ReferenceError runtime, lolos tsc — selalu `import`), G-22 (port→PID Linux wajib korelasi inode `/proc/<pid>/fd`→`/proc/net/tcp{,6}` st=0A, jangan grep tabel global; hex localhost `0100007F`). Dari review + rebuild kerja Haiku yang di-revert. |
 | 2026-07-04 (M3d.1 wiring) | G-20 (output PTY ConPTY sisipkan ANSI/CSI walau baris polos → detector wajib strip ANSI per-baris sebelum classify; cakupan CSI, OSC/charset belum). Dari smoke live M3d.1. |
 | 2026-07-04 (limit agy asli) | G-16 (`useG1Credits` CLI vs IDE `useAiCredits` + fallthrough credit senyap), G-17 (`remainingFraction` absent = exhausted, jangan crash), G-18 (agy `-p` stdin-EOF + print kosong saat limit + skip-permissions kontraproduktif), G-19 (pesan limit TUI agy ASLI `Individual quota reached` + limit≠exit + tak konkuren). Dari eksperimen limit 5-jam agy ASLI (FINDINGS F4-F12). |
 | 2026-07-04 (M2-fix) | G-15 (pesan limit CC nyata "hit your **session** limit" → pola kontigu false-negative, diperbaiki `hit your (?:\w+ )?limit`; warning proaktif 90/75 = UI-only, hitung proximity dari usage-probe). Dari limit 5-jam ASLI tertangkap di transcript sesi. |

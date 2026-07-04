@@ -6,13 +6,31 @@
 
 ## Status saat ini
 
-- **Fase:** **M3d sedang berjalan (8 slice).** M3a/b/c ✅ (engine murni, merged main). **M3d.8 ✅ · M3d.1 ✅ ·
-  M3d.2 ✅** (sesi ini — merged `main`). Rantai supervisor live sudah nyala: **deteksi limit dari
-  output PTY sesi HIDUP → LIMIT_HIT → estimasi reset_at → enqueue probe job + recovery scheduler.** Sisa M3d:
-  **M3d.3 ∥ M3d.4** (probe HTTP/LS live — **outward-facing: creds + jaringan + sesi agy live**), lalu **M3d.5**
-  (dispatch probe→resume/backoff), **M3d.6→M3d.7** (continue-engine resume-by-id + inject "continue" gating).
-  **Sisa M3d = HARD-STOP OTONOM** — M3d.3 baca `~/.claude/.credentials.json` + call `api.anthropic.com`; M3d.4
-  butuh sesi agy live ber-PTY → **butuh go-ahead user, tak dikerjakan sendiri.**
+- **Fase:** **M3d ENGINE LENGKAP (8 slice, semua Tier-1).** M3a/b/c ✅. M3d.8/1/2 ✅. **M3d.3–M3d.7 ✅ (REBUILD,
+  `3db7fa6`)** — probe usage CC (HTTP OAuth) & agy (LS GetUserStatus) + dispatch probe→resume/backoff +
+  resume-by-id (guard cwd, AC-8) + inject-continue gating; **semua I/O di-inject & bertes** (184/184).
+  **Sisa M3 = actuation seams (bukan engine, butuh integrasi/OS nyata):** PTY IPC wrapper↔daemon untuk
+  inject-continue, spawn fresh-wrapper untuk resume-by-id, + live-verify agy port-discovery di Ubuntu (→ I-12).
+  Lihat blok "sesi malam" tepat di bawah.
+- **Terakhir diupdate:** 2026-07-04 (sesi malam, session-end ini) — **M3d.3–M3d.7 REBUILD (revert kerja Haiku).**
+  Sesi sebelumnya keliru dieksekusi Haiku (bukan Opus): 7 commit skeleton di-**revert** ke baseline `2e54a7a`
+  (disimpan di tag `haiku-m3d-attempt`, reversible). Alasan cacat: **`require()` di modul ESM** (crash runtime,
+  lolos tsc), **Linux port-discovery salah korelasi PID** (grep tabel `/proc/net/tcp` global + hex localhost salah),
+  **`SpawnSpec` tanpa `cwd`** (AC-8 tak terpenuhi), **jalur inject-alive `retry` selamanya** (spin), dan **NOL test
+  untuk 5 slice Tier-1**.
+  **Rebuild "sesuai flow yang seharusnya" (`3db7fa6`)** — semua I/O di-inject (fetch/exec/fs) → unit-testable
+  tanpa jaringan/proses nyata; tiap slice bertes:
+  **M3d.3** `shared/http.ts` (egress guard allowlist) + `shared/credentials.ts` (token tak bocor ke error) + CC probe + resumeCmd.
+  **M3d.4** `shared/port-discovery.ts` (Windows `Get-NetTCPConnection`; Linux korelasi **inode** `/proc/<pid>/fd`→`/proc/net/tcp{,6}` st=`0A` LISTEN) + agy probe (coba SEMUA port, ambil yg limits non-kosong).
+  **M3d.5** supervisor `realDispatch` (probe→enqueue resume / backoff / masih-limit retry / error retry).
+  **M3d.6** resume-by-id (proc exited): guard `existsSync(cwd)`→BLOCKED else `resume_ready` spec (bawa cwd).
+  **M3d.7** `shared/pty-control.ts` (`checkInjectGating` pure + `injectToPty` partial-write loop); alive→`inject_deferred`+`done` (TAK spin).
+  **Verifikasi (Opus jalankan sendiri, bukan laporan subagent): build ✅ · eslint ✅ · 184/184 test (141 baseline + 43 baru).**
+  Tier-1 review Opus line-by-line (egress/creds/dispatch state-machine/resume) — **lolos**. Impl = subagent Sonnet
+  dengan **spec presisi injectable-boundary + test wajib per-slice** (pelajaran dari kegagalan Haiku). **I-11 CLOSED**
+  (`realDispatch` ganti placeholder backoff-spin). Gotcha baru **G-21** (ESM `require`) + **G-22** (Linux port→PID inode
+  correlation). **Seam ditunda (jujur, bukan pura-pura selesai) → I-12:** actuation inject (IPC wrapper↔daemon),
+  actuation spawn resume, live-verify agy port-discovery di Ubuntu.
 - **Terakhir diupdate:** 2026-07-04 (sesi sore, session-end) — **3 slice M3d dikerjakan, semua Tier-1, hijau,
   di-commit lalu merged `main` (branch `m3d-wiring-live` fast-forward):**
   **(M3d.8, `a1470b4`)** korpus detektor agy provisional→**VERIFIED** — 4 fixture invented diganti pesan limit
