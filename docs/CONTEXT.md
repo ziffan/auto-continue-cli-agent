@@ -6,13 +6,31 @@
 
 ## Status saat ini
 
-- **Fase:** **M3 sedang berjalan (dipecah jadi slice).** M3a (Daemon+IPC+orphan) ✅ · M3b (Scheduler) ✅ ·
-  **M3c (Usage-Probe parser) ✅** — ketiga slice pure tier-reviewed & merge `main`. **Trio engine murni selesai:
-  Detector (M2) + Scheduler (M3b) + Usage-parser (M3c).** Berikutnya = **M3d — wiring live + continue-engine:**
-  wire detector+scheduler+probe ke daemon; jalur probe HTTP nyata (baca creds, egress whitelist) + agy LS live;
-  inject "continue"/resume-by-id ke sesi CLI nyata (ADR-014, gating). **M3d = HARD-STOP OTONOM** — outward-facing
-  (sentuh sesi live + jaringan) + butuh limit/quota asli (ADR-001, TODO #2 verifikasi TUI agy) + keputusan user
-  → **di-surface ke user, tak dikerjakan sendiri.**
+- **Fase:** **M3d sedang berjalan (8 slice).** M3a/b/c ✅ (engine murni, merged main). **M3d.8 ✅ · M3d.1 ✅ ·
+  M3d.2 ✅** (sesi ini — merged `main`). Rantai supervisor live sudah nyala: **deteksi limit dari
+  output PTY sesi HIDUP → LIMIT_HIT → estimasi reset_at → enqueue probe job + recovery scheduler.** Sisa M3d:
+  **M3d.3 ∥ M3d.4** (probe HTTP/LS live — **outward-facing: creds + jaringan + sesi agy live**), lalu **M3d.5**
+  (dispatch probe→resume/backoff), **M3d.6→M3d.7** (continue-engine resume-by-id + inject "continue" gating).
+  **Sisa M3d = HARD-STOP OTONOM** — M3d.3 baca `~/.claude/.credentials.json` + call `api.anthropic.com`; M3d.4
+  butuh sesi agy live ber-PTY → **butuh go-ahead user, tak dikerjakan sendiri.**
+- **Terakhir diupdate:** 2026-07-04 (sesi sore, session-end) — **3 slice M3d dikerjakan, semua Tier-1, hijau,
+  di-commit lalu merged `main` (branch `m3d-wiring-live` fast-forward):**
+  **(M3d.8, `a1470b4`)** korpus detektor agy provisional→**VERIFIED** — 4 fixture invented diganti pesan limit
+  agy ASLI `Individual quota reached` (G-19); `AGY_LIMIT_PATTERNS` = anchor terverifikasi + generalisasi
+  konservatif; pola tebakan (weekly/daily-allowance) dibuang; reset relatif "59m14s" sengaja bukan resetHint
+  (sumber andal = LS probe).
+  **(M3d.1, `8d0a8b1`)** Detector ter-wire ke output PTY sesi live via `daemon/limit-watcher.ts` (engine murni,
+  latched single-fire, ANSI-strip, line-buffer) + `sessions.markLimitHit` (guard RUNNING, proc tetap alive =
+  limit≠exit) + wiring `run-core.ts`. Smoke live: sesi transisi LIMIT_HIT saat proses masih hidup.
+  **(M3d.2, `fc60cd8`)** LIMIT_HIT → `daemon/schedule-reset.ts` (murni) = estimateReset→setReset→enqueue probe
+  job + event `probe_scheduled`; recovery scheduler di `supervisor.start()`; **I-6 CLOSED** (`createDaemonTimer`
+  bungkus rejection). Smoke live e2e: pesan limit CC → LIMIT_HIT → reset_source=exact reset_at=00:30Z(next-occ)
+  → probe job run_at=reset_at.
+  **Verifikasi (Opus jalankan sendiri, bukan laporan subagent):** 141/141 test, lint clean, build clean, +2 smoke
+  live via PTY nyata. Pola ADR-016: M3d.8 inline Opus (subtil); M3d.1 & M3d.2 = subagent Sonnet + tier-review +
+  smoke Opus. **Dua catatan integrasi non-blocking** → ISSUES I-10 (cross-process gap: run-core enqueue vs
+  scheduler daemon re-arm hanya saat restart) + I-11 (placeholder dispatch backoff-spin sampai M3d.5). Gotcha
+  baru G-20 (ConPTY prepend ANSI ke output → detector wajib strip).
 - **Terakhir diupdate:** 2026-07-04 (sesi siang, tutup) — **3 hasil besar:**
   **(A) Cek delta CC 2.1.201** — satu baris harness-prompt Sonnet 5, **nol dampak spek-kritis**, risiko #4 aman;
   binary on-disk masih 2.1.200. Disinkron RESEARCH §4c.

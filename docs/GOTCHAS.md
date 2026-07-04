@@ -206,10 +206,27 @@ ada yang jawab (`connect` sukses) → daemon hidup → propagate (reject); tak a
 
 ---
 
+## Detector wiring / PTY (M3d)
+
+### G-20 — Output PTY (ConPTY/node-pty) menyisipkan escape ANSI/CSI walau baris "polos" → detector wajib strip
+**Jebakan:** stream `onData` dari node-pty **bukan** teks bersih — ConPTY (Windows) menyisipkan sekuens kontrol
+(mis. `\x1b[?25l` sembunyikan kursor, `\x1b[2J` clear, `\x1b[H` home, `\x1b[m` reset, judul window `\x1b]0;…`)
+di sekitar/di dalam baris. Terbukti di smoke M3d.1: baris pesan limit datang sebagai `…[?25l[2J[m[H` diikuti
+teksnya. Pola detektor (regex frasa limit) yang dijalankan atas teks **mentah** bisa **gagal match** bila kode
+warna/kursor menyusup di tengah frasa (mis. `hit your \x1b[1msession\x1b[0m limit`).
+**Dampak:** false-negative deteksi limit pada output TUI nyata (padahal fixture bersih lolos) → sesi tak ter-LIMIT_HIT.
+**Cara benar:** strip ANSI/CSI **per baris lengkap** (setelah line-buffering, supaya escape tak terpotong antar-chunk)
+sebelum `classify()`. `daemon/limit-watcher.ts` memakai `/\x1b\[[0-9;?]*[a-zA-Z]/g` (butuh
+`eslint-disable no-control-regex`). Cakupan = CSI (warna/kursor); OSC (`\x1b]…\x07`) & charset (`\x1b(B`) belum
+di-strip — perluas bila observasi live menunjukkan frasa terpotong olehnya. **Sumber:** smoke M3d.1 (4 Jul), `src/daemon/limit-watcher.ts`.
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-04 (M3d.1 wiring) | G-20 (output PTY ConPTY sisipkan ANSI/CSI walau baris polos → detector wajib strip ANSI per-baris sebelum classify; cakupan CSI, OSC/charset belum). Dari smoke live M3d.1. |
 | 2026-07-04 (limit agy asli) | G-16 (`useG1Credits` CLI vs IDE `useAiCredits` + fallthrough credit senyap), G-17 (`remainingFraction` absent = exhausted, jangan crash), G-18 (agy `-p` stdin-EOF + print kosong saat limit + skip-permissions kontraproduktif), G-19 (pesan limit TUI agy ASLI `Individual quota reached` + limit≠exit + tak konkuren). Dari eksperimen limit 5-jam agy ASLI (FINDINGS F4-F12). |
 | 2026-07-04 (M2-fix) | G-15 (pesan limit CC nyata "hit your **session** limit" → pola kontigu false-negative, diperbaiki `hit your (?:\w+ )?limit`; warning proaktif 90/75 = UI-only, hitung proximity dari usage-probe). Dari limit 5-jam ASLI tertangkap di transcript sesi. |
 | 2026-07-04 (M3a) | G-14 (unlink socket unix tanpa syarat sebelum listen = steal socket daemon hidup → dua daemon; fix connect-probe stale-vs-live). Dari tier-review M3a. |

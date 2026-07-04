@@ -42,12 +42,16 @@ M3 dieksekusi sebagai sub-slice. **M3a** (Daemon lifecycle + IPC ADR-015 + recon
 ketiganya **engine murni**, tier-reviewed, merged `main`. Sisa = **M3d (wiring live + continue-engine)** di bawah.
 **M3d = HARD-STOP OTONOM** (outward-facing: sentuh sesi live + jaringan + creds; butuh limit/quota asli;
 keputusan user) → dirancang di sini, **dieksekusi dengan user hadir**, bukan otonom.
+**Progres M3d (4 Jul, branch `m3d-wiring-live`):** **M3d.8 ✅** (`a1470b4`) · **M3d.1 ✅** (`8d0a8b1`) ·
+**M3d.2 ✅** (`fc60cd8`, tutup I-6) — Tier-1, 141/141 test, smoke live e2e (LIMIT_HIT→reset_at→probe job).
+Sisa: **M3d.3 ∥ M3d.4** (probe live — creds+jaringan+sesi agy live, go-ahead user), **M3d.5** (dispatch),
+**M3d.6→M3d.7** (continue-engine). Catatan integrasi: ISSUES I-10 (cross-process gap) + I-11 (dispatch placeholder).
 
 > Batas scope-file M3d: banyak slice menyentuh `daemon/supervisor.ts` sebagai titik integrasi → slice
 > ber-supervisor **diserialkan** (bukan paralel). Slice adapter-probe (M3d.3/M3d.4) & fixture (M3d.8) =
 > file terpisah → boleh paralel. Semua slice M3d **Tier 1** (state-machine / egress / creds / inject PTY).
 
-### M3d.1 — Wire Detector ke sesi live (deteksi LIMIT_HIT nyata)
+### M3d.1 — Wire Detector ke sesi live (deteksi LIMIT_HIT nyata) ✅ (`8d0a8b1`)
 **Slice**: supervisor memasang Detector (`classify()`) ke stream output PTY sesi hidup (+ hook `StopFailure` utk CC);
 sinyal limit → status `LIMIT_HIT` + `proc_state` + event `status_change`, tanpa aksi diturunkan dari *isi* output.
 **Scope file**: `daemon/supervisor.ts`, `daemon/process-wrapper.ts` (baru/atau `cli/run-core.ts` wiring), `store/repositories/sessions.ts`. Pakai `daemon/detector.ts` apa adanya.
@@ -56,7 +60,7 @@ sinyal limit → status `LIMIT_HIT` + `proc_state` + event `status_change`, tanp
 **Bukti**: test hijau (paste) transisi state + non-trigger overload; log run.
 **Tier review**: **1** (state machine + jalur deteksi security-sensitive; injection firewall).
 
-### M3d.2 — Enqueue reset+probe saat LIMIT_HIT (estimator → scheduler)
+### M3d.2 — Enqueue reset+probe saat LIMIT_HIT (estimator → scheduler) ✅ (`fc60cd8`)
 **Slice**: transisi `LIMIT_HIT` → hitung `reset_at` (`reset-estimator`, tandai sumber) → enqueue `scheduled_jobs` kind=`probe` (scheduler); recovery timer saat restart daemon.
 **Scope file**: `daemon/supervisor.ts`, `store/repositories/scheduled-jobs.ts` (pakai), `daemon/scheduler.ts` (pakai), `reset-estimator.ts` (pakai).
 **Di luar scope**: adapter probe live, continue.
@@ -104,7 +108,7 @@ sinyal limit → status `LIMIT_HIT` + `proc_state` + event `status_change`, tanp
 **Bukti**: test gating tiap cabang (lulus + 3 gagal) + test literal-only.
 **Tier review**: **1** (inject PTY = paling security-sensitive; injection firewall + literal token).
 
-### M3d.8 — Fixture limit agy ASLI ke korpus detektor (observasi 4 Jul SUDAH ada → tinggal encode)
+### M3d.8 — Fixture limit agy ASLI ke korpus detektor (observasi 4 Jul SUDAH ada → tinggal encode) ✅ (`a1470b4`)
 **Slice**: observasi limit agy ASLI **sudah tertangkap 4 Jul** (`agy-REAL-limit-message.txt`: `⚠ Individual quota
 reached. Please upgrade your subscription to increase your limits. Resets in <Xm Ys>.` + Error ID; agy **tetap hidup**;
 `remainingFraction` absent). Tinggal: encode fixture pesan ke korpus detektor agy (ganti 4 fixture provisional) + fixture

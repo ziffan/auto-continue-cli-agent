@@ -23,14 +23,25 @@ parser wajib perlakukan absent = exhausted (0), jangan crash `undefined`. Plan/c
 `planStatus.planInfo` + `userTier.availableCredits[].creditAmount`. Sisa (non-blocking): rapikan `parseAgyUserStatus`
 (M3c) ke skema nyata + tambah fixture dari respons asli (M3d.4/M3d.8). Parser sudah defensif + test-covered.
 
-### I-6 — Adapter `setTimer` produksi wajib menangkap rejection `runDue` [P2, target M3d wiring]
-`daemon/scheduler.ts` memanggil `setTimer(runDue, delay)` dengan `runDue` async. `setTimeout` (adapter
-nyata nanti) **mengabaikan** Promise yang dikembalikan; per-job error sudah ditangkap di dalam `runDue`,
-tapi bila `arm()` di blok `finally` melempar (mis. `listPending()` gagal karena DB error/closed) → jadi
-**unhandledRejection** yang bisa mematikan daemon. Engine benar untuk test (harness `await runDue`). Saat
-wiring nyata (M3d): adapter `setTimer` produksi WAJIB bungkus rejection, mis.
-`(fn, ms) => setTimeout(() => { void Promise.resolve(fn()).catch(logDaemonError); }, ms)`, atau buat
-`runDue` menelan error `arm()`. Non-blocking sampai scheduler benar-benar di-wire ke `supervisor`.
+### I-11 — Placeholder dispatch scheduler daemon backoff-spin sampai M3d.5 [P3, target M3d.5]
+`supervisor.ts` mem-wire scheduler dengan **dispatch placeholder** (`deps.dispatch ?? …`) yang mengembalikan
+`'retry'` + emit event `job_dispatch_pending` — karena `probeUsage()`/resume nyata baru ada di M3d.5. Efek: bila
+daemon **benar-benar jalan** dgn job `probe` pending, scheduler memicunya → 'retry' → reschedule backoff
+(5m→15m→60m cap) → memicu lagi tiap ~60m selamanya, menumpuk event `job_dispatch_pending`. **Non-blocking
+sekarang** (daemon belum dijalankan di alur normal; `acca run` = wrapper, bukan daemon; tak ada job produksi
+yang dipicu daemon hidup). **Hilang otomatis saat M3d.5** mengganti dispatch dgn probe sungguhan (done/retry
+nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar ini.
+
+### I-10 — Cross-process gap: `run-core` enqueue probe vs scheduler daemon re-arm hanya saat restart [P2, target M3d.5/wiring]
+M3d.2: sesi live di bawah `acca run` (proses run-core) mendeteksi LIMIT_HIT lalu **meng-enqueue** job `probe`
+ke `scheduled_jobs` (SQLite). Tapi scheduler daemon (proses **terpisah**) hanya membaca job pending saat
+`start()` (recovery) atau `enqueue()` **in-process** — ia **tak tahu** job baru yang ditulis proses lain sampai
+**restart**. Jadi hari ini: enqueue benar & persisten, recovery-saat-restart jalan (AC-7 terpenuhi), tapi daemon
+**hidup** tak langsung men-arm job dari run-core. **Cara benar (slice wiring berikutnya):** run-core kirim IPC
+notify ke daemon ("job baru, re-arm") ATAU daemon yang memiliki lifecycle sesi (bukan run-core) — konsolidasi
+sole-writer `scheduled_jobs` saat daemon ambil-alih kepemilikan sesi. Sampai itu, `acca run` + daemon jalan
+paralel = probe tak dipicu tepat waktu di daemon hidup (hanya saat daemon restart). Bootstrap-exception MAP.md
+(run-core tulis `sessions`) di sesi ini **diperluas** ke `scheduled_jobs` — dicatat untuk direkonsiliasi.
 
 ### I-5 — Jalur stale-socket unlink+retry POSIX belum teruji otomatis [P3, target verifikasi Ubuntu]
 `ipc-server.listen()` membedakan socket **stale** (daemon lama crash) vs daemon **hidup** via
@@ -48,6 +59,13 @@ lintas-tengah-malam jadi penting (kemungkinan saat wiring reset ke scheduler M3 
 ---
 
 ## Tertutup
+
+### I-6 — Adapter `setTimer` produksi wajib menangkap rejection `runDue` [P2] ✅ (M3d.2)
+**Ditutup M3d.2:** `supervisor.ts` mengekspor `createDaemonTimer(onError)` = `(fn, ms) => setTimeout(() => { try
+{ void Promise.resolve(fn()).catch(onError); } catch (e) { onError(e); } }, ms)` — membungkus **rejection async
+MAUPUN throw sinkron** dari `runDue` → `onError` (append event `daemon_error`), cegah unhandledRejection
+mematikan daemon. Di-inject sbg default `setTimer` scheduler saat supervisor membangunnya. Teruji
+`test/supervisor.test.ts` (async-reject + sync-throw). Non-blocking saat ditulis (I-6/P2), kini tertutup nyata.
 
 ### I-3 — Rekonsiliasi tulis-balik sesi orphan (RUNNING basi) [P2] ✅
 **Gejala:** wrapper mati keras (SIGKILL/terminal ditutup/crash) sebelum `markExited` → baris `sessions`
