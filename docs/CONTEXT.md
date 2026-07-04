@@ -18,8 +18,16 @@
   Bug MAJOR ditangkap & diperbaiki di M3a (unlink-steal socket POSIX → G-14). Berhenti terjadwal di **M3d**
   (wiring live = outward-facing + limit asli + keputusan user). **Skill baru dibuat:** `.claude/skills/autonomous-run/`
   — mengabadikan mekanisme jadwal-otonom ini (cron lokal one-shot + scope autonomous-safe vs hard-stop +
-  budget-guard). `.claude/` masih untracked (keputusan commit-skills belum diambil). Cron one-shot sudah
-  auto-delete; **tak dijadwalkan ulang** (M3d bukan kerja otonom — tunggu user).
+  budget-guard). Cron one-shot sudah auto-delete; **tak dijadwalkan ulang** (M3d bukan kerja otonom — tunggu user).
+  **Lanjutan pagi (bersama user):** (1) **`.claude/skills/` di-commit** ke repo (`78ccad0`) — 8 skill workflow
+  kini ter-version (sinkron Ubuntu); `settings.local.json` tetap gitignored. (2) **Analisis limit-hit ASLI**:
+  saat limit 5-jam habis ~07:18–07:20 WIB, transcript sesi menyimpan pesan `You've hit your session limit ·
+  resets 7:30am (Asia/Jakarta)` (synthetic `isApiErrorMessage:true`) → **temuan: false-negative detektor M2**
+  (pesan nyata pakai qualifier "session", pola kontigu lolos). (3) **Slice M2-fix** (`755fe36`): pola
+  `hit your (?:\w+ )?limit`, fixture asli, regression test end-to-end, RESEARCH §2b (TODO #2 sebagian tutup
+  CC), G-15, I-8 (proximity monitor). 120/120 test, FP korpus tetap 0. `limit≠exit` terverifikasi di limit
+  ASLI. Warning proaktif 90/75 = UI-only (hitung dari usage-probe, I-8). Hook `error:"rate_limit"` masih perlu
+  hook terpasang (M3d).
 - **Terakhir diupdate (M3c):** 2026-07-04 (dini hari, otonom via cron) — **M3c SELESAI.** Usage-Probe parsers (pure):
   `adapters/usage.ts` — `parseClaudeOAuthUsage` (limits[] array, `resets_at` ISO), `parseClaudeStatusLine`
   (`rate_limits`, `resets_at` epoch-detik ×1000 — G-4), `parseAgyUserStatus` (per-model `quotaInfo`,

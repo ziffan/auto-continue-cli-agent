@@ -42,6 +42,10 @@ error, sekaligus membedakan overload vs usage-limit); (+) deteksi mati tetap and
 fixture & test regresi; (−) hook butuh instalasi per-config (supervisor kelola `CLAUDE_CONFIG_DIR`/settings)
 dan payload-nya belum diuji empiris (RESEARCH §6 TODO #7); (−) sisa verifikasi: fixture pesan limit sebagai
 fallback + varian Antigravity (termasuk perilaku TUI agy saat quota habis) — butuh observasi terminal nyata.
+*(Progres 4 Jul 2026: pesan limit CC **nyata tertangkap lokal** dari limit 5-jam asli — `You've hit your
+session limit · resets 7:30am (Asia/Jakarta)`, fixture + fix false-negative merged (M2-fix). `limit≠exit`
+terverifikasi di limit nyata. **Tetap Proposed** — sisa: varian **agy** saat quota habis + nilai hook
+`error:"rate_limit"` (butuh hook terpasang). RESEARCH §2b, GOTCHAS G-15.)*
 *(Skema statusLine `rate_limits` & resume kedua CLI sudah terkonfirmasi — lihat RESEARCH.md §2/§4b/§4c.)*
 **Alternatives Rejected:** Hanya wrapper+scraping transcript untuk usage (tak perlu lagi — ada jalur resmi);
 hanya statusLine/hook (tak bisa deteksi sesi mati); scraping claude.ai (rapuh, dilarang di RESEARCH).
