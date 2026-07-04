@@ -1,6 +1,6 @@
 import type { DatabaseInstance } from '../db.js';
 import { nowMs } from '../../shared/time.js';
-import type { ProcState, Session, SessionStatus, Tool } from '../../shared/types.js';
+import type { ProcState, ResetSource, Session, SessionStatus, Tool } from '../../shared/types.js';
 
 export interface CreateSessionInput {
   id: string;
@@ -89,12 +89,29 @@ export function createSessionsRepo(db: DatabaseInstance) {
     /** Transisi RUNNING → LIMIT_HIT saat Detector menandai limit pada sesi HIDUP (limit != exit,
      *  ADR-014/RESEARCH §2c) → proc_state DIBIARKAN 'alive'. Guard `status='RUNNING'` = idempoten
      *  (sinyal limit berulang tak menulis ulang) + tak meng-clobber EXITED/FAILED (mis. race exit). */
-    markLimitHit(id: string, opts: { source: string; detectedAt: number }): void {
-      db.prepare(
-        `UPDATE sessions
-         SET status = 'LIMIT_HIT', detected_at = @detectedAt, detect_source = @source, updated_at = @updatedAt
-         WHERE id = @id AND status = 'RUNNING'`,
-      ).run({ id, source: opts.source, detectedAt: opts.detectedAt, updatedAt: nowMs() });
+    markLimitHit(id: string, opts: { source: string; detectedAt: number }): boolean {
+      const info = db
+        .prepare(
+          `UPDATE sessions
+           SET status = 'LIMIT_HIT', detected_at = @detectedAt, detect_source = @source, updated_at = @updatedAt
+           WHERE id = @id AND status = 'RUNNING'`,
+        )
+        .run({ id, source: opts.source, detectedAt: opts.detectedAt, updatedAt: nowMs() });
+      return info.changes > 0;
+    },
+
+    /** Persist reset_at + reset_source pada sesi yang sedang LIMIT_HIT (dipanggil tepat setelah
+     *  markLimitHit sukses). Guard status='LIMIT_HIT' → tak menulis reset ke sesi yang sudah keluar
+     *  dari kondisi limit (mis. race exit). Return true bila terupdate. */
+    setReset(id: string, opts: { resetAt: number; resetSource: ResetSource }): boolean {
+      const info = db
+        .prepare(
+          `UPDATE sessions
+           SET reset_at = @resetAt, reset_source = @resetSource, updated_at = @updatedAt
+           WHERE id = @id AND status = 'LIMIT_HIT'`,
+        )
+        .run({ id, resetAt: opts.resetAt, resetSource: opts.resetSource, updatedAt: nowMs() });
+      return info.changes > 0;
     },
 
     listActive(): Session[] {

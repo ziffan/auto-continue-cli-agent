@@ -6,14 +6,34 @@ import { isProcessAlive } from '../shared/proc.js';
 import type { DatabaseInstance } from '../store/db.js';
 import { createEventsRepo } from '../store/repositories/events.js';
 import { createMetaRepo } from '../store/repositories/meta.js';
+import { createScheduledJobsRepo } from '../store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../store/repositories/sessions.js';
 import { createIpcServer } from './ipc-server.js';
 import { reconcileOrphans } from './reconcile.js';
+import { createScheduler, type JobDispatch, type TimerHandle } from './scheduler.js';
+
+/** I-6: setTimer produksi yang MEMBUNGKUS rejection. `setTimeout` mengabaikan Promise yang
+ *  dikembalikan fn (scheduler mem-pass `runDue` async), jadi tanpa .catch sebuah rejection (mis.
+ *  arm()/listPending() gagal karena DB closed) menjadi unhandledRejection yang bisa mematikan
+ *  daemon. Bungkus baik rejection async MAUPUN throw sinkron → onError. */
+export function createDaemonTimer(onError: (err: unknown) => void): (fn: () => void, ms: number) => TimerHandle {
+  return (fn, ms) =>
+    setTimeout(() => {
+      try {
+        void Promise.resolve(fn()).catch(onError);
+      } catch (err) {
+        onError(err);
+      }
+    }, ms);
+}
 
 export interface SupervisorDeps {
   db: DatabaseInstance;
   socketPath: string;
   now: () => number;
+  dispatch?: JobDispatch;
+  setTimer?: (fn: () => void, ms: number) => TimerHandle;
+  clearTimer?: (h: TimerHandle) => void;
 }
 
 /** Dilempar saat socket/pipe daemon sudah dipakai (instance daemon lain sudah berjalan). */
@@ -35,10 +55,36 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
   const sessions = createSessionsRepo(deps.db);
   const events = createEventsRepo(deps.db);
   const meta = createMetaRepo(deps.db);
+  const jobs = createScheduledJobsRepo(deps.db);
 
   const ipcServer = createIpcServer({
     ping: () => ({ pong: true, pid: process.pid, at: deps.now() }),
     status: () => sessions.listActive(),
+  });
+
+  const daemonError = (err: unknown, where: string, extra?: Record<string, unknown>): void =>
+    events.append({
+      session_id: null,
+      type: 'daemon_error',
+      payload: { where, error: err instanceof Error ? err.message : String(err), ...extra },
+    });
+
+  const dispatch: JobDispatch =
+    deps.dispatch ??
+    ((job) => {
+      // Placeholder M3d.5: probeUsage()/resume nyata belum ada. 'retry' → job tetap tersimpan &
+      // dijadwal ulang (backoff), tidak dihapus, sampai M3d.5 memberi dispatch sungguhan.
+      events.append({ session_id: job.session_id, type: 'job_dispatch_pending', payload: { jobId: job.id, kind: job.kind, note: 'M3d.5' } });
+      return 'retry';
+    });
+
+  const scheduler = createScheduler({
+    jobs,
+    now: deps.now,
+    dispatch,
+    setTimer: deps.setTimer ?? createDaemonTimer((err) => daemonError(err, 'scheduler_timer')),
+    clearTimer: deps.clearTimer ?? ((h) => clearTimeout(h)),
+    onError: (err, job) => daemonError(err, 'dispatch', { jobId: job.id }),
   });
 
   function heartbeat(): void {
@@ -66,9 +112,14 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         }
         throw err;
       }
+
+      // Scheduler diarm SETELAH listen sukses — kalau bind gagal (DaemonAlreadyRunningError)
+      // tak boleh ada timer nyasar tertinggal armed dari instance yang gagal start.
+      scheduler.start();
     },
 
     async stop(): Promise<void> {
+      scheduler.stop();
       await ipcServer.close();
     },
 

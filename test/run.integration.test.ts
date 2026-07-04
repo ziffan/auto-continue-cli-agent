@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb, openDb, type DatabaseInstance } from '../src/store/db.js';
 import { createEventsRepo } from '../src/store/repositories/events.js';
+import { createScheduledJobsRepo } from '../src/store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../src/store/repositories/sessions.js';
 import { runSession } from '../src/cli/run-core.js';
 
@@ -29,6 +30,7 @@ describe('runSession integration', () => {
     async () => {
       const sessions = createSessionsRepo(db);
       const events = createEventsRepo(db);
+      const jobs = createScheduledJobsRepo(db);
 
       // Non-TTY under vitest → raw mode is skipped automatically inside runSession.
       const { sessionId, waitForExit } = runSession(
@@ -38,7 +40,7 @@ describe('runSession integration', () => {
           cwd: process.cwd(),
           tool: 'claude',
         },
-        { sessions, events },
+        { sessions, events, jobs },
       );
 
       const createdImmediately = sessions.getById(sessionId);
@@ -61,6 +63,7 @@ describe('runSession integration', () => {
   it('marks the session FAILED instead of leaving it RUNNING when spawn throws synchronously', async () => {
     const sessions = createSessionsRepo(db);
     const events = createEventsRepo(db);
+    const jobs = createScheduledJobsRepo(db);
 
     const { sessionId, waitForExit } = runSession(
       {
@@ -69,7 +72,7 @@ describe('runSession integration', () => {
         cwd: process.cwd(),
         tool: 'claude',
       },
-      { sessions, events },
+      { sessions, events, jobs },
     );
 
     await expect(waitForExit).rejects.toBeTruthy();

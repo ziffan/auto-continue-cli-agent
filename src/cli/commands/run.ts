@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { resolveAdapter } from '../../adapters/index.js';
 import { closeDb, openDb } from '../../store/db.js';
 import { createEventsRepo } from '../../store/repositories/events.js';
+import { createScheduledJobsRepo } from '../../store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../../store/repositories/sessions.js';
 import { runSession } from '../run-core.js';
 
@@ -21,10 +22,11 @@ export function registerRunCommand(program: Command): void {
       try {
         const sessions = createSessionsRepo(db);
         const events = createEventsRepo(db);
+        const jobs = createScheduledJobsRepo(db);
 
         const { waitForExit } = runSession(
           { file: spawnSpec.file, args: spawnSpec.args, cwd, tool: adapter.tool },
-          { sessions, events },
+          { sessions, events, jobs },
         );
 
         const exitCode = await waitForExit;

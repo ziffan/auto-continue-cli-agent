@@ -1,11 +1,13 @@
 import { isAbsolute } from 'node:path';
 import * as pty from 'node-pty';
 import { createLimitWatcher } from '../daemon/limit-watcher.js';
+import { scheduleProbeForLimit } from '../daemon/schedule-reset.js';
 import { genSessionId } from '../shared/ids.js';
 import { nowMs } from '../shared/time.js';
 import { which } from '../shared/which.js';
 import type { Tool } from '../shared/types.js';
 import type { EventsRepo } from '../store/repositories/events.js';
+import type { ScheduledJobsRepo } from '../store/repositories/scheduled-jobs.js';
 import type { SessionsRepo } from '../store/repositories/sessions.js';
 
 export interface RunSessionSpec {
@@ -18,6 +20,7 @@ export interface RunSessionSpec {
 export interface RunSessionDeps {
   sessions: SessionsRepo;
   events: EventsRepo;
+  jobs: ScheduledJobsRepo;
 }
 
 export interface RunSessionResult {
@@ -80,12 +83,18 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
   const watcher = createLimitWatcher({
     tool: spec.tool,
     onLimit: (result) => {
-      deps.sessions.markLimitHit(id, { source: result.source ?? 'output', detectedAt: nowMs() });
+      const at = nowMs();
+      const transitioned = deps.sessions.markLimitHit(id, { source: result.source ?? 'output', detectedAt: at });
+      if (!transitioned) return; // sesi sudah keluar dari RUNNING (race exit) → jangan emit/enqueue.
       deps.events.append({
         session_id: id,
         type: 'status_change',
         payload: { to: 'LIMIT_HIT', source: result.source, evidence: result.evidence?.slice(0, 200) },
       });
+      scheduleProbeForLimit(
+        { sessionId: id, detectedAt: at, now: at, resetHint: result.resetHint },
+        { sessions: deps.sessions, jobs: deps.jobs, events: deps.events },
+      );
     },
   });
 
