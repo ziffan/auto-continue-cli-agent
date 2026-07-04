@@ -13,7 +13,14 @@
   inject "continue"/resume-by-id ke sesi CLI nyata (ADR-014, gating). **M3d = HARD-STOP OTONOM** — outward-facing
   (sentuh sesi live + jaringan) + butuh limit/quota asli (ADR-001, TODO #2 verifikasi TUI agy) + keputusan user
   → **di-surface ke user, tak dikerjakan sendiri.**
-- **Terakhir diupdate:** 2026-07-04 (dini hari, otonom via cron) — **M3c SELESAI.** Usage-Probe parsers (pure):
+- **Terakhir diupdate:** 2026-07-04 (pagi, tutup sesi) — **Run otonom 2:35 AM tuntas: 4 slice merged
+  (M2 · M3a · M3b · M3c)**, semua tier-reviewed Opus + gate dijalankan sendiri, pushed ke `main` (`4216920`).
+  Bug MAJOR ditangkap & diperbaiki di M3a (unlink-steal socket POSIX → G-14). Berhenti terjadwal di **M3d**
+  (wiring live = outward-facing + limit asli + keputusan user). **Skill baru dibuat:** `.claude/skills/autonomous-run/`
+  — mengabadikan mekanisme jadwal-otonom ini (cron lokal one-shot + scope autonomous-safe vs hard-stop +
+  budget-guard). `.claude/` masih untracked (keputusan commit-skills belum diambil). Cron one-shot sudah
+  auto-delete; **tak dijadwalkan ulang** (M3d bukan kerja otonom — tunggu user).
+- **Terakhir diupdate (M3c):** 2026-07-04 (dini hari, otonom via cron) — **M3c SELESAI.** Usage-Probe parsers (pure):
   `adapters/usage.ts` — `parseClaudeOAuthUsage` (limits[] array, `resets_at` ISO), `parseClaudeStatusLine`
   (`rate_limits`, `resets_at` epoch-detik ×1000 — G-4), `parseAgyUserStatus` (per-model `quotaInfo`,
   `1-remainingFraction`) → model `UsageSnapshot` ternormalisasi (`usedFraction` 0..1, `resetAt` epoch ms).
