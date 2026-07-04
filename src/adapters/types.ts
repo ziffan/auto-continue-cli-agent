@@ -1,9 +1,11 @@
-import type { Tool } from '../shared/types.js';
+import type { Tool, UsageSnapshot } from '../shared/types.js';
 
-/** Spesifikasi proses yang akan di-spawn oleh wrapper PTY. */
+/** Spesifikasi proses yang akan di-spawn oleh wrapper PTY. `cwd` opsional — WAJIB diisi untuk
+ * jalur resume-by-id (AC-8: proses dilanjutkan harus di direktori kerja sesi asli). */
 export interface SpawnSpec {
   file: string;
   args: string[];
+  cwd?: string;
 }
 
 /** Klasifikasi hasil deteksi. `overload` = transient (429/5xx) — bukan usage-limit (RESEARCH §2c). */
@@ -63,4 +65,10 @@ export interface Adapter {
   tool: Tool;
   buildSpawn(args: string[]): SpawnSpec;
   detect(signal: DetectSignal): DetectionResult;
+  /** Probe usage LIVE (M3d.3/M3d.4) — jaringan/kredensial nyata, di luar `detect` yang murni.
+   * `context.sessionPid` dipakai agy (port-discovery lintas-PID); CC probe standalone (abaikan). */
+  probeUsage?(context?: { sessionPid?: number }): Promise<UsageSnapshot>;
+  /** Bangun spec spawn untuk melanjutkan sesi yang sudah exited (resume-by-id, M3d.6). `cwd` wajib
+   * diisi di spec hasil — proses dilanjutkan harus di direktori kerja sesi asli (AC-8). */
+  resumeCmd?(sessionId: string, cwd: string): SpawnSpec;
 }

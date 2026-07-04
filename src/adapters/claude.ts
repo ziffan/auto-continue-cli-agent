@@ -1,4 +1,8 @@
+import { extractClaudeToken, loadClaudeCredentials } from '../shared/credentials.js';
+import { safeFetch } from '../shared/http.js';
+import type { UsageSnapshot } from '../shared/types.js';
 import { isTransientRetry, matchLimit, matchOverload } from './patterns.js';
+import { parseClaudeOAuthUsage } from './usage.js';
 import type { Adapter, DetectionResult, DetectSignal, SpawnSpec } from './types.js';
 
 /** Nilai `error` StopFailure yang berarti overload transient (429/5xx/529) — RESEARCH §2c. */
@@ -8,6 +12,25 @@ export const claudeAdapter: Adapter = {
   tool: 'claude',
   buildSpawn(args: string[]): SpawnSpec {
     return { file: 'claude', args };
+  },
+  // `context` diabaikan: probe CC adalah panggilan HTTP standalone (token dari kredensial disk),
+  // tak butuh PID sesi seperti agy (port-discovery).
+  async probeUsage(): Promise<UsageSnapshot> {
+    const token = extractClaudeToken(loadClaudeCredentials());
+    const resp = await safeFetch('https://api.anthropic.com/api/oauth/usage', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'anthropic-beta': 'oauth-2025-04-20',
+      },
+    });
+    if (!resp.ok) {
+      throw new Error(`CC usage probe failed: ${resp.status} ${resp.statusText}`);
+    }
+    return parseClaudeOAuthUsage(await resp.json(), Date.now());
+  },
+  resumeCmd(sessionId: string, cwd: string): SpawnSpec {
+    return { file: 'claude', args: ['--resume', sessionId], cwd };
   },
   detect(signal: DetectSignal): DetectionResult {
     switch (signal.type) {
