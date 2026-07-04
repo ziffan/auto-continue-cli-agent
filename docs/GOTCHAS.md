@@ -72,6 +72,19 @@ parse integer. `api/oauth/usage` juga punya array `limits[]` lebih kaya (severit
 **Cara benar:** baca field **`error`** (nilai matcher, mis. `rate_limit`). Bonus field
 `last_assistant_message` (teks user-facing) berguna utk fixture. **Sumber:** RESEARCH §2c (TODO #7).
 
+### G-15 — Pesan limit CC nyata menyisipkan qualifier ("session"/"weekly") + warning proaktif UI-only
+**Jebakan (a):** pesan limit Claude Code nyata = `You've hit your session limit · resets 7:30am (Asia/Jakarta)`
+— ada kata **"session"** antara "your" dan "limit". Pola detektor kontigu `hit your limit` **tak match** →
+false-negative pada limit ASLI (korpus komunitas keliru mengira kontigu). **Jebakan (b):** banner peringatan
+proaktif (~90% window 5-jam, ~75% mingguan) yang muncul di terminal **TIDAK di-persist** ke transcript JSONL
+(UI-only, transien) — mencari-nya di transcript = nihil.
+**Dampak:** (a) limit asli lolos deteksi output-scrape → sesi tak ter-resume; (b) sia-sia meng-scrape warning.
+**Cara benar:** (a) pola izinkan satu qualifier opsional: `\bhit your (?:\w+ )?limit\b` (mencakup "session"/
+"weekly"/"limit" polos). (b) JANGAN scrape warning — hitung proximity sendiri dari usage-probe
+(`used_percentage`/`percent` → `usedFraction`, parser M3c), lebih andal + lintas-tool. Threshold Claude Code
+sendiri = 90% (5-jam) / 75% (mingguan) → default US-13. **Sumber:** limit 5-jam asli tertangkap 4 Jul 2026
+(transcript sesi, `isApiErrorMessage:true`); RESEARCH §2b, ISSUES I-8.
+
 ## Lingkungan / repo
 
 ### G-6 — Git CRLF pada docs (Windows)
@@ -160,6 +173,7 @@ ada yang jawab (`connect` sukses) → daemon hidup → propagate (reject); tak a
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-04 (M2-fix) | G-15 (pesan limit CC nyata "hit your **session** limit" → pola kontigu false-negative, diperbaiki `hit your (?:\w+ )?limit`; warning proaktif 90/75 = UI-only, hitung proximity dari usage-probe). Dari limit 5-jam ASLI tertangkap di transcript sesi. |
 | 2026-07-04 (M3a) | G-14 (unlink socket unix tanpa syarat sebelum listen = steal socket daemon hidup → dua daemon; fix connect-probe stale-vs-live). Dari tier-review M3a. |
 | 2026-07-04 (M2) | G-13 (reset-estimator clock-time next-occurrence tambah `MS_PER_DAY` mentah → meleset ±1j di hari transisi DST; non-blocking, I-4/P3). Dari tier-review M2. |
 | 2026-07-03 (sore) | File dibuat. G-1..G-3 (agy: token stale, log login palsu, PTY wajib), G-4..G-5 (CC: dua format reset, field `error` hook), G-6 (CRLF). Dari riset real-CLI + uji sebelumnya. |

@@ -12,3 +12,6 @@ You've hit your limit · resets 3pm (Europe/Dublin)
 Hit your limit · resets 5pm (UTC)
 Rate limit hit. Resets at 4pm
 Rate limit hit. Resets at 4pm (America/New_York)
+# ↓ Terkonfirmasi LOKAL 4 Jul 2026 (limit 5-jam ASLI, dari transcript sesi ini) — format nyata pakai
+# qualifier "session" (bukan "hit your limit" kontigu spt korpus komunitas). Sumber kebenaran §2b.
+You've hit your session limit · resets 7:30am (Asia/Jakarta)

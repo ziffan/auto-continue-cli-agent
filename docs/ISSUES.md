@@ -6,6 +6,14 @@
 
 ## Terbuka
 
+### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13]
+Claude Code menampilkan warning ~90% (window 5-jam) & ~75% (mingguan) di terminal, tapi itu **UI-only,
+tak di-persist** (G-15) → jangan scrape. Sinyalnya sudah tersedia via usage-probe: `usedFraction` (parser
+M3c). Implementasikan proximity-monitor yang threshold `usedFraction` (default **0.90 five_hour**, **0.75
+seven_day** — meniru default Claude Code sendiri; agy: `1-remainingFraction` per model) → emit notifikasi/
+indikator "perkiraan sisa" dini. Basis fitur US-13 (prediksi proaktif, backlog) + indikator proximity di
+`acca status` (M4). Wire saat Usage-Probe live + Notifier ada (M4).
+
 ### I-7 — Skema pasti agy `GetUserStatus` (wrapper + field label model) belum terkonfirmasi [P3, target M3d probe live]
 `parseAgyUserStatus` (M3c) menoleransi respons dibungkus `userStatus` ATAU flat, dan mencoba beberapa nama
 field label model (`model`/`modelName`/`displayName`/`label`) dengan fallback posisional `model-<i>` — karena
