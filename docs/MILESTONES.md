@@ -92,9 +92,16 @@ sinyal limit → status `LIMIT_HIT` + `proc_state` + event `status_change`, tanp
 **Bukti**: log run (angka per-model, tanpa PII) + test parser + test redaksi.
 **Tier review**: **1** (jaringan + PII + creds).
 > **Live-verified 5 Jul (Ubuntu):** port-discovery inode-correlation ✅ pada `agy` LS nyata; GetUserStatus 200 → skema
-> dikonfirmasi (I-7 CLOSED); parser + fixture direkonsiliasi ke respons live. **Sisa slice = wiring** `adapters/antigravity.ts
-> probeUsage()`: probe **`https`(rejectUnauthorized:false)** ke port hasil `discoverLocalPorts`, **retry sampai HTTP 200
-> ber-`userStatus`** (~2–4s pasca bind; G-23), lalu `parseAgyUserStatus`. Redaksi PII (G-9) sudah tertutup di parser.
+> dikonfirmasi (I-7 CLOSED); parser + fixture direkonsiliasi ke respons live. Redaksi PII (G-9) tertutup di parser.
+> **✅ WIRING DONE + live-verified Windows 5 Jul:** `probeAgyUsage` (`adapters/antigravity.ts`, standalone injectable) =
+> `discoverLocalPorts` → **`https`(rejectUnauthorized:false)** ke tiap port via `loopbackHttpsPostJson` (`shared/http.ts`,
+> `node:https`, insecure-TLS dibatasi ketat ke loopback — G-25) → **retry ~tiap 2s cap 15s sampai HTTP 200 ber-`userStatus`**
+> (G-23) → `parseAgyUserStatus`. PII/injection firewall: body respons tak pernah masuk pesan error. **Live Windows:**
+> `Get-NetTCPConnection` port-discovery ✅ (3× fresh spawn, port cocok log agy) + `probeAgyUsage` balas **8 model nyata**
+> (usedFraction/resetTime per-model, reset window beda per-model) dalam ~1s, tanpa PII/token. Tests: `test/agy-probe.test.ts`
+> (7, retry-loop + wrong-port skip + PII-not-leaked) + `test/http-egress.test.ts` (+loopback https guard). **199/199 hijau**,
+> build+lint bersih, Tier-1 self-review lolos. **Sisa non-blocking:** wiring `probeUsage` ke dispatch resume (M3d.5 sudah
+> ada `realDispatch`) sudah nyambung via `adapter.probeUsage`; retrieveUserQuota standalone (#3) tetap impl-tuning.
 
 ### M3d.5 — Gate probe→resume/backoff saat reset (scheduler dispatch)
 **Slice**: job `probe` jatuh tempo → `probeUsage()`; kuota tersedia → enqueue job `resume`; kosong → backoff reschedule (scheduler) + notif "perkiraan". Tak spam-resume.
