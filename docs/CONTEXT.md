@@ -6,14 +6,38 @@
 
 ## Status saat ini
 
-- **Fase:** **M3d ENGINE LENGKAP (8 slice, semua Tier-1).** M3a/b/c ✅. M3d.8/1/2 ✅. **M3d.3–M3d.7 ✅ (REBUILD,
-  `3db7fa6`)** — probe usage CC (HTTP OAuth) & agy (LS GetUserStatus) + dispatch probe→resume/backoff +
-  resume-by-id (guard cwd, AC-8) + inject-continue gating; **semua I/O di-inject & bertes** (**187/187**, hijau di
-  **Ubuntu 24.04** + Windows). **Validasi Ubuntu 5 Jul:** gate native-prebuild LULUS · **port-discovery agy LIVE-VERIFIED**
-  (G-22 terbukti pada `agy` LS nyata) · GetUserStatus 200 → skema dikoreksi (**I-7 CLOSED**) · parser agy di-fix (G-17
-  exhausted). **Sisa M3 = actuation seams (I-12 poin 1&2, bukan engine, butuh integrasi/OS nyata):** PTY IPC
-  wrapper↔daemon untuk inject-continue, spawn fresh-wrapper untuk resume-by-id. Lihat blok "sesi Ubuntu" tepat di bawah.
-- **Terakhir diupdate:** 2026-07-05 (sesi Ubuntu, session-end ini) — **Validasi mesin Ubuntu 24.04 (daily driver) + fix
+- **Fase:** **M3d ENGINE LENGKAP (8 slice, semua Tier-1) + agy probe LIVE-WIRED lintas-OS.** M3a/b/c ✅. M3d.8/1/2 ✅.
+  **M3d.3–M3d.7 ✅ (REBUILD, `3db7fa6`)** — probe usage CC (HTTP OAuth) & agy (LS GetUserStatus) + dispatch
+  probe→resume/backoff + resume-by-id (guard cwd, AC-8) + inject-continue gating; **semua I/O di-inject & bertes**
+  (**199/199**, hijau di **Ubuntu 24.04** + Windows). **M3d.4 probeUsage() DI-WIRE ULANG per G-23 + live-verified Windows
+  (`6fa20ab`):** `probeAgyUsage` = discoverLocalPorts → `loopbackHttpsPostJson` (node:https, `rejectUnauthorized:false`,
+  insecure-TLS dibatasi loopback — G-25) → retry ~2s cap 15s sampai HTTP 200 ber-`userStatus` → parser. **Port-discovery
+  agy LIVE-VERIFIED lintas-OS** (G-22 di Ubuntu 5 Jul + **Windows `Get-NetTCPConnection` 5 Jul**); GetUserStatus skema
+  dikoreksi (**I-7 CLOSED**); parser G-17 exhausted. **Sisa M3 = actuation seams (I-12 poin 1&2, bukan engine, butuh
+  integrasi OS nyata):** PTY IPC wrapper↔daemon untuk inject-continue, spawn fresh-wrapper untuk resume-by-id. Lihat blok
+  "sesi Windows" tepat di bawah.
+- **Terakhir diupdate:** 2026-07-05 (sesi Windows, session-end ini) — **agy live-probe Windows: port-discovery live-verified
+  + probeUsage() di-wire ulang per G-23.** Fokus: "opsi yang butuh sesi agy nyata + Windows-only" (weekend fit), pola
+  Opus-orkestrator inline + self-tier-review Tier-1. Hasil:
+  **(1) Sub-task 1 — port-discovery Windows LIVE-VERIFIED (I-12 poin 3 lintas-OS TUNTAS):** `discoverLocalPorts(<agy-pid>)`
+  via `Get-NetTCPConnection` menembak proses `agy` LS nyata (interaktif ber-PTY node-pty), **3× fresh spawn** (PID
+  2884/20780/28220), tiap kali 2 port (HTTPS/gRPC+HTTP) **cocok persis** dgn port di log agy `server.go … listening on
+  random port`. Melengkapi live-verify Ubuntu 5 Jul → G-22 terbukti dua-OS.
+  **(2) Sub-task 2 — probeUsage() di-wire ulang ke mekanika G-23 (Tier-1, `6fa20ab`):** wiring lama (`http://` single-shot,
+  asumsi pra-5-Jul) diganti: **`shared/http.ts loopbackHttpsPostJson`** (node:https + `rejectUnauthorized:false`,
+  **insecure-TLS dibatasi KETAT ke host loopback** — non-loopback → `EgressBlockedError`, tetap `guardEgress`; undici
+  `fetch` tak bisa nonaktif verifikasi cert tanpa dep `undici` → **G-25**) + **`adapters/antigravity.ts probeAgyUsage`**
+  (standalone injectable) = discoverLocalPorts → https loopback tiap port → **retry ~2s cap 15s sampai HTTP 200
+  ber-`userStatus`** (G-23) → `parseAgyUserStatus`. **PII/injection firewall:** body respons tak pernah masuk pesan error.
+  **(3) LIVE Windows:** `probeAgyUsage` balas **8 model nyata** (usedFraction/resetTime per-model — reset window Gemini
+  09:32:55Z vs Claude/GPT 10:48:03Z) dalam **~1s**, tanpa PII/token. **199/199 test hijau** (+12: `agy-probe.test.ts` 7
+  retry/wrong-port/PII-not-leaked + loopback-guard), build+lint bersih, Tier-1 self-review lolos.
+  **(4) Keputusan:** pending **retensi arsip** ditutup (Ziffan): **tidak pernah purge** (retensi tak terbatas, arsip
+  `archived_at`). **Docs:** GOTCHAS G-25, MILESTONES M3d.4 (wiring done), ISSUES I-12 poin 3 (lintas-OS tuntas), DECISIONS.
+  **Next:** actuation seams — **I-12 poin 1** (inject-continue IPC wrapper↔daemon) & **poin 2** (spawn resume-by-id) +
+  **I-10** (cross-process re-arm). CC `probeUsage` (M3d.3) belum live-verified dgn limit asli (opportunistik). `main`
+  ahead `origin/main` 1 commit (belum di-push).
+- **Terakhir diupdate:** 2026-07-05 (sesi Ubuntu) — **Validasi mesin Ubuntu 24.04 (daily driver) + fix
   parser agy dari data live.** Fokus: "opsi A + semua yang bisa divalidasi di Ubuntu", pola Opus-orkestrator (verifikasi
   + fix inline, self-tier-review Tier-1). Hasil:
   **(1) Gate native-prebuild Ubuntu LULUS (sisa M1 tertutup):** `npm install` bersih (node_modules hilang) → node-pty
