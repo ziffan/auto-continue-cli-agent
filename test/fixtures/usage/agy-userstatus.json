@@ -1,24 +1,59 @@
 {
+  "_comment": "Ditangkap LIVE dari GetUserStatus di Ubuntu 24.04 (agy 1.0.16), 2026-07-05, via sesi ber-PTY. name/email/userTier.id DIREDAKSI (G-9). Entri model = bentuk NYATA: `label` (display) + `modelOrAlias.model` (enum slug) + `quotaInfo`. Entri terakhir = kasus EXHAUSTED (G-17): quotaInfo ada, `remainingFraction` HILANG (hanya resetTime) — diturunkan dari perilaku exhaustion terdokumentasi (kuota penuh saat capture live).",
   "userStatus": {
-    "name": "Ziffan Testuser",
-    "email": "ziffan.test@example.com",
-    "userTier": "PRO",
-    "availableCredits": 120,
-    "planInfo": { "monthlyPromptCredits": 500, "monthlyFlowCredits": 200 },
+    "disableTelemetry": true,
+    "name": "[REDACTED]",
+    "email": "[REDACTED]",
+    "planStatus": {
+      "planInfo": {
+        "teamsTier": "TEAMS_TIER_PRO",
+        "planName": "Pro",
+        "monthlyPromptCredits": 50000,
+        "monthlyFlowCredits": 150000
+      },
+      "availablePromptCredits": 500,
+      "availableFlowCredits": 100
+    },
     "cascadeModelConfigData": {
       "clientModelConfigs": [
         {
-          "model": "claude-sonnet-4-5",
-          "quotaInfo": { "remainingFraction": 0.8, "resetTime": "2026-07-03T14:55:00.000Z" }
+          "label": "GPT-OSS 120B (Medium)",
+          "modelOrAlias": { "model": "MODEL_OPENAI_GPT_OSS_120B_MEDIUM" },
+          "isRecommended": true,
+          "allowedTiers": ["TEAMS_TIER_PRO", "TEAMS_TIER_TEAMS"],
+          "quotaInfo": { "remainingFraction": 1, "resetTime": "2026-07-05T10:16:37Z" }
         },
         {
-          "model": "gemini-2.5-flash",
-          "quotaInfo": { "remainingFraction": 0.63, "resetTime": "2026-07-03T17:15:00.000Z" }
+          "label": "Gemini 3.5 Flash (High)",
+          "modelOrAlias": { "model": "MODEL_PLACEHOLDER_M132" },
+          "supportsImages": true,
+          "isRecommended": true,
+          "allowedTiers": ["TEAMS_TIER_PRO", "TEAMS_TIER_TEAMS"],
+          "quotaInfo": { "remainingFraction": 0.8545074, "resetTime": "2026-07-05T09:32:55Z" }
         },
         {
-          "model": "gemini-2.5-pro-broken",
-          "planInfo": { "note": "no quotaInfo on this config — must be skipped" }
+          "label": "Claude Opus 4.6 (Thinking)",
+          "modelOrAlias": { "model": "MODEL_PLACEHOLDER_M26" },
+          "supportsImages": true,
+          "isRecommended": true,
+          "allowedTiers": ["TEAMS_TIER_PRO", "TEAMS_TIER_TEAMS"],
+          "quotaInfo": { "remainingFraction": 1, "resetTime": "2026-07-05T10:16:37Z" }
+        },
+        {
+          "label": "Gemini 3.1 Pro (High)",
+          "modelOrAlias": { "model": "MODEL_PLACEHOLDER_M77" },
+          "supportsImages": true,
+          "allowedTiers": ["TEAMS_TIER_PRO"],
+          "quotaInfo": { "resetTime": "2026-07-05T09:32:55Z" }
         }
+      ]
+    },
+    "userTier": {
+      "id": "[REDACTED]",
+      "name": "[REDACTED]",
+      "description": "Google AI Pro",
+      "availableCredits": [
+        { "creditType": "GOOGLE_ONE_AI", "creditAmount": "2230", "minimumCreditAmountForUsage": "50" }
       ]
     }
   }

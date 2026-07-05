@@ -102,16 +102,21 @@ export function parseClaudeStatusLine(raw: unknown, now: number): UsageSnapshot 
   return { tool: 'claude', limits, capturedAt: now };
 }
 
-/** Field kandidat label model di tiap `clientModelConfigs[]` — skema persis nama field label
- * TAK terekam di RESEARCH/ADR-010 (hanya `quotaInfo.{remainingFraction,resetTime}` yang
- * terverifikasi live). Coba beberapa nama umum secara berurutan; kalau semua absen, fallback ke
- * indeks posisi supaya entri tetap masuk (bukan silently dropped) tanpa mengarang identitas model. */
-const AGY_MODEL_LABEL_FIELDS = ['model', 'modelName', 'displayName', 'label'] as const;
+/** Field kandidat label model di tiap `clientModelConfigs[]`. Bentuk NYATA (live Ubuntu 2026-07-05):
+ * display name = **`label`** (mis. "Claude Opus 4.6 (Thinking)"); slug enum ada di
+ * **`modelOrAlias.model`** (mis. `MODEL_PLACEHOLDER_M26`) — BUKAN field `model` datar (koreksi I-7:
+ * asumsi lama "flat `model` = display name" salah). `label` diprioritaskan; sisanya fallback lawas;
+ * lalu `modelOrAlias.model`; terakhir indeks posisi supaya entri tak silently dropped tanpa mengarang. */
+const AGY_MODEL_LABEL_FIELDS = ['label', 'model', 'modelName', 'displayName'] as const;
 
 function agyModelLabel(config: Record<string, unknown>, index: number): string {
   for (const field of AGY_MODEL_LABEL_FIELDS) {
     const v = config[field];
     if (typeof v === 'string' && v.length > 0) return v;
+  }
+  const alias = config['modelOrAlias'];
+  if (isRecord(alias) && typeof alias['model'] === 'string' && alias['model'].length > 0) {
+    return alias['model'];
   }
   return `model-${index}`;
 }
@@ -136,13 +141,24 @@ export function parseAgyUserStatus(raw: unknown, now: number): UsageSnapshot {
       configs.forEach((config: unknown, index: number) => {
         if (!isRecord(config)) return;
         const quotaInfo = config['quotaInfo'];
-        if (!isRecord(quotaInfo)) return; // config tanpa quotaInfo — skip (kontrak slice)
+        if (!isRecord(quotaInfo)) return; // config tanpa quotaInfo sama sekali — bukan model ber-kuota, skip.
+        // G-17: saat pool habis, LS MENGHILANGKAN field `remainingFraction` (hanya `resetTime` tersisa) —
+        // BUKAN menyetel 0. Absennya field = EXHAUSTED → usedFraction 1 (bukan di-skip: kalau di-skip,
+        // model habis lenyap dari limits[] dan supervisor `limits.every(usedFraction<1)` keliru RESUME
+        // padahal masih habis). Nilai present-tapi-non-finite (null/string) = korup → skip defensif.
         const remainingFraction = quotaInfo['remainingFraction'];
-        if (!isFiniteNumber(remainingFraction)) return;
+        let usedFraction: number;
+        if (!('remainingFraction' in quotaInfo)) {
+          usedFraction = 1; // exhausted (G-17)
+        } else if (isFiniteNumber(remainingFraction)) {
+          usedFraction = clamp01(1 - remainingFraction);
+        } else {
+          return; // field ada tapi bukan angka finite → data korup, skip.
+        }
         const label = agyModelLabel(config, index);
         limits.push({
           kind: label,
-          usedFraction: clamp01(1 - remainingFraction),
+          usedFraction,
           resetAt: parseIso(quotaInfo['resetTime']),
           scope: label,
         });

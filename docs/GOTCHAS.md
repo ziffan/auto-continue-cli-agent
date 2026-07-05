@@ -242,10 +242,45 @@ korelasi inode+state ini **tak perlu** filter `127.0.0.1` sama sekali. Windows l
 
 ---
 
+## Usage-Probe live (M3d.3/M3d.4) — verifikasi Ubuntu 5 Jul
+
+### G-23 — GetUserStatus agy = port **HTTPS(gRPC)** + Connect-JSON, dan butuh **retry ~2–4s** pasca port-bind
+**Jebakan/Fakta (live Ubuntu 24.04, agy 1.0.16, 5 Jul):** agy LS mem-bind **dua** port (log `server.go:517/525`:
+`… listening on random port at <A> for HTTPS (gRPC)` + `… at <B> for HTTP`). Endpoint `GetUserStatus`
+(Connect-JSON, body `{}`, tanpa csrf) **menjawab di port HTTPS(gRPC)** — pakai `https` + `rejectUnauthorized:false`.
+Salah-protokol gagal senyap: mengirim **HTTP ke port HTTPS** → server balas `TLS handshake error … client sent an
+HTTP request to an HTTPS server` dan klien Node dapat `ECONNRESET` (bukan respons); `https` ke port satunya (gRPC-h2)
+→ `EPROTO`. **Timing:** tepat setelah bind, GetUserStatus balas Connect-error `{code,message}` (cascade/quota belum
+terisi) selama **~2–4 detik** sampai refresh token internal selesai, **baru** `HTTP 200` dgn `userStatus`. Probe di
+t+1s = false-empty. **Nuansa auth:** log `server.go:2424 Auth succeeded` = auth **lokal client↔LS**, BUKAN login
+upstream Google — baris `Failed to get OAuth token … not logged into Antigravity` + `quota_manager … quotaRefreshLoop:
+skipped (not logged in)` bisa muncul **setelah** `Auth succeeded` sebagai race boot (G-2), hilang dalam beberapa detik
+saat token in-memory refresh (walau `oauth_creds.json` on-disk tetap kadaluarsa — G-1). **Cara benar (M3d.4):** probe
+`https`(rejectUnauthorized:false) ke port hasil `discoverLocalPorts`, **retry sampai HTTP 200 ber-`userStatus`** (mis.
+tiap 2s, cap ~10–15s), jangan simpulkan "tak ada kuota" dari attempt pertama. **Sumber:** live-verify 5 Jul (scratchpad
+`live-agy-probe*.mjs`), `~/.gemini/antigravity-cli/log/cli-*.log`.
+
+### G-24 — Bentuk NYATA entri model GetUserStatus: `label` + `modelOrAlias.model`, **bukan** flat `model` (koreksi I-7)
+**Jebakan:** asumsi lama (ISSUES I-7, 4 Jul) bilang tiap `clientModelConfigs[]` punya field datar **`model`** = display
+name, tanpa pembungkus. **Salah** (terkoreksi live 5 Jul): respons **dibungkus `userStatus`**, dan tiap entri = `{ label:
+"Claude Opus 4.6 (Thinking)"  (display), modelOrAlias: { model: "MODEL_PLACEHOLDER_M26" }  (enum slug), isRecommended,
+allowedTiers[], supportedMimeTypes{}, quotaInfo:{remainingFraction,resetTime} }`. Field `model` datar **tak ada**.
+**Dampak:** parser yang baca `config.model` untuk label → `undefined` (identitas model hilang). **Cara benar:** identitas
+= **`label`** (prioritas), fallback `modelOrAlias.model` (slug), baru posisi. `parseAgyUserStatus` sudah diperbaiki
+(prioritas `label` + baca `modelOrAlias.model`) + fixture `test/fixtures/usage/agy-userstatus.json` diganti **capture
+live redaksi** (name/email/userTier.id → `[REDACTED]`, G-9). Kuota per-model + credits di `userStatus.planStatus.{avail…}`
++ `userStatus.userTier.availableCredits[]`. **Reset window per-model beda** (teramati: 10:16:37Z vs 09:32:55Z) — baca
+per-model (konsisten ADR-010). **G-17 juga direkonsiliasi ke consumer:** entri exhausted (`quotaInfo` ada, `remainingFraction`
+absent) kini di-emit `usedFraction=1` (bukan di-skip) supaya supervisor `limits.every(usedFraction<1)` tak keliru resume
+saat satu model masih habis. **Sumber:** live-verify 5 Jul; `src/adapters/usage.ts`, `test/usage-parsers.test.ts`.
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-05 (live-verify Ubuntu) | G-23 (GetUserStatus agy = port HTTPS(gRPC) + Connect-JSON; retry ~2–4s pasca bind sampai HTTP 200; `Auth succeeded` = auth lokal LS bukan login upstream; salah-protokol gagal senyap ECONNRESET/EPROTO), G-24 (bentuk entri model NYATA = `label` + `modelOrAlias.model`, bukan flat `model` — koreksi I-7; parser + fixture direkonsiliasi ke capture live; G-17 exhausted di-emit usedFraction=1 bukan skip). Dari live-verify port-discovery + GetUserStatus di Ubuntu 24.04 (I-12 poin 3). |
 | 2026-07-04 (M3d rebuild) | G-21 (`require()` di ESM = ReferenceError runtime, lolos tsc — selalu `import`), G-22 (port→PID Linux wajib korelasi inode `/proc/<pid>/fd`→`/proc/net/tcp{,6}` st=0A, jangan grep tabel global; hex localhost `0100007F`). Dari review + rebuild kerja Haiku yang di-revert. |
 | 2026-07-04 (M3d.1 wiring) | G-20 (output PTY ConPTY sisipkan ANSI/CSI walau baris polos → detector wajib strip ANSI per-baris sebelum classify; cakupan CSI, OSC/charset belum). Dari smoke live M3d.1. |
 | 2026-07-04 (limit agy asli) | G-16 (`useG1Credits` CLI vs IDE `useAiCredits` + fallthrough credit senyap), G-17 (`remainingFraction` absent = exhausted, jangan crash), G-18 (agy `-p` stdin-EOF + print kosong saat limit + skip-permissions kontraproduktif), G-19 (pesan limit TUI agy ASLI `Individual quota reached` + limit≠exit + tak konkuren). Dari eksperimen limit 5-jam agy ASLI (FINDINGS F4-F12). |

@@ -120,41 +120,82 @@ describe('parseClaudeStatusLine (statusLine JSON — RESEARCH §2 poin 1)', () =
 });
 
 describe('parseAgyUserStatus (GetUserStatus — ADR-010)', () => {
-  const raw = loadFixture('agy-userstatus.json');
+  const raw = loadFixture('agy-userstatus.json'); // capture LIVE Ubuntu 2026-07-05 (redaksi PII)
 
-  it('parses per-model limits, usedFraction = 1 - remainingFraction', () => {
+  it('parses per-model limits by real `label`, usedFraction = 1 - remainingFraction', () => {
     const snapshot = parseAgyUserStatus(raw, NOW);
     expect(snapshot.tool).toBe('antigravity');
-    // 3 configs di fixture, 1 tanpa quotaInfo → 2 tersisa.
-    expect(snapshot.limits).toHaveLength(2);
-    const claude = snapshot.limits.find((l) => l.kind === 'claude-sonnet-4-5');
-    expect(claude?.usedFraction).toBeCloseTo(0.2, 10);
-    const gemini = snapshot.limits.find((l) => l.kind === 'gemini-2.5-flash');
-    expect(gemini?.usedFraction).toBeCloseTo(0.37, 10);
+    // Fixture live = 4 config, semua punya quotaInfo (3 ber-remainingFraction + 1 exhausted) → 4 limits.
+    expect(snapshot.limits).toHaveLength(4);
+    // Identitas model = `label` NYATA (bukan flat `model`; koreksi I-7).
+    const opus = snapshot.limits.find((l) => l.kind === 'Claude Opus 4.6 (Thinking)');
+    expect(opus?.usedFraction).toBeCloseTo(0, 10); // remainingFraction 1 → used 0
+    const flash = snapshot.limits.find((l) => l.kind === 'Gemini 3.5 Flash (High)');
+    expect(flash?.usedFraction).toBeCloseTo(1 - 0.8545074, 6);
   });
 
   it('resetAt parsed from ISO resetTime, distinct reset windows per model (ADR-010)', () => {
     const snapshot = parseAgyUserStatus(raw, NOW);
-    const claude = snapshot.limits.find((l) => l.kind === 'claude-sonnet-4-5');
-    expect(claude?.resetAt).toBe(Date.parse('2026-07-03T14:55:00.000Z'));
-    const gemini = snapshot.limits.find((l) => l.kind === 'gemini-2.5-flash');
-    expect(gemini?.resetAt).toBe(Date.parse('2026-07-03T17:15:00.000Z'));
+    const opus = snapshot.limits.find((l) => l.kind === 'Claude Opus 4.6 (Thinking)');
+    expect(opus?.resetAt).toBe(Date.parse('2026-07-05T10:16:37Z'));
+    const flash = snapshot.limits.find((l) => l.kind === 'Gemini 3.5 Flash (High)');
+    expect(flash?.resetAt).toBe(Date.parse('2026-07-05T09:32:55Z'));
   });
 
-  it('config missing quotaInfo is skipped', () => {
+  it('G-17: exhausted model (quotaInfo present, remainingFraction ABSENT) → usedFraction 1, NOT dropped', () => {
     const snapshot = parseAgyUserStatus(raw, NOW);
-    const broken = snapshot.limits.find((l) => l.kind === 'gemini-2.5-pro-broken');
-    expect(broken).toBeUndefined();
+    // "Gemini 3.1 Pro (High)" di fixture = quotaInfo tanpa remainingFraction (hanya resetTime).
+    const exhausted = snapshot.limits.find((l) => l.kind === 'Gemini 3.1 Pro (High)');
+    expect(exhausted).toBeDefined(); // TIDAK di-skip — kalau di-skip, supervisor keliru resume.
+    expect(exhausted?.usedFraction).toBe(1);
+    expect(exhausted?.resetAt).toBe(Date.parse('2026-07-05T09:32:55Z'));
+    // Konsekuensi consumer: dengan model habis terlihat, `every(usedFraction<1)` = false → tak resume.
+    expect(snapshot.limits.every((l) => l.usedFraction < 1)).toBe(false);
   });
 
-  it('PII firewall: serialized snapshot never contains the fixture name or email (G-9)', () => {
+  it('config missing quotaInfo entirely is skipped (bukan model ber-kuota)', () => {
+    const noQuota = {
+      cascadeModelConfigData: {
+        clientModelConfigs: [
+          { label: 'has-quota', quotaInfo: { remainingFraction: 0.5, resetTime: null } },
+          { label: 'no-quota-config', planInfo: { note: 'no quotaInfo → skip' } },
+        ],
+      },
+    };
+    const snapshot = parseAgyUserStatus(noQuota, NOW);
+    expect(snapshot.limits).toHaveLength(1);
+    expect(snapshot.limits.find((l) => l.kind === 'no-quota-config')).toBeUndefined();
+  });
+
+  it('remainingFraction present but non-finite (corrupt) → skip, not treated as exhausted', () => {
+    const corrupt = {
+      cascadeModelConfigData: {
+        clientModelConfigs: [{ label: 'corrupt', quotaInfo: { remainingFraction: null, resetTime: '2026-07-05T09:32:55Z' } }],
+      },
+    };
+    const snapshot = parseAgyUserStatus(corrupt, NOW);
+    expect(snapshot.limits).toHaveLength(0);
+  });
+
+  it('reads modelOrAlias.model enum slug when no `label` field present', () => {
+    const aliasOnly = {
+      cascadeModelConfigData: {
+        clientModelConfigs: [{ modelOrAlias: { model: 'MODEL_PLACEHOLDER_M26' }, quotaInfo: { remainingFraction: 0.5, resetTime: null } }],
+      },
+    };
+    const snapshot = parseAgyUserStatus(aliasOnly, NOW);
+    expect(snapshot.limits[0]?.kind).toBe('MODEL_PLACEHOLDER_M26');
+  });
+
+  it('PII firewall: serialized snapshot carries only quota, never name/email/credits/plan (G-9)', () => {
     const snapshot = parseAgyUserStatus(raw, NOW);
     const serialized = JSON.stringify(snapshot);
-    expect(serialized).not.toContain('Ziffan Testuser');
-    expect(serialized).not.toContain('ziffan.test@example.com');
-    // Juga tak boleh bocor field noise lain (plan/credits) — bukti ekstraksi ketat, bukan hanya PII.
-    expect(serialized).not.toContain('availableCredits');
+    // Bahkan placeholder PII yang sudah diredaksi di fixture tak ikut lewat → bukti ekstraksi ketat.
+    expect(serialized).not.toContain('[REDACTED]');
+    expect(serialized).not.toContain('Google AI Pro');
+    expect(serialized).not.toContain('availablePromptCredits');
     expect(serialized).not.toContain('monthlyPromptCredits');
+    expect(serialized).not.toContain('GOOGLE_ONE_AI');
   });
 
   it('tolerates a flat response (no top-level `userStatus` wrapper)', () => {
