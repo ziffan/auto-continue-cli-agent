@@ -8,10 +8,32 @@
 
 - **Fase:** **M3d ENGINE LENGKAP (8 slice, semua Tier-1).** M3a/b/c ✅. M3d.8/1/2 ✅. **M3d.3–M3d.7 ✅ (REBUILD,
   `3db7fa6`)** — probe usage CC (HTTP OAuth) & agy (LS GetUserStatus) + dispatch probe→resume/backoff +
-  resume-by-id (guard cwd, AC-8) + inject-continue gating; **semua I/O di-inject & bertes** (184/184).
-  **Sisa M3 = actuation seams (bukan engine, butuh integrasi/OS nyata):** PTY IPC wrapper↔daemon untuk
-  inject-continue, spawn fresh-wrapper untuk resume-by-id, + live-verify agy port-discovery di Ubuntu (→ I-12).
-  Lihat blok "sesi malam" tepat di bawah.
+  resume-by-id (guard cwd, AC-8) + inject-continue gating; **semua I/O di-inject & bertes** (**187/187**, hijau di
+  **Ubuntu 24.04** + Windows). **Validasi Ubuntu 5 Jul:** gate native-prebuild LULUS · **port-discovery agy LIVE-VERIFIED**
+  (G-22 terbukti pada `agy` LS nyata) · GetUserStatus 200 → skema dikoreksi (**I-7 CLOSED**) · parser agy di-fix (G-17
+  exhausted). **Sisa M3 = actuation seams (I-12 poin 1&2, bukan engine, butuh integrasi/OS nyata):** PTY IPC
+  wrapper↔daemon untuk inject-continue, spawn fresh-wrapper untuk resume-by-id. Lihat blok "sesi Ubuntu" tepat di bawah.
+- **Terakhir diupdate:** 2026-07-05 (sesi Ubuntu, session-end ini) — **Validasi mesin Ubuntu 24.04 (daily driver) + fix
+  parser agy dari data live.** Fokus: "opsi A + semua yang bisa divalidasi di Ubuntu", pola Opus-orkestrator (verifikasi
+  + fix inline, self-tier-review Tier-1). Hasil:
+  **(1) Gate native-prebuild Ubuntu LULUS (sisa M1 tertutup):** `npm install` bersih (node_modules hilang) → node-pty
+  **compile-from-source di Linux** (prebuilds hanya darwin/win32) + better-sqlite3 → **require+operasi nyata OK** (bukan cuma
+  exit 0 — G-11). **build ✓ · lint ✓ · 184→187/187 test hijau di Linux** (sebelumnya hanya diverifikasi Windows).
+  **(2) Port-discovery agy LIVE-VERIFIED (I-12 poin 3 ✅, G-22):** `discoverLocalPorts(<agy-pid>)` menembak proses `agy`
+  LS **nyata** (interaktif ber-PTY via node-pty) → 2 port (HTTPS/gRPC + HTTP) **terkorelasi inode benar**, 4× reproduksi.
+  Algoritma inode-correlation `/proc/<pid>/fd`→`/proc/net/tcp{,6}` terbukti di OS nyata (sebelumnya cuma fixture).
+  **(3) GetUserStatus 200 live → skema DIKOREKSI (I-7 CLOSED):** respons **dibungkus `userStatus`** (bukan flat); identitas
+  model = **`label`** + **`modelOrAlias.model`** (enum slug), **bukan** flat `model` (asumsi 4 Jul salah — G-24). Endpoint =
+  port **HTTPS(gRPC)** + Connect-JSON, **retry ~2–4s** pasca bind sampai 200 (token refresh in-memory; `Auth succeeded` =
+  auth lokal LS bukan login upstream — G-23). PII (name/email) hadir → redaksi (G-9) diverifikasi.
+  **(4) Fix Tier-1 `parseAgyUserStatus` (bug ditemukan dari data live):** (a) prioritas `label` + baca `modelOrAlias.model`;
+  (b) **G-17 exhausted** (`quotaInfo` ada, `remainingFraction` absent) → `usedFraction=1` **bukan di-skip** — kalau di-skip,
+  supervisor `limits.every(usedFraction<1)` **keliru RESUME** saat satu model masih habis (bug korektness dispatch nyata,
+  konsumen `supervisor.ts:114`). Fixture diganti **capture live redaksi**. **187/187 hijau**, build+lint bersih, self-tier-review
+  Tier-1 lolos. **Docs:** GOTCHAS G-23/G-24, ISSUES I-7 CLOSED + I-12 poin 3 done, MILESTONES M3d.4/M3-note.
+  **Next:** I-12 poin 1 (inject-continue IPC wrapper↔daemon) & poin 2 (spawn resume-by-id) = actuation seams tersisa;
+  wiring `adapters/antigravity.ts probeUsage()` pakai mekanika G-23 (skema kini pasti). Windows `Get-NetTCPConnection`
+  live-smoke = weekend.
 - **Terakhir diupdate:** 2026-07-04 (sesi malam, session-end ini) — **M3d.3–M3d.7 REBUILD (revert kerja Haiku).**
   Sesi sebelumnya keliru dieksekusi Haiku (bukan Opus): 7 commit skeleton di-**revert** ke baseline `2e54a7a`
   (disimpan di tag `haiku-m3d-attempt`, reversible). Alasan cacat: **`require()` di modul ESM** (crash runtime,

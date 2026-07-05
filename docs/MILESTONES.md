@@ -46,9 +46,14 @@ keputusan user) → dirancang di sini, **dieksekusi dengan user hadir**, bukan o
 Tier-1, smoke live e2e (LIMIT_HIT→reset_at→probe job).
 **M3d.3–M3d.7 ✅ ENGINE (rebuild `3db7fa6`)** — percobaan Haiku di-revert (tag `haiku-m3d-attempt`, alasan: require-ESM,
 Linux port-discovery salah, SpawnSpec tanpa cwd, inject-spin, 0 test); ditulis ulang testable (semua I/O di-inject),
-**184/184 test**, Tier-1 review Opus. **I-11 CLOSED** (realDispatch). **Sisa M3 = actuation seams (I-12, bukan engine):**
-inject-continue butuh IPC wrapper↔daemon; resume-by-id butuh spawn fresh-wrapper; live-verify agy port-discovery di
-Ubuntu. Catatan integrasi tersisa: I-10 (cross-process re-arm).
+**184/184 test**, Tier-1 review Opus. **I-11 CLOSED** (realDispatch).
+**Update 5 Jul (live-verify Ubuntu 24.04):** (a) **gate native-prebuild Ubuntu LULUS** (node-pty compile-from-source +
+better-sqlite3 prebuild → require+operasi OK; sisa M1 tertutup untuk Ubuntu); build+lint+**184→187/187 test hijau di
+Linux** (sebelumnya hanya Windows). (b) **port-discovery agy live-verified** (G-22 terbukti pada proses `agy` LS nyata,
+`discoverLocalPorts` → 2 port terkorelasi inode, 4× reproduksi) + GetUserStatus 200 → skema **direkonsiliasi ke respons
+live** (I-7 CLOSED, G-23/G-24) + `parseAgyUserStatus` diperbaiki (label/`modelOrAlias.model` + G-17 exhausted usedFraction=1).
+**Sisa M3 = actuation seams (I-12 poin 1&2, bukan engine):** inject-continue butuh IPC wrapper↔daemon; resume-by-id butuh
+spawn fresh-wrapper. Catatan integrasi tersisa: I-10 (cross-process re-arm). (I-12 poin 3 live-verify port-discovery ✅.)
 
 > Batas scope-file M3d: banyak slice menyentuh `daemon/supervisor.ts` sebagai titik integrasi → slice
 > ber-supervisor **diserialkan** (bukan paralel). Slice adapter-probe (M3d.3/M3d.4) & fixture (M3d.8) =
@@ -86,6 +91,10 @@ sinyal limit → status `LIMIT_HIT` + `proc_state` + event `status_change`, tanp
 **Kriteria selesai**: sesi agy live ber-PTY → `quotaInfo` per-model (I-7 skema dikonfirmasi dari respons asli). **Tangani `remainingFraction` ABSENT = exhausted** (G-17, jangan crash `undefined`). **Catat caveat F1** (fraksi cached-at-init → snapshot, bukan real-time) + **`useG1Credits` credit-fallthrough** (G-16: limit agy soft bila credit aktif → probe wajib cek exhaustion=absent DAN credit) di komentar/docs. PII tak bocor ke log/events. Print-mode `-p` **tak** untuk deteksi limit (stdout kosong, G-18).
 **Bukti**: log run (angka per-model, tanpa PII) + test parser + test redaksi.
 **Tier review**: **1** (jaringan + PII + creds).
+> **Live-verified 5 Jul (Ubuntu):** port-discovery inode-correlation ✅ pada `agy` LS nyata; GetUserStatus 200 → skema
+> dikonfirmasi (I-7 CLOSED); parser + fixture direkonsiliasi ke respons live. **Sisa slice = wiring** `adapters/antigravity.ts
+> probeUsage()`: probe **`https`(rejectUnauthorized:false)** ke port hasil `discoverLocalPorts`, **retry sampai HTTP 200
+> ber-`userStatus`** (~2–4s pasca bind; G-23), lalu `parseAgyUserStatus`. Redaksi PII (G-9) sudah tertutup di parser.
 
 ### M3d.5 — Gate probe→resume/backoff saat reset (scheduler dispatch)
 **Slice**: job `probe` jatuh tempo → `probeUsage()`; kuota tersedia → enqueue job `resume`; kosong → backoff reschedule (scheduler) + notif "perkiraan". Tak spam-resume.

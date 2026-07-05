@@ -14,10 +14,14 @@ Rebuild M3d.3–7 (`3db7fa6`) menyelesaikan **keputusan** (probe→resume/backof
    menulis `"continue\n"` ke sesi hidupnya. Berkaitan erat dgn I-10 (cross-process).
 2. **resume-by-id (exited):** dispatch hanya emit `resume_ready` + `SpawnSpec` (bawa cwd) — **tak spawn**.
    Butuh jalur spawn fresh-wrapper PTY di `spec.cwd`.
-3. **live-verify agy port-discovery:** algoritma inode-correlation Linux hanya diuji fixture; belum ditembak
-   proses `agy` LS nyata (butuh Ubuntu native + sesi agy live ber-PTY). Windows `Get-NetTCPConnection` juga
-   belum di-smoke live.
-Sampai seams ini di-wire, engine M3d benar & teruji tapi **belum menutup loop auto-continue end-to-end**.
+3. ~~**live-verify agy port-discovery:** algoritma inode-correlation Linux hanya diuji fixture~~ ✅ **DONE (5 Jul,
+   Ubuntu 24.04):** `discoverLocalPorts(<agy-pid>)` menembak proses `agy` LS NYATA (ber-PTY via node-pty) →
+   mengembalikan **2 port** (HTTPS/gRPC + HTTP) terkorelasi inode dengan benar, direproduksi 4×
+   (`[39445,43989]`, `[37391,41229]`, `[38899,39397]`, `[33201,46231]`). GetUserStatus 200 dari port HTTPS(gRPC)
+   dgn kuota per-model nyata → algoritma G-22 **terbukti live**. Windows `Get-NetTCPConnection` masih belum di-smoke
+   live (weekend). Mekanika probe (endpoint HTTPS/Connect + retry timing) → G-23.
+Seams **poin 1 (inject IPC) & poin 2 (spawn resume)** masih **terbuka** → engine M3d benar & teruji tapi **belum
+menutup loop auto-continue end-to-end**.
 
 ### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13]
 Claude Code menampilkan warning ~90% (window 5-jam) & ~75% (mingguan) di terminal, tapi itu **UI-only,
@@ -27,14 +31,16 @@ seven_day** — meniru default Claude Code sendiri; agy: `1-remainingFraction` p
 indikator "perkiraan sisa" dini. Basis fitur US-13 (prediksi proaktif, backlog) + indikator proximity di
 `acca status` (M4). Wire saat Usage-Probe live + Notifier ada (M4).
 
-### I-7 — Skema agy `GetUserStatus` teramati dari respons asli (4 Jul) — tinggal rapikan parser [P3, target M3d.4]
-**Update 4 Jul (eksperimen limit agy):** respons asli teramati (scratchpad probe.log). Bentuk nyata:
-`cascadeModelConfigData.clientModelConfigs[]` (flat, **tanpa** pembungkus `userStatus`), tiap entri punya field
-**`model`** = **display name** (mis. `"Gemini 3.1 Pro (High)"`, bukan slug), plus `quotaInfo.{remainingFraction,
-resetTime}`. **Penting (G-17):** saat exhausted, **`remainingFraction` HILANG** dari entri (hanya `resetTime`) —
-parser wajib perlakukan absent = exhausted (0), jangan crash `undefined`. Plan/credit di
-`planStatus.planInfo` + `userTier.availableCredits[].creditAmount`. Sisa (non-blocking): rapikan `parseAgyUserStatus`
-(M3c) ke skema nyata + tambah fixture dari respons asli (M3d.4/M3d.8). Parser sudah defensif + test-covered.
+### I-7 — Skema agy `GetUserStatus` direkonsiliasi ke respons LIVE Ubuntu (5 Jul) [P3] ✅ (live-verify)
+**RESOLVED (5 Jul, live Ubuntu 24.04 / agy 1.0.16):** GetUserStatus ditembak dari sesi agy NYATA ber-PTY → HTTP 200.
+**Koreksi material vs asumsi 4 Jul:** (a) respons **DIBUNGKUS `userStatus`** (bukan flat); (b) identitas model = **`label`**
+(display, mis. "Claude Opus 4.6 (Thinking)") + **`modelOrAlias.model`** (enum slug, mis. `MODEL_PLACEHOLDER_M26`) —
+**field datar `model` TAK ADA** (asumsi lama salah, G-24). `quotaInfo.{remainingFraction,resetTime}` per-model ✓
+(reset window beda per-model: 10:16:37Z vs 09:32:55Z). Credits di `userStatus.planStatus.{availablePromptCredits,
+availableFlowCredits}` + `userStatus.userTier.availableCredits[]`. **Solusi:** `parseAgyUserStatus` diperbaiki (prioritas
+`label` + baca `modelOrAlias.model`; **G-17 exhausted → usedFraction=1, tak di-skip** supaya consumer `limits.every(usedFraction<1)`
+tak keliru resume); fixture `test/fixtures/usage/agy-userstatus.json` diganti **capture live redaksi PII** (G-9). 187/187
+test hijau. Sisa non-blocking untuk M3d.4: mekanika endpoint (HTTPS/Connect + retry ~2–4s) terdokumentasi G-23.
 
 ### I-11 — Placeholder dispatch scheduler daemon backoff-spin sampai M3d.5 [P3] ✅ (M3d.5 rebuild `3db7fa6`)
 **RESOLVED:** `realDispatch` di `supervisor.ts` mengganti placeholder — probe→enqueue-resume / backoff / masih-limit
