@@ -274,12 +274,25 @@ per-model (konsisten ADR-010). **G-17 juga direkonsiliasi ke consumer:** entri e
 absent) kini di-emit `usedFraction=1` (bukan di-skip) supaya supervisor `limits.every(usedFraction<1)` tak keliru resume
 saat satu model masih habis. **Sumber:** live-verify 5 Jul; `src/adapters/usage.ts`, `test/usage-parsers.test.ts`.
 
+### G-25 — undici `fetch` (global Node) TAK bisa `rejectUnauthorized:false` tanpa dep `undici` → jalur loopback pakai `node:https`
+**Jebakan:** agy LS = HTTPS **self-signed** di 127.0.0.1 (G-23). Codebase mewajibkan semua egress lewat `safeFetch`
+(undici global). Tapi undici `fetch` **tak menerima** `rejectUnauthorized` di `RequestInit` — satu-satunya cara resmi =
+inject **`dispatcher`** (undici `Agent` dgn `connect.rejectUnauthorized:false`), yang butuh **import `undici`** sebagai
+dependency (Node membundel undici hanya sbg global `fetch`, **bukan** modul importable) → tambah dep = gate
+DEPENDENCY-POLICY. Set `NODE_TLS_REJECT_UNAUTHORIZED=0` = **proses-wide** (mematikan verifikasi cert utk SEMUA egress
+termasuk api.anthropic.com) — tak boleh. **Cara benar:** helper khusus `loopbackHttpsPostJson` (`shared/http.ts`) pakai
+**`node:https`** langsung dgn `rejectUnauthorized:false`, **dibatasi KETAT ke host loopback** (guard: `https:` + hostname ∈
+{`127.0.0.1`,`localhost`,`[::1]`}, non-loopback → `EgressBlockedError`) + tetap lewat `guardEgress`. Insecure-TLS jadi
+mustahil bocor ke host internet. `safeFetch` tetap jalur wajib utk host publik (CC/Telegram). **Sumber:** wiring M3d.4
+probeUsage Windows 5 Jul; `src/shared/http.ts`, `test/http-egress.test.ts`.
+
 ---
 
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-05 (Windows, wiring M3d.4) | G-25 (undici `fetch` tak bisa `rejectUnauthorized:false` tanpa dep `undici` → jalur loopback pakai `node:https` `loopbackHttpsPostJson`, insecure-TLS dibatasi ketat ke host loopback + tetap `guardEgress`). Dari wiring `probeAgyUsage` per G-23 + live-verify Windows (Get-NetTCPConnection port-discovery ✅ + probe 8 model nyata dalam ~1s). |
 | 2026-07-05 (live-verify Ubuntu) | G-23 (GetUserStatus agy = port HTTPS(gRPC) + Connect-JSON; retry ~2–4s pasca bind sampai HTTP 200; `Auth succeeded` = auth lokal LS bukan login upstream; salah-protokol gagal senyap ECONNRESET/EPROTO), G-24 (bentuk entri model NYATA = `label` + `modelOrAlias.model`, bukan flat `model` — koreksi I-7; parser + fixture direkonsiliasi ke capture live; G-17 exhausted di-emit usedFraction=1 bukan skip). Dari live-verify port-discovery + GetUserStatus di Ubuntu 24.04 (I-12 poin 3). |
 | 2026-07-04 (M3d rebuild) | G-21 (`require()` di ESM = ReferenceError runtime, lolos tsc — selalu `import`), G-22 (port→PID Linux wajib korelasi inode `/proc/<pid>/fd`→`/proc/net/tcp{,6}` st=0A, jangan grep tabel global; hex localhost `0100007F`). Dari review + rebuild kerja Haiku yang di-revert. |
 | 2026-07-04 (M3d.1 wiring) | G-20 (output PTY ConPTY sisipkan ANSI/CSI walau baris polos → detector wajib strip ANSI per-baris sebelum classify; cakupan CSI, OSC/charset belum). Dari smoke live M3d.1. |

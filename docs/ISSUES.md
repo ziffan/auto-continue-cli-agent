@@ -18,8 +18,10 @@ Rebuild M3d.3–7 (`3db7fa6`) menyelesaikan **keputusan** (probe→resume/backof
    Ubuntu 24.04):** `discoverLocalPorts(<agy-pid>)` menembak proses `agy` LS NYATA (ber-PTY via node-pty) →
    mengembalikan **2 port** (HTTPS/gRPC + HTTP) terkorelasi inode dengan benar, direproduksi 4×
    (`[39445,43989]`, `[37391,41229]`, `[38899,39397]`, `[33201,46231]`). GetUserStatus 200 dari port HTTPS(gRPC)
-   dgn kuota per-model nyata → algoritma G-22 **terbukti live**. Windows `Get-NetTCPConnection` masih belum di-smoke
-   live (weekend). Mekanika probe (endpoint HTTPS/Connect + retry timing) → G-23.
+   dgn kuota per-model nyata → algoritma G-22 **terbukti live**. **✅ Windows `Get-NetTCPConnection` juga live-verified
+   5 Jul** (3× fresh spawn agy ber-PTY, port hasil `discoverLocalPorts` cocok persis dgn port di log agy `server.go …
+   listening on random port`); **`probeAgyUsage` (wiring G-23) live di Windows** → 8 model nyata dalam ~1s. Mekanika
+   probe (endpoint HTTPS/Connect + retry timing) → G-23; helper insecure-TLS loopback → G-25. **I-12 poin 3 TUNTAS lintas-OS.**
 Seams **poin 1 (inject IPC) & poin 2 (spawn resume)** masih **terbuka** → engine M3d benar & teruji tapi **belum
 menutup loop auto-continue end-to-end**.
 

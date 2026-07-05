@@ -1,5 +1,5 @@
 import { discoverLocalPorts } from '../shared/port-discovery.js';
-import { safeFetch } from '../shared/http.js';
+import { loopbackHttpsPostJson, type LoopbackResponse } from '../shared/http.js';
 import type { UsageSnapshot } from '../shared/types.js';
 import { isTransientRetry, matchAgyLimit, matchOverload } from './patterns.js';
 import { parseAgyUserStatus } from './usage.js';
@@ -7,48 +7,94 @@ import type { Adapter, DetectionResult, DetectSignal, SpawnSpec } from './types.
 
 const GET_USER_STATUS_PATH = '/exa.language_server_pb.LanguageServerService/GetUserStatus';
 
+// G-23 (live-verify Ubuntu + Windows 5 Jul): tepat setelah LS bind, GetUserStatus balas Connect-error
+// (cascade/quota belum terisi) selama ~2–4s sampai refresh token in-memory selesai — baru HTTP 200
+// ber-`userStatus`. Probe wajib RETRY sampai 200-berkuota, jangan simpulkan "tak ada kuota" dari
+// attempt pertama. Cap konservatif ~15s.
+const AGY_PROBE_MAX_WAIT_MS = 15000;
+const AGY_PROBE_INTERVAL_MS = 2000;
+
+/** Boundary I/O di-inject supaya retry-loop probe teruji tanpa jaringan/proses nyata. */
+export interface AgyProbeDeps {
+  discover?: (pid: number) => number[];
+  post?: (url: string, jsonBody: string) => Promise<LoopbackResponse>;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+  maxWaitMs?: number;
+  intervalMs?: number;
+}
+
+/**
+ * Probe usage agy dari sesi hidup ber-PTY (ADR-010 opsi #2). Alur (G-23): discoverLocalPorts →
+ * untuk tiap port coba `POST GetUserStatus` via **https loopback** (`rejectUnauthorized:false`;
+ * agy LS = TLS self-signed) → retry ~tiap 2s sampai satu port balas **HTTP 200 ber-`userStatus`**
+ * (limits non-kosong), cap ~15s. Salah-port (HTTP plaintext / gRPC-h2) gagal senyap
+ * (ECONNRESET/EPROTO) → coba port lain. **PII/injection firewall (G-9/ADR-013):** body respons
+ * TAK PERNAH masuk pesan error (`lastStatus` hanya kode/`error.message` jaringan); ekstraksi kuota
+ * lewat `parseAgyUserStatus` (allowlist ketat). Standalone (bukan method) supaya deps injectable di test.
+ */
+export async function probeAgyUsage(
+  context: { sessionPid?: number } | undefined,
+  deps: AgyProbeDeps = {},
+): Promise<UsageSnapshot> {
+  if (!context?.sessionPid) {
+    throw new Error('agy probeUsage requires sessionPid (sesi hidup ber-PTY)');
+  }
+  const pid = context.sessionPid;
+  const discover = deps.discover ?? ((p) => discoverLocalPorts(p));
+  const post = deps.post ?? ((url, body) => loopbackHttpsPostJson(url, body));
+  const sleep = deps.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = deps.now ?? (() => Date.now());
+  const maxWaitMs = deps.maxWaitMs ?? AGY_PROBE_MAX_WAIT_MS;
+  const intervalMs = deps.intervalMs ?? AGY_PROBE_INTERVAL_MS;
+
+  const ports = discover(pid);
+  if (ports.length === 0) {
+    throw new Error(`agy LS ports not found for PID ${pid}`);
+  }
+
+  const deadline = now() + maxWaitMs;
+  let lastStatus = 'belum ada respons';
+  for (;;) {
+    for (const port of ports) {
+      let resp: LoopbackResponse;
+      try {
+        resp = await post(`https://127.0.0.1:${port}${GET_USER_STATUS_PATH}`, '{}');
+      } catch (err) {
+        // error.message jaringan (ECONNRESET/EPROTO/timeout) — tak pernah memuat body respons.
+        lastStatus = err instanceof Error ? err.message : String(err);
+        continue;
+      }
+      if (resp.status !== 200) {
+        lastStatus = `HTTP ${resp.status}`; // Connect-error sebelum LS siap (G-23) — retry.
+        continue;
+      }
+      let json: unknown;
+      try {
+        json = JSON.parse(resp.body);
+      } catch {
+        lastStatus = 'respons 200 non-JSON';
+        continue;
+      }
+      const snapshot = parseAgyUserStatus(json, now());
+      if (snapshot.limits.length > 0) return snapshot; // userStatus terisi → selesai.
+      lastStatus = 'HTTP 200 tapi userStatus kosong (LS belum siap)';
+    }
+    if (now() >= deadline) break;
+    await sleep(intervalMs);
+  }
+  throw new Error(
+    `agy usage probe: tak ada HTTP 200 ber-kuota dalam ${maxWaitMs}ms (last: ${lastStatus})`,
+  );
+}
+
 export const antigravityAdapter: Adapter = {
   tool: 'antigravity',
   buildSpawn(args: string[]): SpawnSpec {
     return { file: 'agy', args };
   },
   async probeUsage(context?: { sessionPid?: number }): Promise<UsageSnapshot> {
-    if (!context?.sessionPid) {
-      throw new Error('agy probeUsage requires sessionPid (sesi hidup ber-PTY)');
-    }
-    const pid = context.sessionPid;
-    const ports = discoverLocalPorts(pid);
-    if (ports.length === 0) {
-      throw new Error(`agy LS ports not found for PID ${pid}`);
-    }
-
-    // agy bind gRPC + HTTP di dua port random tanpa urutan terjamin — coba semua port, terima yang
-    // pertama membalas dengan limits non-kosong (itu port HTTP-nya). Tak pernah bocorkan body respons
-    // ke pesan error (injection/PII firewall — ADR-013/G-9).
-    let fallback: UsageSnapshot | undefined;
-    let lastStatus = '';
-    for (const port of ports) {
-      let resp: Response;
-      try {
-        resp = await safeFetch(`http://127.0.0.1:${port}${GET_USER_STATUS_PATH}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: '{}',
-        });
-      } catch (err) {
-        lastStatus = err instanceof Error ? err.message : String(err);
-        continue;
-      }
-      if (!resp.ok) {
-        lastStatus = `${resp.status} ${resp.statusText}`;
-        continue;
-      }
-      const snapshot = parseAgyUserStatus(await resp.json(), Date.now());
-      if (snapshot.limits.length > 0) return snapshot;
-      fallback = fallback ?? snapshot;
-    }
-    if (fallback) return fallback;
-    throw new Error(`agy usage probe failed on all discovered ports (last: ${lastStatus})`);
+    return probeAgyUsage(context);
   },
   resumeCmd(sessionId: string, cwd: string): SpawnSpec {
     return { file: 'agy', args: ['--conversation', sessionId], cwd };
