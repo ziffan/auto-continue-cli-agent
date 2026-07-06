@@ -4,6 +4,8 @@
 
 import { existsSync } from 'node:fs';
 import { adapters } from '../adapters/index.js';
+import type { SpawnSpec } from '../adapters/types.js';
+import { runSession } from '../cli/run-core.js';
 import { isProcessAlive } from '../shared/proc.js';
 import { sessionControlSocketPath } from '../shared/paths.js';
 import type { Session } from '../shared/types.js';
@@ -42,6 +44,15 @@ export interface SupervisorDeps {
   /** Minta wrapper pemilik PTY sesi meng-inject continue (I-12 poin 1). Default = connect ke socket
    *  kontrol per-sesi (`sessionControlSocketPath`) via IPC. Di-inject di test → tanpa socket nyata. */
   requestInject?: (session: Session) => Promise<InjectRequestResult>;
+  /** Spawn wrapper PTY baru untuk resume-by-id sesi yang `exited` (I-12 poin 2). Default = `runSession`
+   *  in-process (spawn CLI target di `spec.cwd`, catat sesi baru, host socket kontrol → re-injectable).
+   *  Di-inject di test → tak spawn proses nyata. */
+  spawnResume?: (spec: SpawnSpec, session: Session) => ResumeSpawnResult;
+}
+
+/** Hasil spawn resume-by-id. `sessionId` = id sesi wrapper BARU yang melanjutkan percakapan lama. */
+export interface ResumeSpawnResult {
+  sessionId?: string;
 }
 
 /** Dilempar saat socket/pipe daemon sudah dipakai (instance daemon lain sudah berjalan). */
@@ -80,6 +91,19 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
   // Sisi-daemon dari kanal inject-continue (I-12 poin 1). Default = connect ke socket kontrol
   // per-sesi yang di-host wrapper; test menyuntik pengganti tanpa socket nyata.
   const requestInjectFn = deps.requestInject ?? ((session: Session): Promise<InjectRequestResult> => requestInject(sessionControlSocketPath(session.id)));
+
+  // Actuation resume-by-id (I-12 poin 2). Default = runSession in-process: spawn CLI target di cwd
+  // asli (which/G-12), catat sesi wrapper BARU, host socket kontrol (re-injectable). Non-blocking —
+  // `waitForExit` sengaja tak di-await. Test menyuntik pengganti supaya tak spawn proses nyata.
+  const spawnResumeFn: (spec: SpawnSpec, session: Session) => ResumeSpawnResult =
+    deps.spawnResume ??
+    ((spec, session) => {
+      const { sessionId: newId } = runSession(
+        { file: spec.file, args: spec.args, cwd: spec.cwd ?? session.cwd, tool: session.tool },
+        { sessions, events, jobs },
+      );
+      return { sessionId: newId };
+    });
 
   // Dispatch nyata (M3d.5 probe + M3d.6 resume-by-id + M3d.7 inject-continue gating). Setiap
   // cabang menulis event audit (pola sudah ada di reconcile.ts/limit-watcher.ts); error tak
@@ -202,12 +226,15 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       }
 
       const spec = adapter.resumeCmd(session.id, session.cwd);
-      // Actuation spawn nyata (fresh wrapper PTY di `spec.cwd`) adalah seam integrasi
-      // wrapper/CLI terpisah — supervisor bukan pemilik proses PTY, jadi tak spawn langsung di sini.
+      // Actuation spawn nyata (I-12 poin 2): jalankan wrapper PTY baru di `spec.cwd` (AC-8 — resume
+      // WAJIB di direktori kerja sesi asli). Bila spawn gagal (mis. binary hilang), `spawnResumeFn`
+      // melempar → ditangkap catch luar → event error + 'retry' (backoff berjenjang, tak spin cepat).
+      const spawned = spawnResumeFn(spec, session);
+      sessions.markResumed(job.session_id);
       events.append({
         session_id: job.session_id,
         type: 'job_dispatch_done',
-        payload: { jobId: job.id, action: 'resume_ready', spec },
+        payload: { jobId: job.id, action: 'resume_spawned', newSessionId: spawned.sessionId, spec },
       });
       return 'done';
     } catch (err) {
