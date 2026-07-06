@@ -288,10 +288,43 @@ probeUsage Windows 5 Jul; `src/shared/http.ts`, `test/http-egress.test.ts`.
 
 ---
 
+## Actuation seams (M3d.6/M3d.7) — inject-continue & resume-by-id (6 Jul)
+
+### G-26 — Kanal inject-continue: injection firewall harus STRUKTURAL (bukan sekadar konvensi) + wrapper host socket = non-fatal + guard race listen/exit
+**Jebakan/Fakta (I-12 poin 1):** actuation "inject continue ke sesi hidup" menyeberangi batas kepercayaan
+(daemon → wrapper pemilik PTY). Godaan: kirim token yang mau di-inject **lewat IPC**. **Salah** — itu membuka
+kanal untuk menyelundupkan keystroke (dari daemon, atau lebih buruk dari isi output yang di-relay). **Cara benar
+(struktural):** token `CONTINUE_TOKEN='continue\r'` **di-hardcode di WRAPPER**; perintah IPC `inject` **tak
+membawa payload sama sekali** (args diabaikan). Dengan begitu tak ada *kanal fisik* untuk konten mengalir ke
+keystroke — injection firewall jadi properti tipe/struktur, bukan janji. Uji eksplisit: panggil handler dgn args
+jahat → yang tertulis TETAP hanya literal. **Dua jebakan operasional wrapper host socket:** (a) meng-host
+`createIpcServer` per-sesi **tak boleh fatal** — bila `listen` gagal (mis. pipe stale), sesi user (jalur utama)
+harus tetap jalan; bungkus `.catch` → event `control_socket_error`, lanjut tanpa kemampuan auto-inject. (b) **race
+listen-vs-exit:** `listen` async; bila proses child sudah exit sebelum listen selesai, server bisa menggantung
+menahan event-loop (vitest tak exit). Guard: set flag `exited` di `onExit` + `void controlServer.close()`, DAN di
+`.then()` listen cek `if (exited) close()`. Terverifikasi: `run.integration.test` tetap exit bersih. **Sumber:**
+Sub-task 1 (6 Jul), `daemon/inject-continue.ts`, `cli/run-core.ts`.
+
+### G-27 — Resume-by-id: JANGAN re-spawn `acca run <tool> --resume …` (commander salah-parse opsi); pakai runSession in-process. ConPTY meng-echo `\r` inject → `\r\n`
+**Jebakan (a):** untuk actuation resume-by-id, tergoda men-spawn ulang wrapper via CLI: `acca run claude --resume <id>`.
+**Salah** — `run` command commander punya `.argument('[args...]')` variadic, tapi commander tetap mencoba parse
+`--resume` sebagai **opsi milik `run`** (bukan diteruskan) → error "unknown option" ATAU tertelan. **Cara benar:**
+default `spawnResume` panggil **`runSession(spec, deps)` in-process** — spec dari `adapter.resumeCmd` diteruskan
+langsung ke `pty.spawn` (which/G-12), tak ada lapisan parse-CLI kedua. Konsekuensi arsitektur (disengaja, dalam
+ADR-002 monolith): daemon jadi **pemilik PTY sesi hasil-resume** (headless — output → log daemon; stdin raw di-skip
+karena daemon non-TTY). `runSession` di-import daemon = layer terbalik fisik tapi engine-nya memang niatnya di
+`daemon/process-wrapper.ts` (I-14). **Jebakan (b) minor:** saat inject `"continue\r"` ke PTY, ConPTY/terminal
+meng-**echo** balik dgn terjemahan line-ending → child stdin menerima `"continue\r\n"` (bukan `\r` polos). Tak
+masalah fungsional (agent tetap dapat "continue"+Enter), tapi **jangan assert byte-exact `\r`** pada sisi child —
+assert `includes('continue')`. **Sumber:** Sub-task 2 + smoke live (6 Jul), `daemon/supervisor.ts`.
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-06 (Windows, actuation M3d.6/7) | G-26 (inject-continue: injection firewall STRUKTURAL — token hardcoded wrapper + perintah IPC tanpa payload; wrapper host socket non-fatal; guard race listen/exit), G-27 (resume-by-id: jangan re-spawn `acca run … --resume` — commander salah-parse; pakai `runSession` in-process; ConPTY echo `\r`→`\r\n`). Dari wiring actuation seams I-12 poin 1&2 + 2 smoke live Windows. |
 | 2026-07-05 (Windows, wiring M3d.4) | G-25 (undici `fetch` tak bisa `rejectUnauthorized:false` tanpa dep `undici` → jalur loopback pakai `node:https` `loopbackHttpsPostJson`, insecure-TLS dibatasi ketat ke host loopback + tetap `guardEgress`). Dari wiring `probeAgyUsage` per G-23 + live-verify Windows (Get-NetTCPConnection port-discovery ✅ + probe 8 model nyata dalam ~1s). |
 | 2026-07-05 (live-verify Ubuntu) | G-23 (GetUserStatus agy = port HTTPS(gRPC) + Connect-JSON; retry ~2–4s pasca bind sampai HTTP 200; `Auth succeeded` = auth lokal LS bukan login upstream; salah-protokol gagal senyap ECONNRESET/EPROTO), G-24 (bentuk entri model NYATA = `label` + `modelOrAlias.model`, bukan flat `model` — koreksi I-7; parser + fixture direkonsiliasi ke capture live; G-17 exhausted di-emit usedFraction=1 bukan skip). Dari live-verify port-discovery + GetUserStatus di Ubuntu 24.04 (I-12 poin 3). |
 | 2026-07-04 (M3d rebuild) | G-21 (`require()` di ESM = ReferenceError runtime, lolos tsc — selalu `import`), G-22 (port→PID Linux wajib korelasi inode `/proc/<pid>/fd`→`/proc/net/tcp{,6}` st=0A, jangan grep tabel global; hex localhost `0100007F`). Dari review + rebuild kerja Haiku yang di-revert. |

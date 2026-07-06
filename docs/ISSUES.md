@@ -6,24 +6,34 @@
 
 ## Terbuka
 
-### I-12 — Actuation seams M3d: inject-continue & resume-by-id belum meng-aksi (engine-only) [P2, target wiring wrapper↔daemon]
-Rebuild M3d.3–7 (`3db7fa6`) menyelesaikan **keputusan** (probe→resume/backoff, gating, spec resume) tapi
-**actuation-nya sengaja ditunda** — supervisor bukan pemilik proses PTY:
-1. **inject-continue (alive):** `checkInjectGating` selalu dapat `ptyFd: undefined` → emit `inject_deferred`/
-   `invalid_pty_fd` → `'done'`. Butuh **IPC wrapper↔daemon** supaya daemon minta wrapper (pemegang fd PTY)
-   menulis `"continue\n"` ke sesi hidupnya. Berkaitan erat dgn I-10 (cross-process).
-2. **resume-by-id (exited):** dispatch hanya emit `resume_ready` + `SpawnSpec` (bawa cwd) — **tak spawn**.
-   Butuh jalur spawn fresh-wrapper PTY di `spec.cwd`.
-3. ~~**live-verify agy port-discovery:** algoritma inode-correlation Linux hanya diuji fixture~~ ✅ **DONE (5 Jul,
-   Ubuntu 24.04):** `discoverLocalPorts(<agy-pid>)` menembak proses `agy` LS NYATA (ber-PTY via node-pty) →
-   mengembalikan **2 port** (HTTPS/gRPC + HTTP) terkorelasi inode dengan benar, direproduksi 4×
-   (`[39445,43989]`, `[37391,41229]`, `[38899,39397]`, `[33201,46231]`). GetUserStatus 200 dari port HTTPS(gRPC)
-   dgn kuota per-model nyata → algoritma G-22 **terbukti live**. **✅ Windows `Get-NetTCPConnection` juga live-verified
-   5 Jul** (3× fresh spawn agy ber-PTY, port hasil `discoverLocalPorts` cocok persis dgn port di log agy `server.go …
-   listening on random port`); **`probeAgyUsage` (wiring G-23) live di Windows** → 8 model nyata dalam ~1s. Mekanika
-   probe (endpoint HTTPS/Connect + retry timing) → G-23; helper insecure-TLS loopback → G-25. **I-12 poin 3 TUNTAS lintas-OS.**
-Seams **poin 1 (inject IPC) & poin 2 (spawn resume)** masih **terbuka** → engine M3d benar & teruji tapi **belum
-menutup loop auto-continue end-to-end**.
+### I-13 — Gating inject-continue foreground/idle belum dihitung (hook di-thread, komputasi kosong) [P2, target lanjutan M3d.7]
+Seam inject-continue (I-12 poin 1, `33e78b5`) menjalankan `checkInjectGating` di sisi WRAPPER, tapi input
+`foregroundIsAgent`/`idle` masih `undefined` (belum dihitung) → per semantik gating (`undefined != false`
+tak memblokir), inject **lolos** hanya dengan `procAlive` + `hasPtyHandle`. Berarti gating ADR-014 poin
+(ii) foreground=agent-bukan-shell & (iii) idle-bukan-mid-turn **belum ditegakkan**. Poin (iv) probe-kuota-dulu
+SUDAH dipenuhi struktur pipeline (M3d.5 probe→resume). **Cara benar:** `createInjectHandler` sudah menerima
+callback `foregroundIsAgent()`/`idle()` (drop-in) — tinggal implementasi deteksi lintas-OS: foreground =
+proses foreground PTY == agent (claude/node/agy), idle = footer TUI "esc to interrupt" absen (mis. `shared/proc.ts`).
+Sampai itu, jangan andalkan gating memblokir inject saat sesi drop-ke-shell atau mid-turn. Risiko nyata
+tapi terbatas: inject "continue\r" ke shell = ketik teks tak berbahaya (bukan perintah), ke mid-turn =
+Enter di tengah generate. **Sumber:** review Sub-task 1 (6 Jul).
+
+### I-14 — Resume-by-id: `runSession` di-import daemon (layer terbalik) + link old→new session longgar [P3, target refactor]
+Sub-task 2 (`76df6ae`) meng-import `runSession` dari `cli/run-core.ts` ke `daemon/supervisor.ts` — **fisiknya
+backward** (MAP: cli/ panggil daemon lewat IPC, bukan sebaliknya). Secara *semantik* `runSession` = engine
+process-wrapper yang MAP sendiri niatkan tinggal di `daemon/process-wrapper.ts` (penempatan di cli/ = bootstrap
+M1). Tak ada import cycle (build+test hijau). **Cara benar:** relokasi `runSession` → `daemon/process-wrapper.ts`,
+`cli/commands/run.ts` + supervisor sama-sama import dari sana. **Juga:** sesi hasil resume = row BARU; kaitan ke
+sesi lama hanya lewat event `resume_spawned` (longgar) — pertimbangkan set `cli_session_id`/parent link supaya
+`status`/riwayat bisa menautkan rantai resume. **Sumber:** Sub-task 2 (6 Jul).
+
+### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
+Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
+`resumeCmd`), bukan CLI agent nyata di limit nyata: (a) apakah `claude`/`agy` hidup di prompt benar-benar
+**menerima `continue\r`** lalu melanjutkan turn; (b) apakah `claude --resume <id>` / `agy --conversation <id>`
+benar melanjutkan percakapan di sesi wrapper baru. Ini sekelas verifikasi yang genuinely butuh limit/sesi
+asli (tak bisa dipaksa) — tangkap **opportunistik** saat limit 5-jam habis. Keystroke pasti agy = TBD
+(ADR-014 catatan agy: kandidat "continue"/Enter). **Sumber:** smoke Sub-task 1&2 (6 Jul).
 
 ### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13]
 Claude Code menampilkan warning ~90% (window 5-jam) & ~75% (mingguan) di terminal, tapi itu **UI-only,
@@ -84,6 +94,24 @@ lintas-tengah-malam jadi penting (kemungkinan saat wiring reset ke scheduler M3 
 ---
 
 ## Tertutup
+
+### I-12 — Actuation seams M3d: inject-continue & resume-by-id [P2] ✅ (6 Jul, `33e78b5`+`76df6ae`)
+Rebuild M3d.3–7 menyelesaikan **keputusan** (probe→resume/backoff, gating, spec resume) tapi menunda
+**actuation** (supervisor bukan pemilik proses PTY). Ketiga poin kini tertutup:
+1. ✅ **inject-continue (alive) — `33e78b5`:** kanal IPC per-sesi (ADR-015, tanpa transport baru). Wrapper
+   `acca run` host `createIpcServer({inject})` di `sessionControlSocketPath(id)`; daemon `requestInject`
+   → wrapper gating lokal + `ptyProcess.write(CONTINUE_TOKEN)`. Injected → `markResumed`+RESUMED; gagal/
+   unreachable → `inject_skipped`+done (surface, tanpa spin). **Injection firewall struktural:** token
+   di-hardcode wrapper, perintah `inject` tanpa payload. Baru: `daemon/inject-continue.ts`,
+   `sessionControlSocketPath`, `sessions.markResumed`, `checkInjectGating`+`hasPtyHandle`. Smoke live Win:
+   pipe → `{injected:true}` → child PTY terima `continue\r`. Sisa gating foreground/idle → **I-13**.
+2. ✅ **resume-by-id (exited) — `76df6ae`:** `spawnResumeFn` (injectable; default `runSession` in-process)
+   spawn wrapper PTY baru di cwd asli (`resumeCmd`; which/G-12; sesi baru host socket kontrol →
+   re-injectable). cwd hilang → BLOCKED (AC-8). Sukses → `markResumed` lama + event `resume_spawned`.
+   Smoke live Win: sesi baru pid nyata di cwd benar, lama RESUMED. Layer/link → **I-14**; live-verify
+   nyata → **I-15**.
+3. ✅ **live-verify agy port-discovery (5 Jul, Ubuntu+Windows):** `discoverLocalPorts` menembak `agy` LS
+   nyata → 2 port terkorelasi inode; GetUserStatus 200 per-model. G-22 terbukti live lintas-OS.
 
 ### I-6 — Adapter `setTimer` produksi wajib menangkap rejection `runDue` [P2] ✅ (M3d.2)
 **Ditutup M3d.2:** `supervisor.ts` mengekspor `createDaemonTimer(onError)` = `(fn, ms) => setTimeout(() => { try
