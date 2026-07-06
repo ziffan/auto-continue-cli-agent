@@ -114,6 +114,21 @@ export function createSessionsRepo(db: DatabaseInstance) {
       return info.changes > 0;
     },
 
+    /** Tandai sesi RESUMED setelah continue-engine berhasil melanjutkannya (M3d.6 resume-by-id ATAU
+     *  M3d.7 inject-continue). `proc_state` SENGAJA tak disentuh: inject-continue melanjutkan proses
+     *  yang sama (tetap 'alive'); resume-by-id spawn wrapper baru (sesi barunya sendiri). Guard
+     *  `id` saja (transisi eksplisit oleh dispatch, bukan race liveness). Return true bila terupdate. */
+    markResumed(id: string): boolean {
+      const info = db
+        .prepare(
+          `UPDATE sessions
+           SET status = 'RESUMED', updated_at = @updated_at
+           WHERE id = @id`,
+        )
+        .run({ id, updated_at: nowMs() });
+      return info.changes > 0;
+    },
+
     listActive(): Session[] {
       return db
         .prepare<[], Session>(

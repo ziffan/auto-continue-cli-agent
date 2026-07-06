@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { adapters } from '../src/adapters/index.js';
-import { createSupervisor } from '../src/daemon/supervisor.js';
+import type { InjectRequestResult } from '../src/daemon/inject-continue.js';
+import { createSupervisor, type SupervisorDeps } from '../src/daemon/supervisor.js';
 import type { TimerHandle } from '../src/daemon/scheduler.js';
 import { closeDb, openDb, type DatabaseInstance } from '../src/store/db.js';
 import { createScheduledJobsRepo } from '../src/store/repositories/scheduled-jobs.js';
@@ -80,6 +81,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     procState: 'alive' | 'exited';
     cwd: string;
     jobKind: 'probe' | 'resume';
+    requestInject?: SupervisorDeps['requestInject'];
   }): Promise<{ db: DatabaseInstance }> {
     tempDir = join(tmpdir(), `acca-dispatch-test-${randomBytes(4).toString('hex')}`);
     process.env.ACCA_DATA_DIR = tempDir;
@@ -110,6 +112,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
       now: () => nowRef.value,
       setTimer: manual.setTimer,
       clearTimer: manual.clearTimer,
+      requestInject: opts.requestInject,
       // deps.dispatch SENGAJA tidak diisi — memakai dispatch nyata di dalam createSupervisor.
     });
 
@@ -207,18 +210,48 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect((errorEvent?.payload as { error: string }).error).toContain('network boom');
   });
 
-  it('resume: proc_state alive → inject_deferred event + done (not retry)', async () => {
-    const { db: database } = await setupAndFire({ sessionId: 's-resume-alive', procState: 'alive', cwd: process.cwd(), jobKind: 'resume' });
+  it('resume: proc_state alive + wrapper injects → RESUMED + inject_continue event + done', async () => {
+    const injected: InjectRequestResult = { reachable: true, injected: true, reason: null };
+    const requestInject = vi.fn((): Promise<InjectRequestResult> => Promise.resolve(injected));
 
-    const remaining = pendingJobs(database, 's-resume-alive');
-    expect(remaining).toHaveLength(0); // done → job removed, no infinite retry spin
+    const { db: database } = await setupAndFire({ sessionId: 's-resume-alive-ok', procState: 'alive', cwd: process.cwd(), jobKind: 'resume', requestInject });
 
-    const events = eventsFor(database, 's-resume-alive');
-    const pending = events.find((e) => e.type === 'job_dispatch_pending');
+    expect(requestInject).toHaveBeenCalledTimes(1);
+
+    const remaining = pendingJobs(database, 's-resume-alive-ok');
+    expect(remaining).toHaveLength(0); // done → job removed, no spin
+
+    const session = createSessionsRepo(database).getById('s-resume-alive-ok');
+    expect(session?.status).toBe('RESUMED');
+    expect(session?.proc_state).toBe('alive'); // inject-continue melanjutkan proses yang SAMA
+
+    const events = eventsFor(database, 's-resume-alive-ok');
+    const done = events.find((e) => e.type === 'job_dispatch_done');
+    expect((done?.payload as { action: string }).action).toBe('inject_continue');
+    const statusChange = events.find(
+      (e) => e.type === 'status_change' && (e.payload as { to?: string }).to === 'RESUMED',
+    );
+    expect(statusChange).toBeDefined();
+  });
+
+  it('resume: proc_state alive + wrapper unreachable → inject_skipped event + done (no spin, no status change)', async () => {
+    const unreachable: InjectRequestResult = { reachable: false, injected: false, reason: 'wrapper_unreachable' };
+    const requestInject = vi.fn((): Promise<InjectRequestResult> => Promise.resolve(unreachable));
+
+    const { db: database } = await setupAndFire({ sessionId: 's-resume-alive-gone', procState: 'alive', cwd: process.cwd(), jobKind: 'resume', requestInject });
+
+    const remaining = pendingJobs(database, 's-resume-alive-gone');
+    expect(remaining).toHaveLength(0); // done → job removed, tak ada retry-spin
+
+    const session = createSessionsRepo(database).getById('s-resume-alive-gone');
+    expect(session?.status).toBe('LIMIT_HIT'); // TAK di-RESUMED — surface manual (ADR-014)
+
+    const events = eventsFor(database, 's-resume-alive-gone');
+    const pending = events.find((e) => e.type === 'job_dispatch_pending' && (e.payload as { action?: string }).action === 'inject_skipped');
     expect(pending).toBeDefined();
-    const payload = pending?.payload as { action: string; reason: string };
-    expect(payload.action).toBe('inject_deferred');
-    expect(payload.reason).toBe('invalid_pty_fd');
+    const payload = pending?.payload as { action: string; reason: string; reachable: boolean };
+    expect(payload.reason).toBe('wrapper_unreachable');
+    expect(payload.reachable).toBe(false);
   });
 
   it('resume: proc_state exited + cwd exists → resume_ready event with spec.cwd + done', async () => {
