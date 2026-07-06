@@ -54,3 +54,19 @@ export function runtimeSocketPath(): string {
   mkdirSync(dir, { recursive: true });
   return join(dir, 'daemon.sock');
 }
+
+/**
+ * Path socket kontrol PER-SESI (ADR-015 — Node `net`) yang di-HOST oleh wrapper `acca run` pemilik
+ * PTY sesi itu; daemon me-connect ke sini sebagai klien untuk minta inject-continue (I-12 poin 1,
+ * seam actuation ADR-014 §1). Deterministik dari `sessionId` → daemon & wrapper menurunkan path yang
+ * SAMA tanpa handshake registrasi (bila wrapper tak mendengarkan, connect gagal → daemon perlakukan
+ * sebagai "wrapper unreachable"). Diturunkan dari `dataDir()` (bukan runtime dir) supaya override
+ * `ACCA_DATA_DIR` di test/lingkungan terisolasi ikut memindahkannya. Windows = named pipe (bukan path
+ * filesystem, tak perlu mkdir); POSIX = file socket di `dataDir()`.
+ */
+export function sessionControlSocketPath(sessionId: string): string {
+  if (process.platform === 'win32') {
+    return `\\\\.\\pipe\\acca-session-${sessionId}`;
+  }
+  return join(dataDir(), `session-${sessionId}.sock`);
+}

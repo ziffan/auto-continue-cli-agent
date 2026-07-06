@@ -5,12 +5,14 @@
 import { existsSync } from 'node:fs';
 import { adapters } from '../adapters/index.js';
 import { isProcessAlive } from '../shared/proc.js';
-import { checkInjectGating } from '../shared/pty-control.js';
+import { sessionControlSocketPath } from '../shared/paths.js';
+import type { Session } from '../shared/types.js';
 import type { DatabaseInstance } from '../store/db.js';
 import { createEventsRepo } from '../store/repositories/events.js';
 import { createMetaRepo } from '../store/repositories/meta.js';
 import { createScheduledJobsRepo } from '../store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../store/repositories/sessions.js';
+import { requestInject, type InjectRequestResult } from './inject-continue.js';
 import { createIpcServer } from './ipc-server.js';
 import { reconcileOrphans } from './reconcile.js';
 import { createScheduler, type JobDispatch, type JobResult, type TimerHandle } from './scheduler.js';
@@ -37,6 +39,9 @@ export interface SupervisorDeps {
   dispatch?: JobDispatch;
   setTimer?: (fn: () => void, ms: number) => TimerHandle;
   clearTimer?: (h: TimerHandle) => void;
+  /** Minta wrapper pemilik PTY sesi meng-inject continue (I-12 poin 1). Default = connect ke socket
+   *  kontrol per-sesi (`sessionControlSocketPath`) via IPC. Di-inject di test → tanpa socket nyata. */
+  requestInject?: (session: Session) => Promise<InjectRequestResult>;
 }
 
 /** Dilempar saat socket/pipe daemon sudah dipakai (instance daemon lain sudah berjalan). */
@@ -71,6 +76,10 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       type: 'daemon_error',
       payload: { where, error: err instanceof Error ? err.message : String(err), ...extra },
     });
+
+  // Sisi-daemon dari kanal inject-continue (I-12 poin 1). Default = connect ke socket kontrol
+  // per-sesi yang di-host wrapper; test menyuntik pengganti tanpa socket nyata.
+  const requestInjectFn = deps.requestInject ?? ((session: Session): Promise<InjectRequestResult> => requestInject(sessionControlSocketPath(session.id)));
 
   // Dispatch nyata (M3d.5 probe + M3d.6 resume-by-id + M3d.7 inject-continue gating). Setiap
   // cabang menulis event audit (pola sudah ada di reconcile.ts/limit-watcher.ts); error tak
@@ -143,20 +152,31 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
 
       if (session.proc_state === 'alive') {
         // Jalur preferred ADR-014: sesi masih hidup di PTY → inject "continue", bukan kill+respawn.
-        // `ptyFd` selalu undefined di sini — fd hanya dipegang wrapper proses, daemon belum punya
-        // jalur IPC untuk mengambilnya (seam integrasi M3d.7 lanjutan, bukan slice ini). Gating akan
-        // selalu menolak dengan 'invalid_pty_fd' sampai IPC itu ter-plumb; actuation inject-nya
-        // sendiri (menulis "continue\n" ke fd) hidup di wrapper, bukan di sini.
-        const reason = checkInjectGating({ procAlive: true, ptyFd: undefined });
+        // Daemon bukan pemilik PTY → minta wrapper (via socket kontrol per-sesi) yang melakukan gating
+        // lokal + menulis token literal (I-12 poin 1). Token TAK PERNAH dilewatkan lewat IPC ini.
+        const outcome = await requestInjectFn(session);
+        if (outcome.injected) {
+          sessions.markResumed(job.session_id);
+          events.append({
+            session_id: job.session_id,
+            type: 'status_change',
+            payload: { to: 'RESUMED', reason: 'inject_continue' },
+          });
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_done',
+            payload: { jobId: job.id, action: 'inject_continue' },
+          });
+          return 'done';
+        }
+        // Tak ter-inject (gating wrapper menolak ATAU wrapper tak terjangkau). 'done', bukan 'retry' —
+        // hindari retry-spin tak berujung (bug yang menyebabkan percobaan sebelumnya di-revert).
+        // Kondisi tetap terlihat via event audit; surface manual sesuai ADR-014 (jangan auto-kill).
         events.append({
           session_id: job.session_id,
           type: 'job_dispatch_pending',
-          payload: { jobId: job.id, action: 'inject_deferred', reason, note: 'requires wrapper PTY IPC (M3d.7 integration seam)' },
+          payload: { jobId: job.id, action: 'inject_skipped', reason: outcome.reason, reachable: outcome.reachable },
         });
-        // 'done', bukan 'retry' — actuation nyata adalah slice integrasi terpisah; retry tanpa
-        // batas di sini hanya akan spin selamanya (bug yang menyebabkan percobaan sebelumnya
-        // di-revert). Kondisi tetap terlihat via event audit + status sesi, surface manual sesuai
-        // ADR-014 (jangan auto-kill).
         return 'done';
       }
 

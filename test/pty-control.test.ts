@@ -31,6 +31,16 @@ describe('checkInjectGating', () => {
     expect(checkInjectGating({ procAlive: true, ptyFd: 5 })).toBeNull();
     expect(checkInjectGating({ procAlive: true, ptyFd: 5, foregroundIsAgent: undefined, idle: undefined })).toBeNull();
   });
+
+  it('accepts hasPtyHandle as the write-handle proof (wrapper side, no numeric fd)', () => {
+    // Wrapper memegang node-pty (tanpa fd numerik portabel) → hasPtyHandle:true lolos gate handle.
+    expect(checkInjectGating({ procAlive: true, hasPtyHandle: true })).toBeNull();
+    // Tanpa fd MAUPUN hasPtyHandle → tak ada tempat menulis → tetap terblokir.
+    expect(checkInjectGating({ procAlive: true })).toBe('invalid_pty_fd');
+    expect(checkInjectGating({ procAlive: true, hasPtyHandle: false })).toBe('invalid_pty_fd');
+    // hasPtyHandle tak melewati gate berikutnya bila foreground/idle eksplisit false.
+    expect(checkInjectGating({ procAlive: true, hasPtyHandle: true, idle: false })).toBe('proc_not_idle');
+  });
 });
 
 describe('injectToPty', () => {

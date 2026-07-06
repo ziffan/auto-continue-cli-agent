@@ -1,8 +1,11 @@
 import { isAbsolute } from 'node:path';
 import * as pty from 'node-pty';
+import { createInjectHandler } from '../daemon/inject-continue.js';
+import { createIpcServer } from '../daemon/ipc-server.js';
 import { createLimitWatcher } from '../daemon/limit-watcher.js';
 import { scheduleProbeForLimit } from '../daemon/schedule-reset.js';
 import { genSessionId } from '../shared/ids.js';
+import { sessionControlSocketPath } from '../shared/paths.js';
 import { nowMs } from '../shared/time.js';
 import { which } from '../shared/which.js';
 import type { Tool } from '../shared/types.js';
@@ -78,6 +81,34 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
 
   deps.sessions.setPid(id, ptyProcess.pid);
 
+  // M3d.7 / I-12 poin 1 — kanal inject-continue: wrapper (pemilik PTY) meng-host handler `inject` di
+  // socket kontrol per-sesi supaya daemon bisa minta melanjutkan sesi HIDUP ini (limit != exit,
+  // ADR-014 §1). Token yang ditulis = literal `CONTINUE_TOKEN` di dalam handler — TAK PERNAH dari IPC
+  // args maupun output (injection firewall struktural). Non-fatal by design: bila host socket gagal,
+  // sesi user (jalur utama) tetap jalan, hanya kehilangan kemampuan auto-inject (surface via event).
+  let exited = false;
+  const controlPath = sessionControlSocketPath(id);
+  const controlServer = createIpcServer({
+    inject: createInjectHandler({
+      isAlive: () => !exited,
+      write: (text) => ptyProcess.write(text),
+    }),
+  });
+  controlServer
+    .listen(controlPath)
+    .then(() => {
+      // Race listen-vs-exit: bila proses sudah keluar sebelum listen selesai, tutup segera supaya
+      // tak ada socket/pipe menggantung (mencegah handle bocor yang menahan event-loop).
+      if (exited) void controlServer.close();
+    })
+    .catch((err: unknown) => {
+      deps.events.append({
+        session_id: id,
+        type: 'control_socket_error',
+        payload: { error: err instanceof Error ? err.message : String(err) },
+      });
+    });
+
   // M3d.1 — seam Detector→sesi live: engine murni (tak akses store/IPC, ADR-008/013), transisi
   // state dilakukan di sini oleh pemanggil saat `onLimit` menyala (sekali, latched).
   const watcher = createLimitWatcher({
@@ -128,8 +159,10 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
 
   const waitForExit = new Promise<number>((resolve) => {
     ptyProcess.onExit(({ exitCode }) => {
+      exited = true;
       dataSub.dispose();
       restoreStdin?.();
+      void controlServer.close();
       deps.sessions.markExited(id);
       deps.events.append({
         session_id: id,

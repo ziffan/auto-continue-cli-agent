@@ -28,7 +28,11 @@ export function injectToPty(fd: number, text: string, writeImpl: typeof writeSyn
 
 export interface InjectGatingInput {
   procAlive: boolean;
-  ptyFd?: number; // undefined saat wrapper-fd belum ter-plumb (integration seam)
+  /** Handle tulis ke PTY sebagai fd numerik (jalur legacy daemon-side; selalu undefined di sana). */
+  ptyFd?: number;
+  /** `true` = pemanggil memegang handle PTY yang bisa ditulis (jalur wrapper-side: node-pty `.write`,
+   *  tak ada fd numerik portabel). Menggantikan cek `ptyFd` bila diset — wrapper adalah pemilik PTY. */
+  hasPtyHandle?: boolean;
   foregroundIsAgent?: boolean; // dihitung wrapper nanti; undefined = unknown
   idle?: boolean; // dihitung wrapper nanti; undefined = unknown
 }
@@ -37,7 +41,10 @@ export interface InjectGatingInput {
  * `idle` berarti BELUM DIKETAHUI — tidak memblokir (hanya `false` eksplisit yang memblokir). */
 export function checkInjectGating(i: InjectGatingInput): string | null {
   if (!i.procAlive) return 'proc_not_alive';
-  if (i.ptyFd === undefined || i.ptyFd <= 0) return 'invalid_pty_fd';
+  // Handle-tulis valid bila wrapper menyatakan memegang PTY (`hasPtyHandle`) ATAU fd numerik > 0
+  // (jalur legacy). Tanpa keduanya → tak ada tempat aman menulis "continue".
+  const handleOk = i.hasPtyHandle === true || (i.ptyFd !== undefined && i.ptyFd > 0);
+  if (!handleOk) return 'invalid_pty_fd';
   if (i.foregroundIsAgent === false) return 'foreground_not_agent';
   if (i.idle === false) return 'proc_not_idle';
   return null;
