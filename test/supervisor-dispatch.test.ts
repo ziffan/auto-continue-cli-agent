@@ -82,6 +82,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     cwd: string;
     jobKind: 'probe' | 'resume';
     requestInject?: SupervisorDeps['requestInject'];
+    spawnResume?: SupervisorDeps['spawnResume'];
   }): Promise<{ db: DatabaseInstance }> {
     tempDir = join(tmpdir(), `acca-dispatch-test-${randomBytes(4).toString('hex')}`);
     process.env.ACCA_DATA_DIR = tempDir;
@@ -113,6 +114,9 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
       setTimer: manual.setTimer,
       clearTimer: manual.clearTimer,
       requestInject: opts.requestInject,
+      // spawnResume SELALU di-inject untuk cabang exited — default runSession akan men-spawn
+      // proses `claude` NYATA di mesin ini (fatal untuk unit test).
+      spawnResume: opts.spawnResume,
       // deps.dispatch SENGAJA tidak diisi — memakai dispatch nyata di dalam createSupervisor.
     });
 
@@ -254,25 +258,43 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(payload.reachable).toBe(false);
   });
 
-  it('resume: proc_state exited + cwd exists → resume_ready event with spec.cwd + done', async () => {
+  it('resume: proc_state exited + cwd exists → spawns fresh wrapper at spec.cwd (AC-8), marks RESUMED', async () => {
     const realCwd = process.cwd();
-    const { db: database } = await setupAndFire({ sessionId: 's-resume-exited-ok', procState: 'exited', cwd: realCwd, jobKind: 'resume' });
+    const spawnCalls: Array<{ file: string; args: string[]; cwd?: string; tool: string }> = [];
+    const spawnResume = vi.fn((spec: { file: string; args: string[]; cwd?: string }, session: { tool: string }) => {
+      spawnCalls.push({ file: spec.file, args: spec.args, cwd: spec.cwd, tool: session.tool });
+      return { sessionId: 'new-session-1' };
+    });
+
+    const { db: database } = await setupAndFire({ sessionId: 's-resume-exited-ok', procState: 'exited', cwd: realCwd, jobKind: 'resume', spawnResume });
+
+    // Spawn dipanggil TEPAT SEKALI, dengan cwd sesi ASLI (AC-8) + perintah resume-by-id yang benar.
+    expect(spawnResume).toHaveBeenCalledTimes(1);
+    expect(spawnCalls[0]?.cwd).toBe(realCwd);
+    expect(spawnCalls[0]?.file).toBe('claude');
+    expect(spawnCalls[0]?.args).toEqual(['--resume', 's-resume-exited-ok']);
 
     const remaining = pendingJobs(database, 's-resume-exited-ok');
     expect(remaining).toHaveLength(0);
 
+    const session = createSessionsRepo(database).getById('s-resume-exited-ok');
+    expect(session?.status).toBe('RESUMED');
+
     const events = eventsFor(database, 's-resume-exited-ok');
     const done = events.find((e) => e.type === 'job_dispatch_done');
-    expect(done).toBeDefined();
-    const payload = done?.payload as { action: string; spec: { file: string; args: string[]; cwd?: string } };
-    expect(payload.action).toBe('resume_ready');
+    const payload = done?.payload as { action: string; newSessionId?: string; spec: { cwd?: string } };
+    expect(payload.action).toBe('resume_spawned');
+    expect(payload.newSessionId).toBe('new-session-1');
     expect(payload.spec.cwd).toBe(realCwd);
-    expect(payload.spec.file).toBe('claude');
   });
 
-  it('resume: proc_state exited + cwd missing → BLOCKED event + done (terminal, no retry)', async () => {
+  it('resume: proc_state exited + cwd missing → BLOCKED event + done (terminal, no retry, NO spawn)', async () => {
     const missingCwd = join(tmpdir(), `acca-missing-cwd-${randomBytes(6).toString('hex')}`);
-    const { db: database } = await setupAndFire({ sessionId: 's-resume-exited-blocked', procState: 'exited', cwd: missingCwd, jobKind: 'resume' });
+    const spawnResume = vi.fn(() => ({ sessionId: 'should-not-happen' }));
+    const { db: database } = await setupAndFire({ sessionId: 's-resume-exited-blocked', procState: 'exited', cwd: missingCwd, jobKind: 'resume', spawnResume });
+
+    // AC-8: cwd hilang → JANGAN spawn di tempat yang salah.
+    expect(spawnResume).not.toHaveBeenCalled();
 
     const remaining = pendingJobs(database, 's-resume-exited-blocked');
     expect(remaining).toHaveLength(0);
