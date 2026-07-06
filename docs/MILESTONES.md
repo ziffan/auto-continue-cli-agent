@@ -52,8 +52,13 @@ better-sqlite3 prebuild → require+operasi OK; sisa M1 tertutup untuk Ubuntu); 
 Linux** (sebelumnya hanya Windows). (b) **port-discovery agy live-verified** (G-22 terbukti pada proses `agy` LS nyata,
 `discoverLocalPorts` → 2 port terkorelasi inode, 4× reproduksi) + GetUserStatus 200 → skema **direkonsiliasi ke respons
 live** (I-7 CLOSED, G-23/G-24) + `parseAgyUserStatus` diperbaiki (label/`modelOrAlias.model` + G-17 exhausted usedFraction=1).
-**Sisa M3 = actuation seams (I-12 poin 1&2, bukan engine):** inject-continue butuh IPC wrapper↔daemon; resume-by-id butuh
-spawn fresh-wrapper. Catatan integrasi tersisa: I-10 (cross-process re-arm). (I-12 poin 3 live-verify port-discovery ✅.)
+**Update 6 Jul (actuation seams TERTUTUP — Windows):** **M3d.7/I-12 poin 1 ✅ (`33e78b5`)** inject-continue via
+kanal IPC per-sesi (wrapper host `createIpcServer({inject})` ↔ daemon `requestInject`; token literal hardcoded =
+injection firewall struktural; smoke live: child PTY terima `continue\r`) · **M3d.6/I-12 poin 2 ✅ (`76df6ae`)**
+resume-by-id spawn wrapper PTY baru di cwd asli via `runSession` in-process (AC-8: cwd hilang→BLOCKED; smoke live:
+sesi baru pid nyata + lama RESUMED). **209/209 test, Tier-1 self-review.** **Sisa M3 (follow-up, bukan blocker
+loop):** gating foreground/idle belum dihitung (**I-13**), relokasi runSession + link old→new (**I-14**),
+live-verify actuation dgn limit ASLI opportunistik (**I-15**), I-10 cross-process re-arm.
 
 > Batas scope-file M3d: banyak slice menyentuh `daemon/supervisor.ts` sebagai titik integrasi → slice
 > ber-supervisor **diserialkan** (bukan paralel). Slice adapter-probe (M3d.3/M3d.4) & fixture (M3d.8) =
@@ -111,7 +116,13 @@ sinyal limit → status `LIMIT_HIT` + `proc_state` + event `status_change`, tanp
 **Bukti**: test hijau kedua cabang.
 **Tier review**: **1** (keputusan aksi-auto + state machine).
 
-### M3d.6 — Continue-engine: resume-by-id (proc `exited`) di cwd asli (ADR-014 §3-4)
+### M3d.6 — Continue-engine: resume-by-id (proc `exited`) di cwd asli (ADR-014 §3-4) ✅ (`76df6ae`, 6 Jul)
+> **DONE:** `supervisor.realDispatch` cabang `exited` → `spawnResumeFn` (injectable; default `runSession` in-process,
+> BUKAN `daemon/continue.ts` — actuation cukup di dispatch + engine wrapper yang sudah ada). Spawn wrapper PTY baru di
+> `spec.cwd` (=cwd asli, AC-8) via `resumeCmd`; cwd hilang → BLOCKED sebelum spawn. Sukses → `markResumed` sesi lama +
+> event `resume_spawned {newSessionId,spec}`. Sesi hasil resume host socket kontrol → re-injectable. Uji: dispatch
+> test (cwd asli + BLOCKED no-spawn) + smoke live Win (sesi baru pid nyata di cwd benar, lama RESUMED). Live-verify
+> `claude --resume` dgn sesi asli = opportunistik (I-15). Relokasi runSession→process-wrapper + link old→new = I-14.
 **Slice**: sesi `exited` + kuota ok → jalankan resume di **cwd asli** (`claude --resume <id>` / `agy --conversation <id>`) via PTY; **cwd hilang → `BLOCKED`** (jangan resume di tempat salah).
 **Scope file**: `daemon/continue.ts` (baru), `adapters/{claude,antigravity}.ts resumeCmd()` (pakai), `daemon/supervisor.ts` (panggil).
 **Di luar scope**: jalur inject-PTY (M3d.7).
@@ -119,7 +130,15 @@ sinyal limit → status `LIMIT_HIT` + `proc_state` + event `status_change`, tanp
 **Bukti**: integration test (cwd benar + cwd hilang→BLOCKED); log run.
 **Tier review**: **1** (spawn proses + korektness cwd = AC-8).
 
-### M3d.7 — Continue-engine: inject "continue" ke PTY hidup + gating (ADR-014 §1-2, preferred)
+### M3d.7 — Continue-engine: inject "continue" ke PTY hidup + gating (ADR-014 §1-2, preferred) ✅ SEAM (`33e78b5`, 6 Jul)
+> **DONE (kanal IPC + actuation):** wrapper `acca run` (pemilik PTY) host `createIpcServer({inject})` di socket kontrol
+> per-sesi (`sessionControlSocketPath`, ADR-015 — tanpa transport baru); daemon `requestInject` → wrapper gating
+> lokal (`checkInjectGating`+`hasPtyHandle`) + `ptyProcess.write(CONTINUE_TOKEN='continue\r')`. Injected → `markResumed`
+> (RESUMED, proc alive) + event; gagal/unreachable → `inject_skipped` + done (surface, TANPA spin). **Injection firewall
+> STRUKTURAL:** token hardcoded wrapper, perintah `inject` tanpa payload (G-26). Uji: `inject-continue.test.ts` (8, incl
+> firewall-ignores-args) + dispatch (injected/unreachable) + smoke live Win (child PTY terima `continue\r`).
+> **SISA (I-13):** komputasi gating `foregroundIsAgent`/`idle` belum ada (hook di-thread, drop-in) → saat ini inject
+> lolos hanya dgn alive+hasPtyHandle. Keystroke agy + live-verify limit asli = I-15.
 **Slice**: sesi `alive` + **gating LULUS** (proc alive = child kita · foreground = agent bukan shell · sesi idle bukan mid-turn · probe kuota ok) → inject **literal tetap** `"continue"\n` ke PTY. **Gating GAGAL → surface manual, TAK auto-kill.** Token **tak pernah** dari isi output (injection firewall).
 **Scope file**: `daemon/continue.ts`, `shared/proc.ts` (foreground/idle detection lintas-OS — reuse spike burn2 sesi ini: idle marker footer, foreground=agent), `daemon/supervisor.ts` (panggil).
 **Di luar scope**: resume-by-id (M3d.6), remote.

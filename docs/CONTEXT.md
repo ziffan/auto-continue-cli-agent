@@ -6,7 +6,12 @@
 
 ## Status saat ini
 
-- **Fase:** **M3d ENGINE LENGKAP (8 slice, semua Tier-1) + agy probe LIVE-WIRED lintas-OS.** M3a/b/c ✅. M3d.8/1/2 ✅.
+- **Fase:** **M3d ENGINE LENGKAP + ACTUATION SEAMS TERTUTUP (I-12 poin 1&2).** Loop auto-continue kini
+  tersambung end-to-end (deteksi→jadwal→probe→**inject-continue / resume-by-id NYATA**), semua Tier-1,
+  live-verified Windows. M3a/b/c ✅. M3d.8/1/2 ✅. **M3d.6 (resume-by-id spawn) & M3d.7 (inject-continue
+  IPC) ✅ 6 Jul** — lihat entri teratas. Sisa follow-up (bukan blocker loop): gating foreground/idle
+  belum dihitung, live-verify resume `claude --resume`/keystroke agy (opportunistik), I-10 re-arm.
+- **Fase (sebelumnya):** **M3d ENGINE LENGKAP (8 slice, semua Tier-1) + agy probe LIVE-WIRED lintas-OS.** M3a/b/c ✅. M3d.8/1/2 ✅.
   **M3d.3–M3d.7 ✅ (REBUILD, `3db7fa6`)** — probe usage CC (HTTP OAuth) & agy (LS GetUserStatus) + dispatch
   probe→resume/backoff + resume-by-id (guard cwd, AC-8) + inject-continue gating; **semua I/O di-inject & bertes**
   (**199/199**, hijau di **Ubuntu 24.04** + Windows). **M3d.4 probeUsage() DI-WIRE ULANG per G-23 + live-verified Windows
@@ -16,7 +21,39 @@
   dikoreksi (**I-7 CLOSED**); parser G-17 exhausted. **Sisa M3 = actuation seams (I-12 poin 1&2, bukan engine, butuh
   integrasi OS nyata):** PTY IPC wrapper↔daemon untuk inject-continue, spawn fresh-wrapper untuk resume-by-id. Lihat blok
   "sesi Windows" tepat di bawah.
-- **Terakhir diupdate:** 2026-07-05 (sesi Windows, session-end ini) — **agy live-probe Windows: port-discovery live-verified
+- **Terakhir diupdate:** 2026-07-06 (sesi Windows, session-end ini) — **ACTUATION SEAMS M3d TERTUTUP:
+  inject-continue (I-12 poin 1) + resume-by-id spawn (I-12 poin 2) di-wire & LIVE-VERIFIED Windows.**
+  Pola Opus-orkestrator inline (seam paling security-sensitive: inject PTY + injection firewall) +
+  self-tier-review Tier-1. **Dua slice, dua commit, dua smoke live:**
+  **(1) M3d.7/I-12 poin 1 — kanal IPC inject-continue (`33e78b5`):** pakai primitif IPC yang sudah ada
+  (ADR-015), bukan transport baru. **Wrapper** (`acca run`, pemilik PTY) meng-host `createIpcServer({inject})`
+  di **socket kontrol per-sesi** (`sessionControlSocketPath` — named pipe Win / unix socket POSIX,
+  deterministik dari session id, diturunkan dari `dataDir()` utk isolasi test). Handler jalankan gating
+  lokal → tulis token via `ptyProcess.write`. **Daemon** (`supervisor.realDispatch` cabang `alive`) →
+  `requestInject(session)`: injected → `markResumed` (RESUMED, proc tetap alive) + event; gagal/tak-
+  terjangkau → `inject_skipped` + `done` (**surface manual, TANPA retry-spin**, ADR-014).
+  **Injection firewall STRUKTURAL:** `CONTINUE_TOKEN='continue\r'` di-hardcode di wrapper; perintah
+  `inject` **tak bawa payload** (args diabaikan) → mustahil menyelundupkan keystroke dari daemon/output.
+  Baru: `daemon/inject-continue.ts`, `sessionControlSocketPath`, `sessions.markResumed`, `checkInjectGating`
+  +`hasPtyHandle`. **Smoke live:** wrapper host pipe `acca-session-kcb3` → `requestInject {injected:true}`
+  → child PTY hidup terima `"continue\r"`.
+  **(2) M3d.6/I-12 poin 2 — resume-by-id spawn (`76df6ae`):** cabang `exited` tak lagi cuma emit
+  `resume_ready` — kini `spawnResumeFn` (injectable; **default = `runSession` in-process**) men-spawn
+  wrapper PTY BARU di **cwd asli** (`resumeCmd` claude `--resume <id>`; which/G-12; catat sesi baru; host
+  socket kontrol → **hasil resume ikut re-injectable**). **cwd hilang → BLOCKED** sebelum spawn (AC-8).
+  Sukses → `markResumed` sesi lama + event `resume_spawned {newSessionId,spec}`; spawn gagal → catch →
+  retry backoff. **Smoke live:** default path spawn child PTY nyata di cwd benar → sesi baru `jj22` (pid
+  nyata) tercatat, sesi lama `RESUMED`.
+  **Keputusan impl (dalam ADR-002/014/015, bukan ADR baru):** resume spawn pakai **`runSession` in-process**
+  (bukan re-spawn `acca run` via CLI — commander akan salah-parse `--resume` sbg opsi `run`); daemon jadi
+  pemilik PTY sesi hasil-resume (headless, output → log daemon). **Verifikasi (Opus sendiri):** build ✅ ·
+  eslint ✅ · **209/209 test** (+10: 8 `inject-continue.test.ts` + hasPtyHandle + rewrite exited/alive
+  dispatch) · `run.integration` tetap hijau tanpa hang (race listen/exit ter-guard). **Docs:** GOTCHAS
+  G-26/G-27, ISSUES (I-12 poin 1&2 CLOSED + I-13/I-14/I-15 baru), MILESTONES M3d.6/M3d.7, DECISIONS Change Log.
+  **Next:** (1) hitung gating `foregroundIsAgent`/`idle` (I-13, hook sudah di-thread); (2) I-10 cross-process
+  re-arm (daemon hidup arm job dari run-core via IPC notify); (3) live-verify resume `claude --resume`/keystroke
+  agy saat limit asli (opportunistik). `main` ahead `origin/main` **2 commit** (+docs commit) — di-push sesi ini.
+- **Terakhir diupdate:** 2026-07-05 (sesi Windows) — **agy live-probe Windows: port-discovery live-verified
   + probeUsage() di-wire ulang per G-23.** Fokus: "opsi yang butuh sesi agy nyata + Windows-only" (weekend fit), pola
   Opus-orkestrator inline + self-tier-review Tier-1. Hasil:
   **(1) Sub-task 1 — port-discovery Windows LIVE-VERIFIED (I-12 poin 3 lintas-OS TUNTAS):** `discoverLocalPorts(<agy-pid>)`
