@@ -320,10 +320,40 @@ assert `includes('continue')`. **Sumber:** Sub-task 2 + smoke live (6 Jul), `dae
 
 ---
 
+## Gating inject-continue (M3d/I-13) — foreground & idle (7 Jul)
+
+### G-28 — Foreground "agent-bukan-shell" = `/proc/<pid>/stat` tpgid vs pgrp, BUKAN name-matching; proses piped → tpgid=-1
+**Jebakan/Fakta:** untuk gating inject-continue poin (ii) ADR-014 ("foreground = agent, bukan shell"), godaan =
+mencocokkan nama proses foreground ke daftar shell (`bash`/`zsh`/…). **Rapuh** (daftar tak lengkap, nama truncated
+15-char, `node` ambigu). **Sinyal yang tepat & robust:** grup proses mana yang memegang **foreground terminal (pts)**.
+node-pty (forkpty) menjadikan child **session+group leader** (`setsid`) → `pgrp == childPid`. `/proc/<childPid>/stat`
+field **8 = tpgid** (foreground pgrp dari controlling tty) & field **5 = pgrp**. Bila agent foreground → `tpgid == pgrp`;
+bila "drop ke shell" interaktif, subshell ambil job-control sendiri (grup baru + `tcsetpgrp`) → `tpgid != pgrp`. Maka
+`tpgid==pgrp`→agent(true) · `!=`(>0)→grup lain(false, block) · **`<=0`→unknown (undefined, JANGAN artikan "bukan agent")**.
+**Live Ubuntu:** child ber-PTY → `tpgid==pgrp`=8303 → true; **proses PIPED (non-tty, mis. proses tool/test sendiri) →
+`tpgid=-1`** → undefined (bukan false!). **Parse:** `comm` (field 2) bisa memuat spasi/`)` → mulai split dari `)`
+**TERAKHIR**. Windows/ConPTY tak punya tpgid sederhana → undefined (TBD). **Cara benar:** `foregroundIsAgent` never-throws,
+semua kegagalan → undefined (tak memblokir; token-literal firewall tetap jaga keamanan). **Sumber:** I-13 (7 Jul),
+`src/shared/foreground.ts`, live-verify /proc Ubuntu.
+
+### G-29 — Idle "bukan mid-turn" = jendela-sunyi penanda busy; regex penanda WAJIB non-global (`.test()` stateful bila `/g`)
+**Jebakan/Fakta:** gating poin (iii) ADR-014 ("idle, bukan mid-turn") dari stream output: footer generate Claude
+(`esc to interrupt`) **di-repaint terus-menerus** (spinner sub-detik) selama turn → idle = **tak ada penanda busy
+selama jendela sunyi** (default 1000ms), bukan "penanda hilang sekali". Melacak dari stream (bukan menebak isi —
+hanya penanda footer tetap; ADR-008/013). **Footgun regex:** penanda dipakai via `RegExp.test()`. Bila regex diberi
+flag **`/g`**, `.test()` menyimpan `lastIndex` → hasil **berselang-seling** true/false untuk input sama (bug diam).
+Penanda WAJIB **non-global** (`/esc to interrupt/i`, tanpa `g`). **Chunk-split:** penanda bisa terbelah antar-chunk
+`onData` → simpan carry ~64 char. **Batas diterima (ADR-014 risk band):** bila agent pause mid-turn >quietMs tanpa
+repaint footer → false-"idle" → inject = **Enter-keystroke** (bukan perintah, low-harm). agy: penanda busy belum
+diverifikasi → `undefined` (unknown, tak memblokir) sampai I-15. **Sumber:** I-13 (7 Jul), `src/shared/idle-tracker.ts`.
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-07 (Ubuntu, gating M3d/I-13) | G-28 (foreground = `/proc` tpgid vs pgrp, bukan name-match; piped→tpgid=-1=unknown bukan false; parse comm dari `)` terakhir; live-verify Ubuntu), G-29 (idle = jendela-sunyi penanda busy `esc to interrupt`; regex penanda WAJIB non-global — `/g` bikin `.test()` stateful; carry antar-chunk; risk band Enter-keystroke). Dari I-13. |
 | 2026-07-06 (Windows, actuation M3d.6/7) | G-26 (inject-continue: injection firewall STRUKTURAL — token hardcoded wrapper + perintah IPC tanpa payload; wrapper host socket non-fatal; guard race listen/exit), G-27 (resume-by-id: jangan re-spawn `acca run … --resume` — commander salah-parse; pakai `runSession` in-process; ConPTY echo `\r`→`\r\n`). Dari wiring actuation seams I-12 poin 1&2 + 2 smoke live Windows. |
 | 2026-07-05 (Windows, wiring M3d.4) | G-25 (undici `fetch` tak bisa `rejectUnauthorized:false` tanpa dep `undici` → jalur loopback pakai `node:https` `loopbackHttpsPostJson`, insecure-TLS dibatasi ketat ke host loopback + tetap `guardEgress`). Dari wiring `probeAgyUsage` per G-23 + live-verify Windows (Get-NetTCPConnection port-discovery ✅ + probe 8 model nyata dalam ~1s). |
 | 2026-07-05 (live-verify Ubuntu) | G-23 (GetUserStatus agy = port HTTPS(gRPC) + Connect-JSON; retry ~2–4s pasca bind sampai HTTP 200; `Auth succeeded` = auth lokal LS bukan login upstream; salah-protokol gagal senyap ECONNRESET/EPROTO), G-24 (bentuk entri model NYATA = `label` + `modelOrAlias.model`, bukan flat `model` — koreksi I-7; parser + fixture direkonsiliasi ke capture live; G-17 exhausted di-emit usedFraction=1 bukan skip). Dari live-verify port-discovery + GetUserStatus di Ubuntu 24.04 (I-12 poin 3). |
