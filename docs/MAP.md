@@ -46,9 +46,12 @@ auto-continue-cli-agent/
   boleh `store/` langsung (baca `meta.daemon_heartbeat_at` untuk liveness).
 - `daemon/` satu-satunya penulis `sessions`/`scheduled_jobs`; `events` append-only dari mana pun via repo.
   **Pengecualian bootstrap M1** (daemon/IPC belum ada — ADR-015 baru dibangun M3): proses `acca run` **adalah**
-  wrapper pemilik sesinya sendiri, jadi ia menulis `sessions` (RUNNING→EXITED/FAILED) langsung via repo. Aturan
-  "penulis tunggal = daemon" berlaku penuh sejak M3 saat mutasi lewat `daemon/ipc-server`; `acca run` lalu jadi
-  klien daemon, bukan penulis langsung.
+  wrapper pemilik sesinya sendiri, jadi ia menulis `sessions` (RUNNING→EXITED/FAILED) **dan** `scheduled_jobs`
+  (enqueue `probe` saat LIMIT_HIT) langsung via repo. Sejak M3d, engine wrapper (`runSession`) tinggal di
+  **`daemon/process-wrapper.ts`** (I-14) — dipanggil `cli/commands/run.ts` (jalur user) **dan** `daemon/supervisor.ts`
+  (actuation resume-by-id). Saat wrapper menulis job baru, ia mengirim IPC `rearm` best-effort ke daemon hidup
+  (I-10) supaya scheduler re-arm tanpa restart. Aturan "penulis tunggal = daemon" **belum** penuh: konsolidasi
+  sole-writer `scheduled_jobs` (daemon ambil-alih kepemilikan lifecycle sesi) = residual I-10, refactor menyusul.
 - `adapters/` = satu-satunya tempat perintah tool-spesifik (resume/probe). Core **tak** hardcode `claude`/`agy`.
 - `remote/` masuk supervisor lewat **IPC lokal yang sama** seperti CLI (otoritas identik — ADR-012);
   `remote/redact.ts` wajib di jalur egress output (ADR-013).

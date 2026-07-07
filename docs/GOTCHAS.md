@@ -349,10 +349,30 @@ diverifikasi → `undefined` (unknown, tak memblokir) sampai I-15. **Sumber:** I
 
 ---
 
+## Store / migrasi (M3d/I-14)
+
+### G-30 — SQLite `ALTER TABLE ADD COLUMN` + FK butuh default NULL saat `foreign_keys=ON`; FK ditegakkan → test parent-link WAJIB seed parent dulu
+**Jebakan/Fakta (migrasi `0002` I-14):** menambah kolom foreign-key ke tabel yang sudah ada — mis.
+`ALTER TABLE sessions ADD COLUMN resumed_from TEXT NULL REFERENCES sessions(id)` — hanya sah bila kolom **nullable
+default NULL**. Dengan `foreign_keys=ON` (kita aktifkan di `openDb`), SQLite **menolak** `ADD COLUMN` ber-REFERENCES
+yang punya default non-NULL. Kolom nullable NULL = aman (teruji live upgrade v1→v2 pada DB **ber-isi**: ALTER sukses,
+baris lama dapat `resumed_from=NULL`). **Konsekuensi kedua (mengejutkan di test):** FK itu **benar-benar ditegakkan** —
+`createSession({resumed_from:'id-yg-tak-ada'})` → `SqliteError: FOREIGN KEY constraint failed`. Di produksi selalu
+aman (parent = sesi lama yang PASTI ada + never-purge ADR-004 → parent tak pernah hilang), tapi **test yang menautkan
+parent WAJIB meng-`createSession` parent-nya dulu** (bukan pakai id karangan). **Cara benar (migrasi baru apa pun):**
+(a) kolom FK tambahan = `NULL` default NULL; (b) migrasi 1 file = ALTER + `UPDATE meta SET value='<n>'…` (bump
+`schema_version`, dijalankan `db.exec` dalam satu transaksi — `runMigrations` di `store/db.ts`); (c) `SELECT *`
+mengembalikan kolom baru **di posisi TERAKHIR** (ADD COLUMN append) — mapping better-sqlite3 by-name, jadi urutan
+field di interface `Session` tak wajib sama tapi jaga tetap sinkron DATA-MODEL. **Sumber:** I-14 (7 Jul),
+`src/store/migrations/0002-session-resumed-from.sql`, live smoke upgrade + FK reject.
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-07 (Windows, I-14/I-10) | G-30 (SQLite `ALTER ADD COLUMN` FK butuh default NULL saat `foreign_keys=ON`; FK ditegakkan → test parent-link wajib seed parent; pola migrasi bump schema_version + ADD COLUMN append terakhir). Dari relokasi runSession + resume-chain (I-14). I-10 (daemon re-arm lintas-proses via IPC `rearm`) tak melahirkan gotcha baru — pakai primitif yang ada (`arm()` baca store segar, perintah IPC tanpa payload = G-26). |
 | 2026-07-07 (Ubuntu, gating M3d/I-13) | G-28 (foreground = `/proc` tpgid vs pgrp, bukan name-match; piped→tpgid=-1=unknown bukan false; parse comm dari `)` terakhir; live-verify Ubuntu), G-29 (idle = jendela-sunyi penanda busy `esc to interrupt`; regex penanda WAJIB non-global — `/g` bikin `.test()` stateful; carry antar-chunk; risk band Enter-keystroke). Dari I-13. |
 | 2026-07-06 (Windows, actuation M3d.6/7) | G-26 (inject-continue: injection firewall STRUKTURAL — token hardcoded wrapper + perintah IPC tanpa payload; wrapper host socket non-fatal; guard race listen/exit), G-27 (resume-by-id: jangan re-spawn `acca run … --resume` — commander salah-parse; pakai `runSession` in-process; ConPTY echo `\r`→`\r\n`). Dari wiring actuation seams I-12 poin 1&2 + 2 smoke live Windows. |
 | 2026-07-05 (Windows, wiring M3d.4) | G-25 (undici `fetch` tak bisa `rejectUnauthorized:false` tanpa dep `undici` → jalur loopback pakai `node:https` `loopbackHttpsPostJson`, insecure-TLS dibatasi ketat ke host loopback + tetap `guardEgress`). Dari wiring `probeAgyUsage` per G-23 + live-verify Windows (Get-NetTCPConnection port-discovery ✅ + probe 8 model nyata dalam ~1s). |

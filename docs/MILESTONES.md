@@ -61,9 +61,16 @@ sesi baru pid nyata + lama RESUMED). **209/209 test, Tier-1 self-review.**
 (ADR-014 poin ii&iii): `shared/foreground.ts` (`/proc` tpgid==pgrp, live-verified Ubuntu, G-28) + `shared/idle-tracker.ts`
 (jendela-sunyi `esc to interrupt`, G-29) di-wire ke `createInjectHandler`; inject tak lagi lolos saat drop-ke-shell /
 (Claude) mid-turn. **I-5 ✅ (`280f8d7`)** stale-socket POSIX (G-14) diverifikasi otomatis di Ubuntu (`test/ipc-stale-socket.test.ts`,
-POSIX-only). **231/231 test, build+lint bersih, Tier-1 self-review.** **Sisa M3 (follow-up, bukan blocker loop):**
-relokasi runSession + link old→new (**I-14**), live-verify actuation dgn limit ASLI opportunistik (**I-15**, termasuk
-keystroke agy + foreground Windows), I-10 cross-process re-arm.
+POSIX-only). **231/231 test, build+lint bersih, Tier-1 self-review.**
+**Update 7 Jul (Windows — utang struktural ditutup):** **I-14 ✅ (`c4cf164`)** relokasi `runSession`
+`cli/run-core.ts`→`daemon/process-wrapper.ts` (menutup layer-inversion G-27; cli/ & daemon/ sama-sama import dari
+daemon/) + resume-chain link (migrasi `0002` kolom `sessions.resumed_from` FK, `schema_version`=2; `acca status`
+render `#new<-#old`; live smoke upgrade v1→v2 pada DB ber-isi + FK enforced, G-30). **I-10 ✅ (`4255c99`)** daemon
+hidup re-arm job lintas-proses via IPC `rearm` (`scheduler.rearm()` baca store segar + perintah tanpa payload +
+`notifyDaemonRearm` best-effort; live smoke DUA PROSES: daemon nyata idle → proses terpisah tulis job+rearm →
+dispatch tanpa restart). **235/235 test, build+lint bersih, Tier-1 self-review.** **Sisa M3 (follow-up, bukan
+blocker loop):** live-verify actuation dgn limit ASLI opportunistik (**I-15**: keystroke agy + foreground Windows);
+residual I-10 = konsolidasi sole-writer `scheduled_jobs` (daemon ambil-alih lifecycle sesi, refactor lebih besar).
 
 > Batas scope-file M3d: banyak slice menyentuh `daemon/supervisor.ts` sebagai titik integrasi → slice
 > ber-supervisor **diserialkan** (bukan paralel). Slice adapter-probe (M3d.3/M3d.4) & fixture (M3d.8) =
