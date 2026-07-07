@@ -56,9 +56,14 @@ live** (I-7 CLOSED, G-23/G-24) + `parseAgyUserStatus` diperbaiki (label/`modelOr
 kanal IPC per-sesi (wrapper host `createIpcServer({inject})` ↔ daemon `requestInject`; token literal hardcoded =
 injection firewall struktural; smoke live: child PTY terima `continue\r`) · **M3d.6/I-12 poin 2 ✅ (`76df6ae`)**
 resume-by-id spawn wrapper PTY baru di cwd asli via `runSession` in-process (AC-8: cwd hilang→BLOCKED; smoke live:
-sesi baru pid nyata + lama RESUMED). **209/209 test, Tier-1 self-review.** **Sisa M3 (follow-up, bukan blocker
-loop):** gating foreground/idle belum dihitung (**I-13**), relokasi runSession + link old→new (**I-14**),
-live-verify actuation dgn limit ASLI opportunistik (**I-15**), I-10 cross-process re-arm.
+sesi baru pid nyata + lama RESUMED). **209/209 test, Tier-1 self-review.**
+**Update 7 Jul (Ubuntu — gating + verifikasi):** **I-13 ✅ (`7dffcbe`)** gating foreground/idle DITEGAKKAN
+(ADR-014 poin ii&iii): `shared/foreground.ts` (`/proc` tpgid==pgrp, live-verified Ubuntu, G-28) + `shared/idle-tracker.ts`
+(jendela-sunyi `esc to interrupt`, G-29) di-wire ke `createInjectHandler`; inject tak lagi lolos saat drop-ke-shell /
+(Claude) mid-turn. **I-5 ✅ (`280f8d7`)** stale-socket POSIX (G-14) diverifikasi otomatis di Ubuntu (`test/ipc-stale-socket.test.ts`,
+POSIX-only). **231/231 test, build+lint bersih, Tier-1 self-review.** **Sisa M3 (follow-up, bukan blocker loop):**
+relokasi runSession + link old→new (**I-14**), live-verify actuation dgn limit ASLI opportunistik (**I-15**, termasuk
+keystroke agy + foreground Windows), I-10 cross-process re-arm.
 
 > Batas scope-file M3d: banyak slice menyentuh `daemon/supervisor.ts` sebagai titik integrasi → slice
 > ber-supervisor **diserialkan** (bukan paralel). Slice adapter-probe (M3d.3/M3d.4) & fixture (M3d.8) =
@@ -137,8 +142,9 @@ sinyal limit → status `LIMIT_HIT` + `proc_state` + event `status_change`, tanp
 > (RESUMED, proc alive) + event; gagal/unreachable → `inject_skipped` + done (surface, TANPA spin). **Injection firewall
 > STRUKTURAL:** token hardcoded wrapper, perintah `inject` tanpa payload (G-26). Uji: `inject-continue.test.ts` (8, incl
 > firewall-ignores-args) + dispatch (injected/unreachable) + smoke live Win (child PTY terima `continue\r`).
-> **SISA (I-13):** komputasi gating `foregroundIsAgent`/`idle` belum ada (hook di-thread, drop-in) → saat ini inject
-> lolos hanya dgn alive+hasPtyHandle. Keystroke agy + live-verify limit asli = I-15.
+> **I-13 ✅ (7 Jul, `7dffcbe`):** komputasi gating `foregroundIsAgent` (`/proc` tpgid==pgrp, Linux; Windows TBD) +
+> `idle` (jendela-sunyi `esc to interrupt`) kini ADA & di-wire → inject diblokir saat drop-ke-shell / (Claude) mid-turn.
+> Keystroke agy + foreground Windows + live-verify limit asli = I-15.
 **Slice**: sesi `alive` + **gating LULUS** (proc alive = child kita · foreground = agent bukan shell · sesi idle bukan mid-turn · probe kuota ok) → inject **literal tetap** `"continue"\n` ke PTY. **Gating GAGAL → surface manual, TAK auto-kill.** Token **tak pernah** dari isi output (injection firewall).
 **Scope file**: `daemon/continue.ts`, `shared/proc.ts` (foreground/idle detection lintas-OS — reuse spike burn2 sesi ini: idle marker footer, foreground=agent), `daemon/supervisor.ts` (panggil).
 **Di luar scope**: resume-by-id (M3d.6), remote.

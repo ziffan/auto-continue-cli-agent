@@ -6,11 +6,33 @@
 
 ## Status saat ini
 
-- **Fase:** **M3d ENGINE LENGKAP + ACTUATION SEAMS TERTUTUP (I-12 poin 1&2).** Loop auto-continue kini
-  tersambung end-to-end (deteksi→jadwal→probe→**inject-continue / resume-by-id NYATA**), semua Tier-1,
-  live-verified Windows. M3a/b/c ✅. M3d.8/1/2 ✅. **M3d.6 (resume-by-id spawn) & M3d.7 (inject-continue
-  IPC) ✅ 6 Jul** — lihat entri teratas. Sisa follow-up (bukan blocker loop): gating foreground/idle
-  belum dihitung, live-verify resume `claude --resume`/keystroke agy (opportunistik), I-10 re-arm.
+- **Fase:** **M3d ENGINE LENGKAP + ACTUATION SEAMS TERTUTUP + GATING inject DITEGAKKAN (I-13).** Loop
+  auto-continue tersambung end-to-end (deteksi→jadwal→probe→**inject-continue / resume-by-id NYATA**),
+  semua Tier-1. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅ (6 Jul). **I-13 ✅ + I-5 ✅ (7 Jul, Ubuntu)** — gating
+  inject foreground/idle kini dihitung & ditegakkan; stale-socket POSIX diverifikasi — lihat entri teratas.
+  Sisa follow-up (bukan blocker loop): I-14 relokasi runSession, I-15 live-verify limit ASLI + keystroke agy +
+  foreground Windows (opportunistik), I-10 re-arm.
+- **Terakhir diupdate:** 2026-07-07 (sesi Ubuntu, session-end ini) — **GATING inject-continue foreground/idle
+  DITEGAKKAN (I-13) + stale-socket POSIX diverifikasi (I-5).** Pola Opus-orkestrator inline (gating = paling
+  security-sensitive) + Tier-1 self-review. Dua sub-task, dua commit:
+  **(1) I-13 (`7dffcbe`) — ADR-014 poin (ii)&(iii) ditegakkan:** sebelumnya `foregroundIsAgent`/`idle`
+  `undefined` (tak dihitung) → inject lolos hanya alive+hasPtyHandle. Baru **`shared/foreground.ts`**
+  (foreground = grup child pegang foreground pts: Linux `/proc/<pid>/stat` `tpgid==pgrp`→agent, `!=`→block
+  subshell, `<=0`/Windows→unknown; robust tanpa name-match; never-throws) + **`shared/idle-tracker.ts`**
+  (idle = jendela-sunyi penanda busy `esc to interrupt`, waktu di-inject; agy TBD→undefined) + **`shared/ansi.ts`**
+  (ekstrak `stripAnsi`); di-wire ke `createInjectHandler` di **`run-core.ts`** (`foregroundIsAgent(childPid)` +
+  `idleTracker` feed di `onData`). Semantik gating tak berubah (undefined tak memblokir; token-literal firewall
+  utuh). **Live-verified real /proc Ubuntu:** child ber-PTY→true, piped→`tpgid=-1`→undefined, pid mati→undefined.
+  **+20 test** (foreground 11 · idle 7 · inject 2). **Minor diterima (ADR-014 risk band):** idle false-positive
+  bila pause mid-turn >1s → inject=Enter (bukan perintah).
+  **(2) I-5 (`280f8d7`) — stale-socket POSIX (G-14) diverifikasi otomatis Ubuntu:** `test/ipc-stale-socket.test.ts`
+  (POSIX-only) reproduksi stale ASLI (spawn listener→SIGKILL→file tertinggal→connect ECONNREFUSED) → server pulih
+  (unlink+retry). Test kedua: listener HIDUP→reject EADDRINUSE, tak diganggu. **Tak ada perubahan kode produksi.**
+  **Verifikasi (Opus sendiri):** build ✅ · eslint ✅ · **231/231 test** · live-verify /proc + stale-socket Ubuntu.
+  **Docs:** GOTCHAS G-28/G-29, ISSUES (I-13/I-5 CLOSED), DECISIONS Change Log, MILESTONES M3d.7, CONTEXT.
+  **Next:** (1) I-14 relokasi `runSession`→`daemon/process-wrapper.ts` + link old→new session; (2) I-10 cross-process
+  re-arm; (3) I-15 live-verify actuation dgn limit ASLI (keystroke agy, foreground Windows) — opportunistik.
+  `main` ahead `origin/main` **2 commit** (+docs commit) — belum di-push.
 - **Fase (sebelumnya):** **M3d ENGINE LENGKAP (8 slice, semua Tier-1) + agy probe LIVE-WIRED lintas-OS.** M3a/b/c ✅. M3d.8/1/2 ✅.
   **M3d.3–M3d.7 ✅ (REBUILD, `3db7fa6`)** — probe usage CC (HTTP OAuth) & agy (LS GetUserStatus) + dispatch
   probe→resume/backoff + resume-by-id (guard cwd, AC-8) + inject-continue gating; **semua I/O di-inject & bertes**

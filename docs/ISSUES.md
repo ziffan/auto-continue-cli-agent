@@ -6,18 +6,6 @@
 
 ## Terbuka
 
-### I-13 — Gating inject-continue foreground/idle belum dihitung (hook di-thread, komputasi kosong) [P2, target lanjutan M3d.7]
-Seam inject-continue (I-12 poin 1, `33e78b5`) menjalankan `checkInjectGating` di sisi WRAPPER, tapi input
-`foregroundIsAgent`/`idle` masih `undefined` (belum dihitung) → per semantik gating (`undefined != false`
-tak memblokir), inject **lolos** hanya dengan `procAlive` + `hasPtyHandle`. Berarti gating ADR-014 poin
-(ii) foreground=agent-bukan-shell & (iii) idle-bukan-mid-turn **belum ditegakkan**. Poin (iv) probe-kuota-dulu
-SUDAH dipenuhi struktur pipeline (M3d.5 probe→resume). **Cara benar:** `createInjectHandler` sudah menerima
-callback `foregroundIsAgent()`/`idle()` (drop-in) — tinggal implementasi deteksi lintas-OS: foreground =
-proses foreground PTY == agent (claude/node/agy), idle = footer TUI "esc to interrupt" absen (mis. `shared/proc.ts`).
-Sampai itu, jangan andalkan gating memblokir inject saat sesi drop-ke-shell atau mid-turn. Risiko nyata
-tapi terbatas: inject "continue\r" ke shell = ketik teks tak berbahaya (bukan perintah), ke mid-turn =
-Enter di tengah generate. **Sumber:** review Sub-task 1 (6 Jul).
-
 ### I-14 — Resume-by-id: `runSession` di-import daemon (layer terbalik) + link old→new session longgar [P3, target refactor]
 Sub-task 2 (`76df6ae`) meng-import `runSession` dari `cli/run-core.ts` ke `daemon/supervisor.ts` — **fisiknya
 backward** (MAP: cli/ panggil daemon lewat IPC, bukan sebaliknya). Secara *semantik* `runSession` = engine
@@ -78,13 +66,6 @@ sole-writer `scheduled_jobs` saat daemon ambil-alih kepemilikan sesi. Sampai itu
 paralel = probe tak dipicu tepat waktu di daemon hidup (hanya saat daemon restart). Bootstrap-exception MAP.md
 (run-core tulis `sessions`) di sesi ini **diperluas** ke `scheduled_jobs` — dicatat untuk direkonsiliasi.
 
-### I-5 — Jalur stale-socket unlink+retry POSIX belum teruji otomatis [P3, target verifikasi Ubuntu]
-`ipc-server.listen()` membedakan socket **stale** (daemon lama crash) vs daemon **hidup** via
-connect-probe sebelum unlink (fix tier-review M3a — lihat GOTCHAS G-14). Jalur "daemon hidup → reject"
-teruji di Windows (named pipe EADDRINUSE). Jalur **stale-unlink-retry POSIX** (unix socket file
-tertinggal → probe ECONNREFUSED → unlink → listen ulang) = **logic-only**, tak bisa diuji di mesin
-Windows ini. Verifikasi saat sesi Ubuntu 24.04 (barengan gate native prebuild — masih SISA dari M1).
-
 ### I-4 — `reset-estimator` clock-time wrap tak DST-aware saat lewat tengah malam [P3, target M3/M4]
 `resolveClockTime` menambah `MS_PER_DAY` mentah untuk "next occurrence" alih-alih menghitung ulang wall-clock+1
 hari di zona target → meleset ±1 jam di ~2 hari transisi DST/tahun (detail GOTCHAS G-13). Non-blocking: jalur
@@ -94,6 +75,33 @@ lintas-tengah-malam jadi penting (kemungkinan saat wiring reset ke scheduler M3 
 ---
 
 ## Tertutup
+
+### I-13 — Gating inject-continue foreground/idle belum dihitung [P2] ✅ (7 Jul, `7dffcbe`)
+**RESOLVED:** ADR-014 poin (ii) foreground=agent-bukan-shell & (iii) idle-bukan-mid-turn kini **dihitung &
+ditegakkan** (sebelumnya `undefined` → tak memblokir, inject lolos hanya dgn alive+hasPtyHandle).
+- **`shared/foreground.ts`** (poin ii): foreground = grup proses child memegang foreground pts. Linux
+  `/proc/<childPid>/stat`: `tpgid == pgrp` → agent (true) · `!=` (>0) → grup lain/subshell job-control (false,
+  block) · `<=0`/Windows/unreadable → `undefined` (unknown, tak memblokir). **Robust tanpa daftar nama proses**
+  (lebih baik dari name-matching shell). Never-throws. **Live-verified real /proc Ubuntu:** child ber-PTY →
+  `tpgid==pgrp` → true; proses piped → `tpgid=-1` → undefined; pid mati → undefined.
+- **`shared/idle-tracker.ts`** (poin iii): idle = tak ada penanda busy (`esc to interrupt`, Claude) di output
+  selama jendela sunyi (default 1000ms; footer generate repaint sub-detik). agy: penanda TBD → `undefined` (I-15).
+  Waktu di-inject (deterministik). ANSI-strip + carry-over antar-chunk.
+- **`shared/ansi.ts`**: `stripAnsi` diekstrak dari limit-watcher → dipakai idle-tracker (DRY).
+- **`cli/run-core.ts`**: wire `foregroundIsAgent(childPid)` + `idleTracker` (feed di `onData`) ke `createInjectHandler`.
+Poin (iv) probe-kuota-dulu sudah dipenuhi pipeline (M3d.5). Token literal firewall utuh (undefined tak memblokir,
+tapi yang ditulis tetap `CONTINUE_TOKEN` hardcoded). **+20 test** (foreground 11 · idle-tracker 7 · inject-continue 2),
+229/229 hijau, Tier-1 self-review APPROVE. **Minor diterima (ADR-014 risk band):** idle bisa false-positive bila
+agent pause mid-turn >1s tanpa repaint footer → inject = Enter-keystroke (bukan perintah). **Sisa:** foreground
+Windows (tpgid tak tersedia sederhana) = TBD; keystroke agy + live-verify limit asli = **I-15**.
+
+### I-5 — Jalur stale-socket unlink+retry POSIX belum teruji otomatis [P3] ✅ (7 Jul, `280f8d7`)
+**RESOLVED:** jalur stale-unlink-retry POSIX (`ipc-server.listen`, G-14) kini **diverifikasi otomatis di Ubuntu
+nyata** — `test/ipc-stale-socket.test.ts` (POSIX-only, `describe.skip` win32) mereproduksi socket **stale ASLI**:
+spawn listener node → **SIGKILL** (file socket tertinggal, tak ada cleanup) → `connect` = **ECONNREFUSED** →
+server pulih (unlink + retry bind → layani ping). Test kedua = kontras listener **HIDUP** → bind kedua reject
+`EADDRINUSE`, socket tak diganggu (pembeda stale-vs-hidup benar di POSIX nyata, bukan cuma named pipe Windows).
+**Tak ada perubahan kode produksi** — logic G-14 sudah benar, hanya verifikasi yang kurang. 231/231 hijau.
 
 ### I-12 — Actuation seams M3d: inject-continue & resume-by-id [P2] ✅ (6 Jul, `33e78b5`+`76df6ae`)
 Rebuild M3d.3–7 menyelesaikan **keputusan** (probe→resume/backoff, gating, spec resume) tapi menunda
