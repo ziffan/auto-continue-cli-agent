@@ -6,12 +6,37 @@
 
 ## Status saat ini
 
-- **Fase:** **M3d ENGINE LENGKAP + ACTUATION SEAMS TERTUTUP + GATING inject DITEGAKKAN (I-13).** Loop
+- **Fase:** **M3d ENGINE LENGKAP + ACTUATION SEAMS + GATING + UTANG STRUKTURAL TERTUTUP.** Loop
   auto-continue tersambung end-to-end (deteksi→jadwal→probe→**inject-continue / resume-by-id NYATA**),
-  semua Tier-1. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅ (6 Jul). **I-13 ✅ + I-5 ✅ (7 Jul, Ubuntu)** — gating
-  inject foreground/idle kini dihitung & ditegakkan; stale-socket POSIX diverifikasi — lihat entri teratas.
-  Sisa follow-up (bukan blocker loop): I-14 relokasi runSession, I-15 live-verify limit ASLI + keystroke agy +
-  foreground Windows (opportunistik), I-10 re-arm.
+  semua Tier-1. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
+  `runSession` direlokasi ke `daemon/process-wrapper.ts` (layer inversion ditutup) + resume-chain link;
+  daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
+  blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik); residual
+  I-10 = konsolidasi sole-writer `scheduled_jobs` (refactor arsitektur lebih besar, di luar scope).
+- **Terakhir diupdate:** 2026-07-07 (sesi Windows, session-end ini) — **UTANG STRUKTURAL M3d DITUTUP:
+  I-14 (relokasi runSession + resume-chain) + I-10 (daemon re-arm lintas-proses).** Pola Opus-orkestrator
+  inline (seam security-sensitive: schema/migrasi + IPC state) + Tier-1 self-review. Dua slice, dua commit,
+  dua live smoke:
+  **(1) I-14 (`c4cf164`):** (a) **relokasi** `runSession` `cli/run-core.ts`→**`daemon/process-wrapper.ts`**
+  (tempat yang MAP niatkan; menutup layer-inversion G-27 — cli/ & daemon/ kini sama-sama import dari daemon/).
+  Importer run.ts + supervisor.ts + integration test diperbarui; nol referensi `run-core` tersisa. (b)
+  **resume-chain link:** migrasi **`0002-session-resumed-from.sql`** tambah kolom `sessions.resumed_from`
+  (FK→sessions.id, `schema_version`=2); default `spawnResumeFn` supervisor meneruskan `session.id` sbg
+  parent; **`acca status` render rantai `#new<-#old`**. **Live smoke Windows:** upgrade v1→v2 pada DB
+  **ber-isi** (ALTER aman, baris lama terjaga), FK menolak parent menggantung (G-30), status render benar.
+  **(2) I-10 (`4255c99`):** celah cross-process ditutup — wrapper `acca run` (proses terpisah) enqueue job
+  `probe` saat LIMIT_HIT tapi scheduler daemon **hidup** tak lihat sampai restart. Fix (Option A — IPC
+  notify): **`scheduler.rearm()`** = `arm()` baca ulang `listPending()` segar dari store; supervisor expose
+  perintah IPC **`rearm`** (tanpa payload — injection firewall konsisten G-26); **`process-wrapper.notifyDaemonRearm()`**
+  best-effort fire-and-forget setelah enqueue (non-fatal: tak ada daemon → swallow; recovery-saat-start tetap
+  jamin AC-7). **Live smoke DUA PROSES:** `acca daemon` nyata (pid 13904) idle → proses terpisah tulis job +
+  kirim rearm → daemon dispatch job (blocked/cwd_missing) **tanpa restart**.
+  **Verifikasi (Opus sendiri):** build ✅ · eslint ✅ · **235/235 test** (+6: store/integration resumed_from,
+  scheduler.rearm cross-process, supervisor rearm-over-IPC real-socket, notifyDaemonRearm live+dead) + 2 skip
+  (stale-socket POSIX-only di Windows). **Docs:** GOTCHAS G-30, ISSUES (I-14/I-10 CLOSED), DECISIONS Change Log,
+  MILESTONES M3d, DATA-MODEL (kolom resumed_from), CONTEXT. **Next:** (1) I-15 live-verify actuation dgn limit
+  ASLI (keystroke agy, foreground Windows) — opportunistik; (2) residual I-10 sole-writer consolidation bila
+  daemon ambil-alih lifecycle sesi; (3) M4 (Notifier + status UX). `main` ahead `origin/main` **2 commit** (+docs) — belum di-push.
 - **Terakhir diupdate:** 2026-07-07 (sesi Ubuntu, session-end ini) — **GATING inject-continue foreground/idle
   DITEGAKKAN (I-13) + stale-socket POSIX diverifikasi (I-5).** Pola Opus-orkestrator inline (gating = paling
   security-sensitive) + Tier-1 self-review. Dua sub-task, dua commit:

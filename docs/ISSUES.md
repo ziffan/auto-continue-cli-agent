@@ -6,15 +6,6 @@
 
 ## Terbuka
 
-### I-14 — Resume-by-id: `runSession` di-import daemon (layer terbalik) + link old→new session longgar [P3, target refactor]
-Sub-task 2 (`76df6ae`) meng-import `runSession` dari `cli/run-core.ts` ke `daemon/supervisor.ts` — **fisiknya
-backward** (MAP: cli/ panggil daemon lewat IPC, bukan sebaliknya). Secara *semantik* `runSession` = engine
-process-wrapper yang MAP sendiri niatkan tinggal di `daemon/process-wrapper.ts` (penempatan di cli/ = bootstrap
-M1). Tak ada import cycle (build+test hijau). **Cara benar:** relokasi `runSession` → `daemon/process-wrapper.ts`,
-`cli/commands/run.ts` + supervisor sama-sama import dari sana. **Juga:** sesi hasil resume = row BARU; kaitan ke
-sesi lama hanya lewat event `resume_spawned` (longgar) — pertimbangkan set `cli_session_id`/parent link supaya
-`status`/riwayat bisa menautkan rantai resume. **Sumber:** Sub-task 2 (6 Jul).
-
 ### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
 Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
 `resumeCmd`), bukan CLI agent nyata di limit nyata: (a) apakah `claude`/`agy` hidup di prompt benar-benar
@@ -55,17 +46,6 @@ sekarang** (daemon belum dijalankan di alur normal; `acca run` = wrapper, bukan 
 yang dipicu daemon hidup). **Hilang otomatis saat M3d.5** mengganti dispatch dgn probe sungguhan (done/retry
 nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar ini.
 
-### I-10 — Cross-process gap: `run-core` enqueue probe vs scheduler daemon re-arm hanya saat restart [P2, target M3d.5/wiring]
-M3d.2: sesi live di bawah `acca run` (proses run-core) mendeteksi LIMIT_HIT lalu **meng-enqueue** job `probe`
-ke `scheduled_jobs` (SQLite). Tapi scheduler daemon (proses **terpisah**) hanya membaca job pending saat
-`start()` (recovery) atau `enqueue()` **in-process** — ia **tak tahu** job baru yang ditulis proses lain sampai
-**restart**. Jadi hari ini: enqueue benar & persisten, recovery-saat-restart jalan (AC-7 terpenuhi), tapi daemon
-**hidup** tak langsung men-arm job dari run-core. **Cara benar (slice wiring berikutnya):** run-core kirim IPC
-notify ke daemon ("job baru, re-arm") ATAU daemon yang memiliki lifecycle sesi (bukan run-core) — konsolidasi
-sole-writer `scheduled_jobs` saat daemon ambil-alih kepemilikan sesi. Sampai itu, `acca run` + daemon jalan
-paralel = probe tak dipicu tepat waktu di daemon hidup (hanya saat daemon restart). Bootstrap-exception MAP.md
-(run-core tulis `sessions`) di sesi ini **diperluas** ke `scheduled_jobs` — dicatat untuk direkonsiliasi.
-
 ### I-4 — `reset-estimator` clock-time wrap tak DST-aware saat lewat tengah malam [P3, target M3/M4]
 `resolveClockTime` menambah `MS_PER_DAY` mentah untuk "next occurrence" alih-alih menghitung ulang wall-clock+1
 hari di zona target → meleset ±1 jam di ~2 hari transisi DST/tahun (detail GOTCHAS G-13). Non-blocking: jalur
@@ -75,6 +55,39 @@ lintas-tengah-malam jadi penting (kemungkinan saat wiring reset ke scheduler M3 
 ---
 
 ## Tertutup
+
+### I-14 — `runSession` di-import daemon (layer terbalik) + link old→new session longgar [P3] ✅ (7 Jul, `c4cf164`)
+**RESOLVED (relokasi + resume-chain link):**
+- **(a) Relokasi:** `runSession` dipindah `cli/run-core.ts` → **`daemon/process-wrapper.ts`** (tempat yang MAP
+  niatkan; `run-core.ts` = bootstrap M1). `cli/commands/run.ts` (jalur user) + `daemon/supervisor.ts` (actuation
+  resume-by-id) kini **sama-sama import dari `daemon/`** → arah dependency benar (bukan lagi daemon→cli). Git
+  mendeteksi sbg rename (87%); nol referensi `run-core` tersisa di kode; build+lint bersih.
+- **(b) Resume-chain link:** sesi hasil resume = row BARU; dulu kaitan ke sesi lama hanya via event `resume_spawned`
+  (longgar). Kini migrasi **`0002-session-resumed-from.sql`** tambah kolom `sessions.resumed_from` (FK→sessions.id,
+  `schema_version`=2); default `spawnResumeFn` meneruskan `session.id` sbg parent; `acca status` render rantai
+  **`#new<-#old`**. Dipilih `resumed_from` (bukan reuse `cli_session_id` yang = id milik CLI, semantik beda).
+- **Verifikasi:** 231→235 test (+store persist +integration persist). **Live smoke Windows:** upgrade v1→v2 pada
+  DB **ber-isi** (ALTER TABLE aman, baris lama terjaga), FK menolak parent menggantung (G-30), status render benar.
+  Tier-1 self-review APPROVE.
+
+### I-10 — Cross-process gap: wrapper enqueue probe vs scheduler daemon re-arm hanya saat restart [P2] ✅ (7 Jul, `4255c99`)
+**RESOLVED (Option A — IPC notify → re-arm; BUKAN konsolidasi sole-writer):** wrapper `acca run` (proses terpisah)
+enqueue job `probe` ke `scheduled_jobs` saat LIMIT_HIT, tapi scheduler daemon **hidup** hanya baca pending saat
+`start()`/`enqueue()` in-process → tak tahu tulisan proses lain sampai restart. Fix:
+- **`scheduler.rearm()`** = `arm()` yang **selalu baca `jobs.listPending()` segar** dari store (termasuk tulisan
+  proses lain) & arm timer terdekat. Aman dipanggil mid-dispatch (finally re-arm).
+- **Supervisor** expose perintah IPC **`rearm`** (ipcServer dipindah setelah scheduler; handler tanpa TDZ).
+  Perintah **tanpa payload** — injection firewall konsisten (G-26); socket tetap 0600 owner-only.
+- **`process-wrapper.notifyDaemonRearm()`** = best-effort fire-and-forget setelah `scheduleProbeForLimit`
+  enqueue. **Non-fatal:** tak ada daemon (`DaemonNotRunningError`)/timeout → di-swallow; recovery-saat-`start()`
+  tetap jamin job tak hilang (AC-7). Notify hanya memangkas latensi "sampai restart" → "seketika".
+- **Verifikasi:** +4 test (scheduler.rearm cross-process, supervisor rearm-over-IPC **real socket**,
+  notifyDaemonRearm live+dead-socket). **Live smoke DUA PROSES:** `acca daemon` nyata (pid 13904) idle → proses
+  terpisah tulis job + kirim rearm → daemon dispatch (blocked/cwd_missing) **tanpa restart**. Tier-1 self-review.
+- **Residual (bukan blocker, dibuka sbg pertimbangan future):** konsolidasi **sole-writer** `scheduled_jobs`
+  (daemon ambil-alih kepemilikan lifecycle sesi, bukan wrapper) = refactor arsitektur lebih besar — sengaja
+  di luar scope slice ini. Bootstrap-exception MAP.md (wrapper tulis `sessions`+`scheduled_jobs`) tetap berlaku
+  sampai konsolidasi itu. Lihat catatan MAP.md.
 
 ### I-13 — Gating inject-continue foreground/idle belum dihitung [P2] ✅ (7 Jul, `7dffcbe`)
 **RESOLVED:** ADR-014 poin (ii) foreground=agent-bukan-shell & (iii) idle-bukan-mid-turn kini **dihitung &
