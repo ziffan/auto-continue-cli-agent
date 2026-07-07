@@ -1,13 +1,14 @@
 import { isAbsolute } from 'node:path';
 import * as pty from 'node-pty';
 import { createInjectHandler } from './inject-continue.js';
+import { sendCommand } from './ipc-client.js';
 import { createIpcServer } from './ipc-server.js';
 import { createLimitWatcher } from './limit-watcher.js';
 import { scheduleProbeForLimit } from './schedule-reset.js';
 import { foregroundIsAgent } from '../shared/foreground.js';
 import { genSessionId } from '../shared/ids.js';
 import { createIdleTracker } from '../shared/idle-tracker.js';
-import { sessionControlSocketPath } from '../shared/paths.js';
+import { runtimeSocketPath, sessionControlSocketPath } from '../shared/paths.js';
 import { nowMs } from '../shared/time.js';
 import { which } from '../shared/which.js';
 import type { Tool } from '../shared/types.js';
@@ -36,6 +37,20 @@ export interface RunSessionResult {
   sessionId: string;
   /** Resolve dengan exit code CLI target saat proses (bungkusan PTY) selesai. */
   waitForExit: Promise<number>;
+}
+
+/**
+ * I-10: beri tahu daemon HIDUP (bila ada) agar memuat ulang `scheduled_jobs` & arm timer setelah
+ * proses INI menulis job baru lintas-proses. **Best-effort & non-fatal:** tak ada daemon
+ * (`DaemonNotRunningError`) / timeout → di-swallow. Recovery-saat-`start()` daemon tetap menjamin
+ * job tak hilang (AC-7) — notify ini hanya memangkas latensi "sampai restart" jadi "seketika".
+ */
+export async function notifyDaemonRearm(socketPath: string = runtimeSocketPath()): Promise<void> {
+  try {
+    await sendCommand(socketPath, 'rearm', undefined, { timeoutMs: 2000 });
+  } catch {
+    // Daemon tak berjalan / tak menjawab → jalur ini memang opsional; abaikan.
+  }
 }
 
 /**
@@ -138,10 +153,14 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
         type: 'status_change',
         payload: { to: 'LIMIT_HIT', source: result.source, evidence: result.evidence?.slice(0, 200) },
       });
-      scheduleProbeForLimit(
+      const scheduled = scheduleProbeForLimit(
         { sessionId: id, detectedAt: at, now: at, resetHint: result.resetHint },
         { sessions: deps.sessions, jobs: deps.jobs, events: deps.events },
       );
+      // I-10: job `probe` baru saja ditulis dari proses wrapper INI (bukan daemon). Beri tahu daemon
+      // hidup agar re-arm seketika (best-effort; fire-and-forget). Hanya bila benar-benar ter-enqueue
+      // (scheduled !== null → setReset sukses, bukan race exit).
+      if (scheduled) void notifyDaemonRearm();
     },
   });
 

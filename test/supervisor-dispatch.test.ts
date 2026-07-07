@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { adapters } from '../src/adapters/index.js';
 import type { InjectRequestResult } from '../src/daemon/inject-continue.js';
+import { sendCommand } from '../src/daemon/ipc-client.js';
 import { createSupervisor, type SupervisorDeps } from '../src/daemon/supervisor.js';
 import type { TimerHandle } from '../src/daemon/scheduler.js';
 import { closeDb, openDb, type DatabaseInstance } from '../src/store/db.js';
@@ -286,6 +287,62 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(payload.action).toBe('resume_spawned');
     expect(payload.newSessionId).toBe('new-session-1');
     expect(payload.spec.cwd).toBe(realCwd);
+  });
+
+  it('rearm over IPC arms a job written by another process AFTER start (I-10 cross-process)', async () => {
+    tempDir = join(tmpdir(), `acca-dispatch-test-${randomBytes(4).toString('hex')}`);
+    process.env.ACCA_DATA_DIR = tempDir;
+    db = openDb();
+    socketPath = uniqueSocketPath();
+
+    const sessions = createSessionsRepo(db);
+    sessions.createSession({
+      id: 's-rearm',
+      tool: 'claude',
+      cwd: process.cwd(),
+      status: 'LIMIT_HIT',
+      proc_state: 'alive',
+      pid: process.pid, // "alive" → reconcileOrphans tak menyentuhnya.
+    });
+
+    // Probe stub → usage tersedia (dispatch probe akan enqueue resume + done, bukti job ter-dispatch).
+    adapters.claude.probeUsage = vi.fn(
+      (): Promise<UsageSnapshot> =>
+        Promise.resolve({ tool: 'claude', limits: [{ kind: 'session', usedFraction: 0.4, resetAt: null }], capturedAt: 0 }),
+    );
+
+    const manual = createManualTimer();
+    const nowRef = { value: 0 };
+    const supervisor = createSupervisor({
+      db,
+      socketPath,
+      now: () => nowRef.value,
+      setTimer: manual.setTimer,
+      clearTimer: manual.clearTimer,
+    });
+
+    await supervisor.start(); // tak ada job pending → scheduler disarmed (tak ada timer).
+    await expect(manual.fire()).rejects.toThrow(/no timer armed/); // buktikan benar-benar disarmed.
+
+    // Proses LAIN menulis job `probe` langsung ke store (bukan lewat scheduler.enqueue in-process).
+    const jobs = createScheduledJobsRepo(db);
+    jobs.enqueue({ session_id: 's-rearm', run_at: 1_000, kind: 'probe' });
+
+    // Notify lintas-proses: daemon HIDUP harus memuat ulang & arm — tanpa restart.
+    const ack = await sendCommand(socketPath, 'rearm', undefined, { timeoutMs: 2000 });
+    expect(ack).toEqual({ rearmed: true });
+
+    // Timer kini armed atas job eksternal → fire → dispatch berjalan.
+    nowRef.value = 1_000;
+    await manual.fire();
+    await supervisor.stop();
+
+    // Bukti job eksternal ter-dispatch: probe done (dihapus) + resume baru ter-enqueue.
+    const remaining = pendingJobs(db, 's-rearm');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.kind).toBe('resume');
+    const events = eventsFor(db, 's-rearm');
+    expect(events.find((e) => e.type === 'job_dispatch_done')).toBeDefined();
   });
 
   it('resume: proc_state exited + cwd missing → BLOCKED event + done (terminal, no retry, NO spawn)', async () => {
