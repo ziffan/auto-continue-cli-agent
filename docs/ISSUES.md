@@ -6,6 +6,27 @@
 
 ## Terbuka
 
+### I-16 — Probe agy `GetUserStatus` mungkin TAK memuat window MINGGUAN → risiko keliru-resume saat weekly habis [P2, target M3d.4 hardening / verifikasi]
+**Temuan (cross-check CodexBar 0.41.0, `docs/antigravity.md`, 7 Jul):** CodexBar memakai **prioritas endpoint
+`RetrieveUserQuotaSummary`** untuk kuota agy, dengan fallback `GetUserStatus`→`GetCommandModelConfigs`. Caveat
+mereka: *"IDE local payloads return **session-level quota but lack the weekly limits** exposed by app/CLI
+`RetrieveUserQuotaSummary`."* **Probe kita (`adapters/antigravity.ts`) HANYA memanggil `GetUserStatus`** →
+`quotaInfo.{remainingFraction,resetTime}` per-model. Reset window yang kita tangkap live (5 Jul: 10:16Z/09:32Z per
+model) tampak = window **refresh 5-jam per-model**, **bukan** kuota mingguan. **Risiko korektness (AC-relevan):**
+model agy = **dual-limit (5-jam + MINGGUAN, dua-duanya harus >0)** — RESEARCH §4/§4b. Dispatch kita memutuskan
+resume via `usage.limits.every(l => l.usedFraction < 1)` (`supervisor.ts`); bila `GetUserStatus` **tak** memuat
+window mingguan, kita bisa **keliru resume saat kuota MINGGUAN habis** (5-jam sudah reset) — sekelas bug "keliru
+resume" yang sudah kita jaga untuk kasus 5-jam (G-17 exhausted→usedFraction=1). **Verifikasi (butuh sesi agy nyata
+ber-PTY — bisa dilakukan di Windows, agy terpasang):** (1) probe `RetrieveUserQuotaSummary` (Connect-JSON, path
+`/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary`) di sesi hidup & bandingkan window-nya vs
+`GetUserStatus`; skema CodexBar = `response.groups[].displayName` + `groups[].buckets[].{remainingFraction,description}`;
+(2) bila mingguan HANYA ada di RetrieveUserQuotaSummary → tambahkan endpoint itu ke probe + normalisasi window
+mingguan ke `UsageLimit` (kind `weekly`), lalu dispatch memperhitungkannya. **Sumber:** cek CodexBar repo (steipete),
+7 Jul. Prior art §5b. **Catatan lain berguna dari CodexBar (minor):** `GetUnleashData` = probe pilih-connect-port
+(200 seketika, tak butuh subtree kuota terisi) — kandidat pengganti retry-GetUserStatus untuk seleksi port;
+`ANTIGRAVITY_OAUTH_CREDENTIALS_JSON` env = injeksi creds standalone (relevan opsi #3 retrieveUserQuota pre-resume);
+`lsof -nP -iTCP -sTCP:LISTEN -a -p <pid>` = port-discovery POSIX mereka (kita pakai inode-correlation, bebas-dependency — pertahankan).
+
 ### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
 Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
 `resumeCmd`), bukan CLI agent nyata di limit nyata: (a) apakah `claude`/`agy` hidup di prompt benar-benar
