@@ -5,7 +5,7 @@
 import { existsSync } from 'node:fs';
 import { adapters } from '../adapters/index.js';
 import type { SpawnSpec } from '../adapters/types.js';
-import { runSession } from '../cli/run-core.js';
+import { runSession } from './process-wrapper.js';
 import { isProcessAlive } from '../shared/proc.js';
 import { sessionControlSocketPath } from '../shared/paths.js';
 import type { Session } from '../shared/types.js';
@@ -99,7 +99,8 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
     deps.spawnResume ??
     ((spec, session) => {
       const { sessionId: newId } = runSession(
-        { file: spec.file, args: spec.args, cwd: spec.cwd ?? session.cwd, tool: session.tool },
+        // resumedFrom = id sesi ASAL → baris sesi baru menautkan rantai resume (I-14).
+        { file: spec.file, args: spec.args, cwd: spec.cwd ?? session.cwd, tool: session.tool, resumedFrom: session.id },
         { sessions, events, jobs },
       );
       return { sessionId: newId };

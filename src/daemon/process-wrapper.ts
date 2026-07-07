@@ -1,9 +1,9 @@
 import { isAbsolute } from 'node:path';
 import * as pty from 'node-pty';
-import { createInjectHandler } from '../daemon/inject-continue.js';
-import { createIpcServer } from '../daemon/ipc-server.js';
-import { createLimitWatcher } from '../daemon/limit-watcher.js';
-import { scheduleProbeForLimit } from '../daemon/schedule-reset.js';
+import { createInjectHandler } from './inject-continue.js';
+import { createIpcServer } from './ipc-server.js';
+import { createLimitWatcher } from './limit-watcher.js';
+import { scheduleProbeForLimit } from './schedule-reset.js';
 import { foregroundIsAgent } from '../shared/foreground.js';
 import { genSessionId } from '../shared/ids.js';
 import { createIdleTracker } from '../shared/idle-tracker.js';
@@ -20,6 +20,10 @@ export interface RunSessionSpec {
   args: string[];
   cwd: string;
   tool: Tool;
+  /** I-14: bila sesi ini adalah hasil resume-by-id dari sesi lain, id sesi ASAL. Disimpan di
+   *  `sessions.resumed_from` supaya `status`/riwayat bisa menautkan rantai resume. `undefined`
+   *  untuk sesi baru biasa (`acca run`). */
+  resumedFrom?: string;
 }
 
 export interface RunSessionDeps {
@@ -35,9 +39,10 @@ export interface RunSessionResult {
 }
 
 /**
- * Inti spawn CLI target via PTY — dipisah dari `commands/run.ts` supaya bisa dipanggil
- * langsung di integration test tanpa TTY nyata (raw-mode dilewati otomatis bila
- * `process.stdin.isTTY` falsy).
+ * Inti spawn CLI target via PTY — engine process-wrapper (MAP: `daemon/process-wrapper.ts`).
+ * Dipanggil oleh `cli/commands/run.ts` (jalur user) DAN `daemon/supervisor.ts` (actuation
+ * resume-by-id, I-12 poin 2). Dipisah dari command wrapper supaya bisa dipanggil langsung di
+ * integration test tanpa TTY nyata (raw-mode dilewati otomatis bila `process.stdin.isTTY` falsy).
  */
 export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessionResult {
   const id = genSessionId();
@@ -48,6 +53,7 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
     cwd: spec.cwd,
     status: 'RUNNING',
     proc_state: 'alive',
+    resumed_from: spec.resumedFrom ?? null,
   });
   deps.events.append({ session_id: id, type: 'status_change', payload: { to: 'RUNNING' } });
 

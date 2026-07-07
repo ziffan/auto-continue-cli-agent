@@ -10,6 +10,8 @@ export interface CreateSessionInput {
   proc_state: ProcState;
   cli_session_id?: string | null;
   pid?: number | null;
+  /** I-14: id sesi ASAL bila baris ini hasil resume-by-id (rantai resume). */
+  resumed_from?: string | null;
 }
 
 /** Repositori `sessions` — satu-satunya jalur akses tabel `sessions` (CONVENTIONS.md). */
@@ -32,16 +34,17 @@ export function createSessionsRepo(db: DatabaseInstance) {
         created_at: now,
         updated_at: now,
         archived_at: null,
+        resumed_from: input.resumed_from ?? null,
       };
       db.prepare(
         `INSERT INTO sessions (
           id, tool, cli_session_id, cwd, pid, status, proc_state,
           detected_at, detect_source, reset_at, reset_source,
-          created_at, updated_at, archived_at
+          created_at, updated_at, archived_at, resumed_from
         ) VALUES (
           @id, @tool, @cli_session_id, @cwd, @pid, @status, @proc_state,
           @detected_at, @detect_source, @reset_at, @reset_source,
-          @created_at, @updated_at, @archived_at
+          @created_at, @updated_at, @archived_at, @resumed_from
         )`,
       ).run(row);
       return row;

@@ -36,6 +36,7 @@
 | `created_at` | INTEGER | epoch ms |
 | `updated_at` | INTEGER | epoch ms |
 | `archived_at` | INTEGER NULL | arsip (bukan delete) |
+| `resumed_from` | TEXT NULL FK→sessions.id | id sesi ASAL bila baris ini hasil resume-by-id (rantai resume, I-14); null utk sesi biasa. Ditambah migrasi `0002` (`schema_version`=2). |
 
 Index: `idx_sessions_status(status)`, `idx_sessions_updated(updated_at)`.
 
