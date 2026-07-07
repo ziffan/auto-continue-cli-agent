@@ -76,11 +76,6 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
   const meta = createMetaRepo(deps.db);
   const jobs = createScheduledJobsRepo(deps.db);
 
-  const ipcServer = createIpcServer({
-    ping: () => ({ pong: true, pid: process.pid, at: deps.now() }),
-    status: () => sessions.listActive(),
-  });
-
   const daemonError = (err: unknown, where: string, extra?: Record<string, unknown>): void =>
     events.append({
       session_id: null,
@@ -257,6 +252,19 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
     setTimer: deps.setTimer ?? createDaemonTimer((err) => daemonError(err, 'scheduler_timer')),
     clearTimer: deps.clearTimer ?? ((h) => clearTimeout(h)),
     onError: (err, job) => daemonError(err, 'dispatch', { jobId: job.id }),
+  });
+
+  // IPC server dibuat SETELAH scheduler supaya handler `rearm` bisa menutup atas `scheduler`
+  // (handler cuma dipanggil setelah start()/listen, jadi tak ada TDZ). `rearm` = celah lintas-proses
+  // I-10: proses lain (wrapper `acca run`) menulis job `probe` ke scheduled_jobs saat LIMIT_HIT lalu
+  // mengirim `rearm` → daemon HIDUP memuat ulang pending & arm timer tanpa menunggu restart.
+  const ipcServer = createIpcServer({
+    ping: () => ({ pong: true, pid: process.pid, at: deps.now() }),
+    status: () => sessions.listActive(),
+    rearm: () => {
+      scheduler.rearm();
+      return { rearmed: true };
+    },
   });
 
   function heartbeat(): void {

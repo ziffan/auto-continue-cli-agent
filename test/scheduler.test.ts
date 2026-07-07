@@ -193,6 +193,28 @@ describe('scheduler', () => {
     expect(sooner.run_at).toBe(5_000);
   });
 
+  it('rearm() picks up a job written out-of-band (cross-process) that enqueue() never saw (I-10)', async () => {
+    const h = setup();
+    h.nowRef.value = 0;
+    h.scheduler.start();
+    expect(h.timer.armedCount()).toBe(0); // no pending → disarmed
+
+    // Job ditulis LANGSUNG lewat repo (bukan scheduler.enqueue) = simulasi proses lain (wrapper
+    // `acca run`) yang menulis ke scheduled_jobs. Daemon in-memory belum tahu apa-apa.
+    const external = jobs.enqueue({ session_id: 'schd', run_at: 5_000, kind: 'probe' });
+    expect(h.timer.armedCount()).toBe(0); // masih disarmed — enqueue lewat repo tak memicu arm
+
+    h.scheduler.rearm();
+    expect(h.timer.armedCount()).toBe(1);
+    expect(h.timer.armedDelay()).toBe(5_000);
+
+    // Dan benar-benar ter-dispatch saat due.
+    h.nowRef.value = 6_000;
+    await h.timer.fire();
+    expect(h.dispatchLog).toEqual([external.id]);
+    expect(jobs.getById(external.id)).toBeUndefined(); // done → removed
+  });
+
   it('a dispatch that throws is treated as retry and calls onError', async () => {
     const h = setup();
     const d = jobs.enqueue({ session_id: 'schd', run_at: 0, kind: 'probe' });

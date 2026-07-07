@@ -33,6 +33,11 @@ export interface Scheduler {
   /** Recovery: muat pending dari `scheduled_jobs` (tahan restart daemon), arm timer untuk job terdekat. */
   start(): void;
   enqueue(input: EnqueueJobInput): ScheduledJob;
+  /** I-10: muat ulang pending dari store & arm ulang timer. `enqueue()` hanya melihat job yang
+   *  ditulis IN-PROCESS; job yang ditulis proses LAIN (mis. wrapper `acca run` yang meng-enqueue
+   *  `probe` saat LIMIT_HIT) tak terlihat daemon hidup sampai restart. `rearm()` (dipicu lewat
+   *  IPC `rearm`) menutup celah itu — `arm()` selalu membaca `jobs.listPending()` segar dari store. */
+  rearm(): void;
   /** Clear timer aktif (tidak menghapus job dari store — hanya berhenti memicu). */
   stop(): void;
 }
@@ -107,6 +112,10 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       const row = jobs.enqueue(input);
       arm(); // job baru mungkin lebih cepat dari timer yang sedang armed.
       return row;
+    },
+
+    rearm(): void {
+      arm(); // baca ulang pending (termasuk yang ditulis proses lain) & arm timer terdekat.
     },
 
     stop(): void {
