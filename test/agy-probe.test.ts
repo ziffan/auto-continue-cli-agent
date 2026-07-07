@@ -2,23 +2,29 @@ import { describe, expect, it, vi } from 'vitest';
 import { probeAgyUsage, type AgyProbeDeps } from '../src/adapters/antigravity.js';
 import type { LoopbackResponse } from '../src/shared/http.js';
 
-// probeAgyUsage: retry-loop G-23 (https loopback → 200 ber-userStatus). Semua I/O di-inject; clock
-// palsu (sleep memajukan `now`) supaya cepat & deterministik tanpa jaringan/timer nyata.
+// probeAgyUsage: retry-loop G-23 (https loopback → 200 ber-kuota). Endpoint = RetrieveUserQuotaSummary
+// (I-16/G-31: weekly+5h per grup). Semua I/O di-inject; clock palsu (sleep memajukan `now`) supaya
+// cepat & deterministik tanpa jaringan/timer nyata.
 
-/** userStatus minimal ber-kuota → parseAgyUserStatus menghasilkan limits non-kosong. */
+/** RetrieveUserQuotaSummary minimal ber-kuota → parseAgyQuotaSummary menghasilkan limits non-kosong
+ *  (satu grup, dua bucket: weekly + 5h). */
 const READY_BODY = JSON.stringify({
-  userStatus: {
-    cascadeModelConfigData: {
-      clientModelConfigs: [
-        { label: 'Claude Opus 4.6', quotaInfo: { remainingFraction: 0.5, resetTime: '2026-07-05T10:00:00Z' } },
-      ],
-    },
+  response: {
+    groups: [
+      {
+        displayName: 'Gemini',
+        buckets: [
+          { bucketId: 'gemini-weekly', window: 'weekly', remainingFraction: 0.5, resetTime: '2026-07-09T10:00:00Z' },
+          { bucketId: 'gemini-5h', window: '5h', remainingFraction: 1, resetTime: '2026-07-07T20:00:00Z' },
+        ],
+      },
+    ],
   },
 });
 
-/** userStatus 200 tapi TANPA model (LS belum siap) — plus PII yang TAK BOLEH bocor ke error. */
+/** 200 tapi TANPA groups (LS belum siap) — plus PII di displayName yang TAK BOLEH bocor ke error. */
 const NOT_READY_BODY_WITH_PII = JSON.stringify({
-  userStatus: { name: 'SECRET_NAME_XYZ', email: 'secret@example.com', cascadeModelConfigData: { clientModelConfigs: [] } },
+  response: { displayName: 'SECRET_NAME_XYZ', ownerEmail: 'secret@example.com', groups: [] },
 });
 
 function makeClock(startMs = 1000) {
@@ -57,13 +63,15 @@ describe('probeAgyUsage', () => {
     await expect(probeAgyUsage({ sessionPid: 42 }, deps)).rejects.toThrow(/ports not found/);
   });
 
-  it('returns snapshot immediately when a port answers 200 with userStatus', async () => {
+  it('returns snapshot immediately when a port answers 200 with a quota summary (weekly+5h)', async () => {
     const post = vi.fn(() => Promise.resolve(ok(READY_BODY)));
     const deps = baseDeps({ post });
     const snap = await probeAgyUsage({ sessionPid: 42 }, deps);
     expect(snap.tool).toBe('antigravity');
-    expect(snap.limits).toHaveLength(1);
-    expect(snap.limits[0]!.usedFraction).toBeCloseTo(0.5);
+    expect(snap.limits).toHaveLength(2); // weekly + 5h
+    const weekly = snap.limits.find((l) => l.kind === 'weekly');
+    expect(weekly?.usedFraction).toBeCloseTo(0.5); // 1 - 0.5
+    expect(snap.limits.find((l) => l.kind === '5h')?.usedFraction).toBeCloseTo(0);
     // dipanggil untuk port pertama; berhenti begitu 200-berkuota (tak lanjut port kedua).
     expect(post).toHaveBeenCalledTimes(1);
   });
@@ -76,7 +84,7 @@ describe('probeAgyUsage', () => {
     );
     const deps = baseDeps({ post });
     const snap = await probeAgyUsage({ sessionPid: 42 }, deps);
-    expect(snap.limits).toHaveLength(1);
+    expect(snap.limits).toHaveLength(2); // weekly + 5h
     expect(post).toHaveBeenCalledTimes(2); // port pertama gagal → port kedua sukses, satu ronde.
   });
 
@@ -86,7 +94,7 @@ describe('probeAgyUsage', () => {
     const post = vi.fn(() => Promise.resolve(clock.now() >= 5000 ? ok(READY_BODY) : httpErr(500)));
     const deps = baseDeps({ post, now: clock.now, sleep: clock.sleep });
     const snap = await probeAgyUsage({ sessionPid: 42 }, deps);
-    expect(snap.limits).toHaveLength(1);
+    expect(snap.limits).toHaveLength(2); // weekly + 5h
     expect(clock.sleep).toHaveBeenCalled(); // benar-benar menunggu, bukan sekali coba.
     expect(post.mock.calls.length).toBeGreaterThan(2);
   });

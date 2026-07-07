@@ -167,3 +167,58 @@ export function parseAgyUserStatus(raw: unknown, now: number): UsageSnapshot {
   }
   return { tool: 'antigravity', limits, capturedAt: now };
 }
+
+/**
+ * agy `RetrieveUserQuotaSummary` (I-16, live-verify 7 Jul — G-31). Sumber kebenaran kuota agy yang
+ * BENAR untuk keputusan resume: tiap grup model berbagi **window MINGGUAN + 5-jam** (dua-duanya harus
+ * >0). `parseAgyUserStatus` (GetUserStatus) HANYA memuat window 5-jam → buta weekly → dispatch bisa
+ * keliru resume saat weekly habis; parser ini menggantikannya di jalur probe. Bentuk NYATA (live):
+ * `response.groups[].buckets[].{bucketId, window:"weekly"|"5h", remainingFraction, resetTime}`
+ * (juga ditoleransi flat `groups` di root). Tiap bucket → satu `UsageLimit`.
+ * **PII firewall (G-9):** HANYA `window`/`bucketId`/`remainingFraction`/`resetTime` diekstrak —
+ * `displayName`/`description` grup/bucket (bisa memuat plan/PII) TIDAK PERNAH disentuh.
+ * **G-17:** absennya `remainingFraction` pada bucket nyata = exhausted → `usedFraction=1` (BUKAN skip:
+ * kalau di-skip, bucket habis lenyap & `every(usedFraction<1)` keliru resume). Bucket tanpa identitas
+ * (tanpa window & bucketId) = malformed → skip (jangan salah anggap exhausted).
+ */
+export function parseAgyQuotaSummary(raw: unknown, now: number): UsageSnapshot {
+  if (!isRecord(raw)) throw new UsageParseError('parseAgyQuotaSummary');
+  const response = raw['response'];
+  const root = isRecord(response) ? response : raw;
+
+  const limits: UsageLimit[] = [];
+  const groups = root['groups'];
+  if (Array.isArray(groups)) {
+    for (const group of groups) {
+      if (!isRecord(group)) continue;
+      const buckets = group['buckets'];
+      if (!Array.isArray(buckets)) continue;
+      for (const bucket of buckets) {
+        if (!isRecord(bucket)) continue;
+        const windowRaw = bucket['window'];
+        const bucketIdRaw = bucket['bucketId'];
+        const window = typeof windowRaw === 'string' && windowRaw.length > 0 ? windowRaw : undefined;
+        const bucketId = typeof bucketIdRaw === 'string' && bucketIdRaw.length > 0 ? bucketIdRaw : undefined;
+        // Identitas non-PII wajib: bucket tanpa window & bucketId = malformed → skip (jangan diperlakukan exhausted).
+        if (window === undefined && bucketId === undefined) continue;
+
+        const remainingFraction = bucket['remainingFraction'];
+        let usedFraction: number;
+        if (!('remainingFraction' in bucket)) {
+          usedFraction = 1; // exhausted (G-17)
+        } else if (isFiniteNumber(remainingFraction)) {
+          usedFraction = clamp01(1 - remainingFraction);
+        } else {
+          continue; // field ada tapi bukan angka finite → korup, skip.
+        }
+        limits.push({
+          kind: window ?? (bucketId as string), // 'weekly' | '5h' (fallback bucketId bila window absen)
+          usedFraction,
+          resetAt: parseIso(bucket['resetTime']),
+          scope: bucketId,
+        });
+      }
+    }
+  }
+  return { tool: 'antigravity', limits, capturedAt: now };
+}
