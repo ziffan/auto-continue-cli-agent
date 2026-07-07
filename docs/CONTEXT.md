@@ -34,9 +34,18 @@
   **Verifikasi (Opus sendiri):** build ✅ · eslint ✅ · **235/235 test** (+6: store/integration resumed_from,
   scheduler.rearm cross-process, supervisor rearm-over-IPC real-socket, notifyDaemonRearm live+dead) + 2 skip
   (stale-socket POSIX-only di Windows). **Docs:** GOTCHAS G-30, ISSUES (I-14/I-10 CLOSED), DECISIONS Change Log,
-  MILESTONES M3d, DATA-MODEL (kolom resumed_from), CONTEXT. **Next:** (1) I-15 live-verify actuation dgn limit
-  ASLI (keystroke agy, foreground Windows) — opportunistik; (2) residual I-10 sole-writer consolidation bila
-  daemon ambil-alih lifecycle sesi; (3) M4 (Notifier + status UX). `main` ahead `origin/main` **2 commit** (+docs) — belum di-push.
+  MILESTONES M3d, DATA-MODEL (kolom resumed_from), CONTEXT. `main` ahead → **di-push sesi ini** (`939cdb0`).
+- **Terakhir diupdate:** 2026-07-07 (sesi Windows, lanjutan) — **CEK CodexBar (steipete) → temuan korektness P1 I-16
+  ditemukan + diperbaiki + live-verified.** Cross-check prior art memicu: probe agy kita dulu HANYA `GetUserStatus`
+  (window 5-jam) → **buta kuota MINGGUAN** yang cuma ada di `RetrieveUserQuotaSummary` → dispatch bisa keliru resume
+  saat weekly habis (agy = dual-limit). **Fix (I-16, Tier-1):** probe pindah ke `RetrieveUserQuotaSummary` + parser
+  baru `parseAgyQuotaSummary` (bucket weekly+5h→UsageLimit, absent→exhausted G-17, PII firewall tak sentuh displayName);
+  dispatch `every(usedFraction<1)` kini benar mencakup weekly. **Verifikasi:** 244/244 test (+9 parser +fixture live
+  redaksi); **live PRODUCTION probe** (`loopbackHttpsPostJson`, tanpa header khusus) balas 4 limit weekly+5h dari agy
+  nyata (gemini-weekly used 0.74, 3p-weekly 0.60). `parseAgyUserStatus` dipertahankan (credits/proximity M4).
+  **Docs:** GOTCHAS G-31, ISSUES (I-16 CLOSED), MILESTONES M3d.4, CONTEXT. Konfirmasi sampingan: CodexBar tetap
+  monitor-only → diferensiasi auto-continue kita utuh, risiko #4 tak berubah. **Next:** I-15 (opportunistik) · residual
+  I-10 sole-writer · M4 (Notifier + status UX). `main` ahead `origin/main` — belum di-push (commit I-16 fix).
 - **Terakhir diupdate:** 2026-07-07 (sesi Ubuntu, session-end ini) — **GATING inject-continue foreground/idle
   DITEGAKKAN (I-13) + stale-socket POSIX diverifikasi (I-5).** Pola Opus-orkestrator inline (gating = paling
   security-sensitive) + Tier-1 self-review. Dua sub-task, dua commit:

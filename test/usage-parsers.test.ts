@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  parseAgyQuotaSummary,
   parseAgyUserStatus,
   parseClaudeOAuthUsage,
   parseClaudeStatusLine,
@@ -242,5 +243,87 @@ describe('parseAgyUserStatus (GetUserStatus — ADR-010)', () => {
     expect(snapshot).toEqual({ tool: 'antigravity', limits: [], capturedAt: NOW });
     // Bukti tambahan firewall PII: bahkan pada payload minimal, name/email tak ikut lewat.
     expect(JSON.stringify(snapshot)).not.toContain('"x"');
+  });
+});
+
+describe('parseAgyQuotaSummary (RetrieveUserQuotaSummary — I-16/G-31)', () => {
+  const raw = loadFixture('agy-quota-summary.json'); // capture LIVE Windows 2026-07-07 (redaksi PII)
+
+  it('parses BOTH weekly + 5h buckets across all groups (4 limits) — the window GetUserStatus lacks', () => {
+    const snapshot = parseAgyQuotaSummary(raw, NOW);
+    expect(snapshot.tool).toBe('antigravity');
+    expect(snapshot.limits).toHaveLength(4); // 2 grup × (weekly + 5h)
+    const weeklies = snapshot.limits.filter((l) => l.kind === 'weekly');
+    const fiveHours = snapshot.limits.filter((l) => l.kind === '5h');
+    expect(weeklies).toHaveLength(2);
+    expect(fiveHours).toHaveLength(2);
+  });
+
+  it('usedFraction = 1 - remainingFraction; scope = bucketId (non-PII)', () => {
+    const snapshot = parseAgyQuotaSummary(raw, NOW);
+    const geminiWeekly = snapshot.limits.find((l) => l.scope === 'gemini-weekly');
+    expect(geminiWeekly?.kind).toBe('weekly');
+    expect(geminiWeekly?.usedFraction).toBeCloseTo(1 - 0.26316896, 6);
+    expect(geminiWeekly?.resetAt).toBe(Date.parse('2026-07-09T14:32:43Z'));
+    const claudeWeekly = snapshot.limits.find((l) => l.scope === '3p-weekly');
+    expect(claudeWeekly?.usedFraction).toBeCloseTo(1 - 0.39947107, 6);
+  });
+
+  it('the WHOLE POINT (I-16): a weekly bucket at 0 blocks resume even when 5h is full', () => {
+    // Skenario nyata gap: 5-jam sudah reset (remainingFraction 1) tapi MINGGUAN habis.
+    const weeklyExhausted = {
+      response: {
+        groups: [
+          {
+            buckets: [
+              { bucketId: 'g-weekly', window: 'weekly', resetTime: '2026-07-09T00:00:00Z' }, // remainingFraction ABSENT = exhausted (G-17)
+              { bucketId: 'g-5h', window: '5h', remainingFraction: 1, resetTime: '2026-07-07T20:00:00Z' },
+            ],
+          },
+        ],
+      },
+    };
+    const snapshot = parseAgyQuotaSummary(weeklyExhausted, NOW);
+    const weekly = snapshot.limits.find((l) => l.kind === 'weekly');
+    expect(weekly?.usedFraction).toBe(1); // exhausted, TIDAK di-skip
+    // Consumer supervisor: `every(usedFraction<1)` = false → TAK resume. Inilah yang GetUserStatus tak bisa lihat.
+    expect(snapshot.limits.every((l) => l.usedFraction < 1)).toBe(false);
+  });
+
+  it('a malformed bucket (no window & no bucketId) is skipped, NOT treated as exhausted', () => {
+    const malformed = { response: { groups: [{ buckets: [{ remainingFraction: 1 }, { foo: 'bar' }] }] } };
+    const snapshot = parseAgyQuotaSummary(malformed, NOW);
+    expect(snapshot.limits).toHaveLength(0); // dua-duanya tak beridentitas → skip
+  });
+
+  it('remainingFraction present but non-finite (corrupt) → skip', () => {
+    const corrupt = { response: { groups: [{ buckets: [{ window: 'weekly', remainingFraction: null }] }] } };
+    const snapshot = parseAgyQuotaSummary(corrupt, NOW);
+    expect(snapshot.limits).toHaveLength(0);
+  });
+
+  it('tolerates a flat response (no top-level `response` wrapper)', () => {
+    const flat = { groups: [{ buckets: [{ window: '5h', bucketId: 'g-5h', remainingFraction: 0.5, resetTime: null }] }] };
+    const snapshot = parseAgyQuotaSummary(flat, NOW);
+    expect(snapshot.limits).toHaveLength(1);
+    expect(snapshot.limits[0]?.usedFraction).toBeCloseTo(0.5, 10);
+  });
+
+  it('PII firewall (G-9): serialized snapshot never carries displayName/description/[REDACTED]', () => {
+    const snapshot = parseAgyQuotaSummary(raw, NOW);
+    const serialized = JSON.stringify(snapshot);
+    expect(serialized).not.toContain('[REDACTED]');
+    expect(serialized).not.toContain('Models within this group');
+    expect(serialized).not.toContain('weekly limit, it will fully refresh');
+  });
+
+  it('throws UsageParseError for non-object top-level input', () => {
+    expect(() => parseAgyQuotaSummary(null, NOW)).toThrow(UsageParseError);
+    expect(() => parseAgyQuotaSummary('nope', NOW)).toThrow(UsageParseError);
+  });
+
+  it('an object with no groups returns empty limits (no throw)', () => {
+    expect(parseAgyQuotaSummary({ response: {} }, NOW)).toEqual({ tool: 'antigravity', limits: [], capturedAt: NOW });
+    expect(parseAgyQuotaSummary({ unrelated: true }, NOW)).toEqual({ tool: 'antigravity', limits: [], capturedAt: NOW });
   });
 });

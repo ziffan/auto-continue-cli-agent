@@ -68,9 +68,14 @@ daemon/) + resume-chain link (migrasi `0002` kolom `sessions.resumed_from` FK, `
 render `#new<-#old`; live smoke upgrade v1→v2 pada DB ber-isi + FK enforced, G-30). **I-10 ✅ (`4255c99`)** daemon
 hidup re-arm job lintas-proses via IPC `rearm` (`scheduler.rearm()` baca store segar + perintah tanpa payload +
 `notifyDaemonRearm` best-effort; live smoke DUA PROSES: daemon nyata idle → proses terpisah tulis job+rearm →
-dispatch tanpa restart). **235/235 test, build+lint bersih, Tier-1 self-review.** **Sisa M3 (follow-up, bukan
-blocker loop):** live-verify actuation dgn limit ASLI opportunistik (**I-15**: keystroke agy + foreground Windows);
-residual I-10 = konsolidasi sole-writer `scheduled_jobs` (daemon ambil-alih lifecycle sesi, refactor lebih besar).
+dispatch tanpa restart). **235/235 test, build+lint bersih, Tier-1 self-review.**
+**Update 7 Jul (Windows — I-16 hardening probe agy, dari cek CodexBar):** **I-16 ✅** probe agy pindah dari
+`GetUserStatus` (buta window MINGGUAN) ke **`RetrieveUserQuotaSummary`** (weekly+5h per grup, G-31). Parser baru
+`parseAgyQuotaSummary` (bucket→UsageLimit, `kind`=weekly/5h, absent→exhausted G-17, PII firewall tak sentuh displayName).
+Dispatch `every(usedFraction<1)` kini benar mencakup weekly (dulu bisa keliru resume saat weekly habis). **244/244 test,
+live PRODUCTION probe balas 4 limit weekly+5h dari agy nyata.** `parseAgyUserStatus` dipertahankan (credits/proximity M4).
+**Sisa M3 (follow-up, bukan blocker loop):** live-verify actuation dgn limit ASLI opportunistik (**I-15**: keystroke agy
++ foreground Windows); residual I-10 = konsolidasi sole-writer `scheduled_jobs` (daemon ambil-alih lifecycle sesi, refactor lebih besar).
 
 > Batas scope-file M3d: banyak slice menyentuh `daemon/supervisor.ts` sebagai titik integrasi → slice
 > ber-supervisor **diserialkan** (bukan paralel). Slice adapter-probe (M3d.3/M3d.4) & fixture (M3d.8) =

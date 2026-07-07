@@ -6,34 +6,6 @@
 
 ## Terbuka
 
-### I-16 — Probe agy `GetUserStatus` BUTA window MINGGUAN → dispatch keliru-resume saat weekly habis [P1, CONFIRMED live 7 Jul, target M3d.4 hardening]
-**✅ CONFIRMED LIVE (7 Jul, Windows, agy 1.0.16, sesi ber-PTY nyata — spike I-16).** Cross-check CodexBar 0.41.0
-memicu verifikasi; ditembak dua endpoint di LS port yang sama (HTTPS loopback, no csrf, `Connect-Protocol-Version:1`):
-- **`GetUserStatus` (yang kita pakai) = window 5-JAM SAJA.** Per-model `quotaInfo.{remainingFraction,resetTime}` —
-  ke-8 model `remainingFraction:1` dgn satu reset `2026-07-07T20:38:50Z`. **Body TAK memuat "week"/weekly sama sekali.**
-- **`RetrieveUserQuotaSummary` (tak kita panggil) = KEDUA window per-grup.** Struktur `response.groups[].{displayName,
-  description, buckets[]}`; tiap bucket `{bucketId, window:"weekly"|"5h", remainingFraction, resetTime, description}`.
-  Live: grup Gemini **weekly 0.263** (kepakai ~74%, reset 2026-07-09) + 5h 1.0; grup Claude/GPT-OSS **weekly 0.399**
-  (reset 2026-07-10) + 5h 1.0. Deskripsi resmi: *"Within each group, models share a weekly limit AND a 5-hour limit."*
-- `RetrieveUserQuota` (singular) = **404** di LS — endpoint yang benar = `…/RetrieveUserQuotaSummary`.
-
-**Dampak korektness (AC-relevan, karena itu P1):** dispatch kita memutuskan resume via
-`usage.limits.every(l => l.usedFraction < 1)` (`supervisor.ts`) atas hasil `GetUserStatus` = **hanya 5-jam**. Hari ini
-weekly belum habis (26%/40% sisa) jadi tak ada misfire nyata, tapi **secara struktural** bila weekly→0 saat 5-jam sudah
-reset, `GetUserStatus` tetap tampak all-full → **kita keliru resume** — meruntuhkan jaminan dual-limit agy (RESEARCH §4/§4b).
-Sekelas bug "keliru resume" yang sudah dijaga untuk 5-jam (G-17). Lihat **G-31**.
-
-**Fix (slice M3d.4-hardening, Tier-1 — network+parser+dispatch):** (1) `adapters/antigravity.ts` probe pindah/ tambah ke
-**`RetrieveUserQuotaSummary`** (reuse `loopbackHttpsPostJson` + retry pola G-23); (2) parser baru `parseAgyQuotaSummary`
-→ normalisasi **tiap bucket** (weekly + 5h, semua grup) ke `UsageLimit[]` (`kind`=`weekly`/`5h`, `scope`=grup;
-`usedFraction=1-remainingFraction`; **absent→exhausted=1** per G-17); (3) dispatch tetap `every(usedFraction<1)` kini
-mencakup weekly → benar. Pertahankan redaksi PII (displayName grup/plan bisa PII → G-9). Fixture = capture live redaksi.
-**Sumber:** spike live I-16 (scratchpad, sudah dibersihkan), CodexBar `docs/antigravity.md`, prior art §5b.
-**Catatan minor CodexBar (dicatat, bukan aksi wajib):** `GetUnleashData` = probe pilih-connect-port (200 seketika, tak
-butuh subtree kuota) — kandidat seleksi port lebih cepat dari retry-GetUserStatus; `ANTIGRAVITY_OAUTH_CREDENTIALS_JSON`
-env = injeksi creds standalone (opsi #3 pre-resume); `lsof -nP -iTCP -sTCP:LISTEN -a -p <pid>` = port-discovery POSIX
-mereka (kita pakai inode-correlation bebas-dependency — pertahankan).
-
 ### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
 Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
 `resumeCmd`), bukan CLI agent nyata di limit nyata: (a) apakah `claude`/`agy` hidup di prompt benar-benar
@@ -83,6 +55,28 @@ lintas-tengah-malam jadi penting (kemungkinan saat wiring reset ke scheduler M3 
 ---
 
 ## Tertutup
+
+### I-16 — Probe agy `GetUserStatus` BUTA window MINGGUAN → dispatch keliru-resume [P1] ✅ (7 Jul, ditemukan+diperbaiki+live-verified)
+**Temuan (cross-check CodexBar 0.41.0) → CONFIRMED live → FIXED, semua 7 Jul (Windows, agy 1.0.16, sesi ber-PTY).**
+- **Bukti gap (spike live):** `GetUserStatus` (yang dulu kita pakai) = **window 5-JAM SAJA** — 8 model
+  `remainingFraction:1`, satu reset, **body tak memuat "week"**. `RetrieveUserQuotaSummary` = **KEDUA window per-grup**:
+  `response.groups[].buckets[].{bucketId, window:"weekly"|"5h", remainingFraction, resetTime}`; live grup Gemini weekly
+  0.263 + 5h 1.0, grup Claude/GPT weekly 0.399 + 5h 1.0 (*"models share a weekly limit AND a 5-hour limit"*).
+  `RetrieveUserQuota` singular = 404. Dampak: dispatch `every(usedFraction<1)` atas GetUserStatus **buta weekly** →
+  bisa keliru resume saat weekly habis (sekelas G-17). Lihat **G-31**.
+- **Fix (Tier-1 — network+parser+dispatch):** (1) `adapters/antigravity.ts` probe pindah ke
+  **`RetrieveUserQuotaSummary`** (reuse `loopbackHttpsPostJson` + retry G-23 — header `Connect-Protocol-Version` TAK
+  diperlukan, dikonfirmasi live). (2) parser baru **`parseAgyQuotaSummary`** (`adapters/usage.ts`): tiap bucket
+  (weekly+5h, semua grup) → `UsageLimit` (`kind`=`weekly`/`5h`, `scope`=`bucketId` non-PII;
+  `usedFraction=1-remainingFraction`; **absent→exhausted=1** G-17; bucket tanpa identitas → skip). PII firewall:
+  **displayName/description grup-bucket TAK PERNAH disentuh** (G-9). (3) dispatch tak berubah — kini mencakup weekly → benar.
+- **Verifikasi:** 242→**244 test** (+parseAgyQuotaSummary 9 kasus incl. "weekly=0 blokir resume saat 5h penuh"; probe test
+  di-update ke shape summary; fixture `agy-quota-summary.json` = capture live redaksi). **Live PRODUCTION probe** (dist,
+  `loopbackHttpsPostJson`) balas 4 limit weekly+5h dari agy nyata (gemini-weekly used 0.74, 3p-weekly 0.60). Tier-1 self-review.
+- **Catatan:** `parseAgyUserStatus` (GetUserStatus) DIPERTAHANKAN (masih diekspor+bertes) — GetUserStatus punya
+  `planStatus`/credits yang RetrieveUserQuotaSummary tak punya → kandidat sumber deteksi **credit-fallthrough** (G-16) &
+  proximity (I-8) di M4. **Minor CodexBar (dicatat):** `GetUnleashData` (pilih-port instan), `ANTIGRAVITY_OAUTH_CREDENTIALS_JSON`
+  (creds standalone, opsi #3), `lsof` (POSIX port-discovery — kita pakai inode, pertahankan).
 
 ### I-14 — `runSession` di-import daemon (layer terbalik) + link old→new session longgar [P3] ✅ (7 Jul, `c4cf164`)
 **RESOLVED (relokasi + resume-chain link):**
