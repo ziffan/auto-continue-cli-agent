@@ -286,6 +286,20 @@ termasuk api.anthropic.com) — tak boleh. **Cara benar:** helper khusus `loopba
 mustahil bocor ke host internet. `safeFetch` tetap jalur wajib utk host publik (CC/Telegram). **Sumber:** wiring M3d.4
 probeUsage Windows 5 Jul; `src/shared/http.ts`, `test/http-egress.test.ts`.
 
+### G-31 — agy `GetUserStatus` = window 5-JAM saja; kuota MINGGUAN hanya di `RetrieveUserQuotaSummary`
+**Jebakan/Fakta (live-verify 7 Jul, agy 1.0.16 Windows, spike I-16):** `GetUserStatus` (LS Connect-JSON) balas
+per-model `quotaInfo.{remainingFraction,resetTime}` yang **hanya** merepresentasikan window **refresh 5-jam** —
+**tak ada window mingguan sama sekali** (body tak memuat kata "week"). Padahal agy = **dual-limit: tiap grup model
+berbagi kuota MINGGUAN + kuota 5-jam, dua-duanya harus >0** ("Within each group, models share a weekly limit and a
+5-hour limit"). Sinyal mingguan **hanya** muncul di endpoint lain: **`POST …/RetrieveUserQuotaSummary`** (body `{}`,
+port + no-csrf sama seperti GetUserStatus) → `response.groups[].buckets[].{window:"weekly"|"5h", remainingFraction,
+resetTime, description}`. (`RetrieveUserQuota` singular = 404 di LS — bukan itu.)
+**Dampak:** probe yang cuma baca `GetUserStatus` (kita, sampai M3d.4-hardening) **buta terhadap exhaustion mingguan**
+→ dispatch `every(usedFraction<1)` bisa **keliru resume** saat weekly habis tapi 5-jam sudah reset. Sekelas G-17.
+**Cara benar:** probe agy pakai **`RetrieveUserQuotaSummary`**, normalisasi **tiap bucket** (weekly + 5h, semua grup)
+ke `UsageLimit[]`; absent remainingFraction = exhausted (G-17). Redaksi displayName grup/plan (PII, G-9). **Sumber:**
+spike I-16 (ISSUES), CodexBar `docs/antigravity.md` (mereka prioritas `RetrieveUserQuotaSummary`).
+
 ---
 
 ## Actuation seams (M3d.6/M3d.7) — inject-continue & resume-by-id (6 Jul)
@@ -372,6 +386,7 @@ field di interface `Session` tak wajib sama tapi jaga tetap sinkron DATA-MODEL. 
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-07 (Windows, I-16 live) | G-31 (agy `GetUserStatus` = window 5-jam saja; kuota MINGGUAN hanya di `RetrieveUserQuotaSummary` → probe GetUserStatus-only buta weekly → risiko keliru-resume). Dari verifikasi live cross-check CodexBar (I-16 CONFIRMED). |
 | 2026-07-07 (Windows, I-14/I-10) | G-30 (SQLite `ALTER ADD COLUMN` FK butuh default NULL saat `foreign_keys=ON`; FK ditegakkan → test parent-link wajib seed parent; pola migrasi bump schema_version + ADD COLUMN append terakhir). Dari relokasi runSession + resume-chain (I-14). I-10 (daemon re-arm lintas-proses via IPC `rearm`) tak melahirkan gotcha baru — pakai primitif yang ada (`arm()` baca store segar, perintah IPC tanpa payload = G-26). |
 | 2026-07-07 (Ubuntu, gating M3d/I-13) | G-28 (foreground = `/proc` tpgid vs pgrp, bukan name-match; piped→tpgid=-1=unknown bukan false; parse comm dari `)` terakhir; live-verify Ubuntu), G-29 (idle = jendela-sunyi penanda busy `esc to interrupt`; regex penanda WAJIB non-global — `/g` bikin `.test()` stateful; carry antar-chunk; risk band Enter-keystroke). Dari I-13. |
 | 2026-07-06 (Windows, actuation M3d.6/7) | G-26 (inject-continue: injection firewall STRUKTURAL — token hardcoded wrapper + perintah IPC tanpa payload; wrapper host socket non-fatal; guard race listen/exit), G-27 (resume-by-id: jangan re-spawn `acca run … --resume` — commander salah-parse; pakai `runSession` in-process; ConPTY echo `\r`→`\r\n`). Dari wiring actuation seams I-12 poin 1&2 + 2 smoke live Windows. |
