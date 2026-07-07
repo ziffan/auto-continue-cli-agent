@@ -11,6 +11,7 @@
 // engine ini sudah menerima `feedSignal` sehingga hook nanti tinggal memanggilnya apa adanya.
 
 import { classify } from './detector.js';
+import { stripAnsi } from '../shared/ansi.js';
 import type { DetectionResult, DetectSignal } from '../adapters/types.js';
 import type { Tool } from '../shared/types.js';
 
@@ -28,18 +29,9 @@ export interface LimitWatcher {
   feedSignal(signal: DetectSignal): void;
 }
 
-// Cakupan CSI (Control Sequence Introducer) dasar: ESC "[" params... final-byte. Cukup untuk
-// warna/cursor TUI (mis. "\x1b[31m", "\x1b[0m") tanpa merusak frasa limit di sekitarnya.
-// eslint-disable-next-line no-control-regex
-const ANSI_PATTERN = /\x1b\[[0-9;?]*[a-zA-Z]/g;
-
 /** Buffer tanpa newline melebihi ini (mis. progress-bar `\r`-only) → dipangkas, sisakan ekor. */
 const MAX_BUFFER_LEN = 65536;
 const BUFFER_TAIL_LEN = 4096;
-
-function stripAnsi(text: string): string {
-  return text.replace(ANSI_PATTERN, '');
-}
 
 export function createLimitWatcher(deps: LimitWatcherDeps): LimitWatcher {
   let buffer = '';

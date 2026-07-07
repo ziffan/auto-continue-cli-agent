@@ -4,7 +4,9 @@ import { createInjectHandler } from '../daemon/inject-continue.js';
 import { createIpcServer } from '../daemon/ipc-server.js';
 import { createLimitWatcher } from '../daemon/limit-watcher.js';
 import { scheduleProbeForLimit } from '../daemon/schedule-reset.js';
+import { foregroundIsAgent } from '../shared/foreground.js';
 import { genSessionId } from '../shared/ids.js';
+import { createIdleTracker } from '../shared/idle-tracker.js';
 import { sessionControlSocketPath } from '../shared/paths.js';
 import { nowMs } from '../shared/time.js';
 import { which } from '../shared/which.js';
@@ -86,12 +88,20 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
   // ADR-014 §1). Token yang ditulis = literal `CONTINUE_TOKEN` di dalam handler — TAK PERNAH dari IPC
   // args maupun output (injection firewall struktural). Non-fatal by design: bila host socket gagal,
   // sesi user (jalur utama) tetap jalan, hanya kehilangan kemampuan auto-inject (surface via event).
+  // Idle-tracker (gating ADR-014 poin iii): dilacak dari stream output PTY (di-feed di `onData` bawah)
+  // supaya handler inject bisa menolak saat sesi mid-turn. Foreground (poin ii) dihitung on-demand dari
+  // `/proc` (Linux) atas PID child. Keduanya `undefined` = unknown → tak memblokir (injection-firewall
+  // token literal tetap berlaku).
+  const idleTracker = createIdleTracker({ tool: spec.tool });
+
   let exited = false;
   const controlPath = sessionControlSocketPath(id);
   const controlServer = createIpcServer({
     inject: createInjectHandler({
       isAlive: () => !exited,
       write: (text) => ptyProcess.write(text),
+      foregroundIsAgent: () => foregroundIsAgent(ptyProcess.pid),
+      idle: () => idleTracker.isIdle(),
     }),
   });
   controlServer
@@ -132,6 +142,7 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
   const dataSub = ptyProcess.onData((data: string) => {
     process.stdout.write(data);
     watcher.feedOutput(data);
+    idleTracker.feed(data);
   });
 
   let restoreStdin: (() => void) | undefined;

@@ -53,6 +53,32 @@ describe('createInjectHandler (wrapper side)', () => {
     expect(write).not.toHaveBeenCalled();
   });
 
+  it('injects when foreground=agent AND idle both pass (I-13 gating satisfied)', () => {
+    const writes: string[] = [];
+    const handler = createInjectHandler({
+      isAlive: () => true,
+      write: (t) => writes.push(t),
+      foregroundIsAgent: () => true,
+      idle: () => true,
+    });
+
+    expect(handler()).toEqual({ injected: true, reason: null });
+    expect(writes).toEqual([CONTINUE_TOKEN]);
+  });
+
+  it('injects when gating is UNKNOWN (undefined does not block — semantik gating)', () => {
+    const writes: string[] = [];
+    const handler = createInjectHandler({
+      isAlive: () => true,
+      write: (t) => writes.push(t),
+      foregroundIsAgent: () => undefined, // mis. Windows / /proc tak terbaca
+      idle: () => undefined, // mis. agy (penanda belum diverifikasi)
+    });
+
+    expect(handler()).toEqual({ injected: true, reason: null });
+    expect(writes).toEqual([CONTINUE_TOKEN]);
+  });
+
   it('INJECTION FIREWALL: ignores IPC args entirely — writes only the hardcoded literal', () => {
     const writes: string[] = [];
     const handler = createInjectHandler({ isAlive: () => true, write: (t) => writes.push(t) });
