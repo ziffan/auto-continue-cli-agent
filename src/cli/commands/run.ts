@@ -4,7 +4,7 @@ import { closeDb, openDb } from '../../store/db.js';
 import { createEventsRepo } from '../../store/repositories/events.js';
 import { createScheduledJobsRepo } from '../../store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../../store/repositories/sessions.js';
-import { runSession } from '../run-core.js';
+import { runSession } from '../../daemon/process-wrapper.js';
 
 /** `acca run -- <tool> [args...]` — spawn CLI target via PTY, catat sesi ke store. */
 export function registerRunCommand(program: Command): void {

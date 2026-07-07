@@ -11,8 +11,10 @@ function toRow(session: Session): string[] {
   // ISSUES I-1/I-3). Tandai di tampilan; jangan menulis DB (status = read-only).
   const stale =
     session.proc_state === 'alive' && session.pid !== null && !isProcessAlive(session.pid);
+  // I-14: sesi hasil resume-by-id menautkan sesi asalnya (rantai resume) — tampilkan `#new<-#old`.
+  const idCell = session.resumed_from ? `#${session.id}<-#${session.resumed_from}` : `#${session.id}`;
   return [
-    `#${session.id}`,
+    idCell,
     session.tool,
     stale ? `${session.status} (basi)` : session.status,
     session.proc_state,

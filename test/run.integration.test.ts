@@ -7,7 +7,7 @@ import { closeDb, openDb, type DatabaseInstance } from '../src/store/db.js';
 import { createEventsRepo } from '../src/store/repositories/events.js';
 import { createScheduledJobsRepo } from '../src/store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../src/store/repositories/sessions.js';
-import { runSession } from '../src/cli/run-core.js';
+import { runSession } from '../src/daemon/process-wrapper.js';
 
 const tempDir = join(tmpdir(), `acca-run-test-${randomBytes(4).toString('hex')}`);
 process.env.ACCA_DATA_DIR = tempDir;
@@ -81,4 +81,37 @@ describe('runSession integration', () => {
     expect(finalRow?.status).toBe('FAILED');
     expect(finalRow?.proc_state).toBe('exited');
   });
+
+  it('persists resumedFrom on the new session row (I-14 resume chain)', async () => {
+    const sessions = createSessionsRepo(db);
+    const events = createEventsRepo(db);
+    const jobs = createScheduledJobsRepo(db);
+
+    // Sesi ASAL harus ada — FK `resumed_from → sessions.id` ditegakkan (foreign_keys=ON).
+    // Di produksi ini selalu terpenuhi (parent = sesi lama yang di-resume).
+    sessions.createSession({
+      id: 'origin-sess',
+      tool: 'claude',
+      cwd: process.cwd(),
+      status: 'EXITED',
+      proc_state: 'exited',
+    });
+
+    const { sessionId, waitForExit } = runSession(
+      {
+        file: process.execPath,
+        args: ['-e', 'process.exit(0)'],
+        cwd: process.cwd(),
+        tool: 'claude',
+        resumedFrom: 'origin-sess',
+      },
+      { sessions, events, jobs },
+    );
+
+    // Tautan resume tercatat sejak createSession, tak menunggu exit.
+    expect(sessions.getById(sessionId)?.resumed_from).toBe('origin-sess');
+
+    await waitForExit;
+    expect(sessions.getById(sessionId)?.resumed_from).toBe('origin-sess');
+  }, 10_000);
 });

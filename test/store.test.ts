@@ -45,11 +45,36 @@ describe('store', () => {
     expect(created.reset_at).toBeNull();
     expect(created.reset_source).toBeNull();
     expect(created.archived_at).toBeNull();
+    expect(created.resumed_from).toBeNull();
     expect(typeof created.created_at).toBe('number');
     expect(typeof created.updated_at).toBe('number');
 
     const fetched = sessions.getById('a1b2');
     expect(fetched).toEqual(created);
+  });
+
+  it('persists resumed_from for a resume-chained session (I-14)', () => {
+    const sessions = createSessionsRepo(db);
+    sessions.createSession({
+      id: 'orig',
+      tool: 'claude',
+      cwd: '/tmp/chain',
+      status: 'EXITED',
+      proc_state: 'exited',
+    });
+    const child = sessions.createSession({
+      id: 'chld',
+      tool: 'claude',
+      cwd: '/tmp/chain',
+      status: 'RUNNING',
+      proc_state: 'alive',
+      resumed_from: 'orig',
+    });
+
+    expect(child.resumed_from).toBe('orig');
+    expect(sessions.getById('chld')?.resumed_from).toBe('orig');
+    // Sesi biasa tetap null (tak menautkan apa pun).
+    expect(sessions.getById('orig')?.resumed_from).toBeNull();
   });
 
   it('setPid updates pid and updated_at', () => {

@@ -1,6 +1,6 @@
 // M3d.1 — seam yang menyambungkan Detector murni (M2, `classify()`) ke stream output PTY
 // sesi hidup. Engine ini TETAP MURNI: tak ada akses store/IPC di sini (ADR-008/013) — hanya
-// mem-buffer/strip/classify lalu memanggil `onLimit` callback; pemanggil (`cli/run-core.ts`)
+// mem-buffer/strip/classify lalu memanggil `onLimit` callback; pemanggil (`daemon/process-wrapper.ts`)
 // yang melakukan transisi state (`sessions.markLimitHit` + `events.append`). Tak ada aksi yang
 // diturunkan dari *isi* output selain klasifikasi kind tetap `limit`/`overload`/`none`.
 //

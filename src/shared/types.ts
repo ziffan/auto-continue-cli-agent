@@ -40,6 +40,8 @@ export interface Session {
   created_at: number;
   updated_at: number;
   archived_at: number | null;
+  /** I-14: id sesi ASAL bila sesi ini hasil resume-by-id (rantai resume); null untuk sesi biasa. */
+  resumed_from: string | null;
 }
 
 /** Baris tabel `scheduled_jobs` (DATA-MODEL.md). Waktu = epoch ms. */
