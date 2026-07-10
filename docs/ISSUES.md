@@ -6,6 +6,17 @@
 
 ## Terbuka
 
+### I-18 — `inject_skipped` (gating-gagal sesi hidup) tak ter-surface ke Notifier → sesi macet senyap [P3, target M4]
+**Ditemukan saat tier-review M4 Notifier (11 Jul, Windows).** Saat dispatch mencoba inject-continue ke sesi
+`alive` tapi gating wrapper menolak / wrapper tak terjangkau, supervisor meng-emit `job_dispatch_pending`
+`action:'inject_skipped'` lalu `'done'` (bukan retry-spin — benar, ADR-014 "surface manual, jangan auto-kill").
+**Tapi** `notificationForEvent` tak memetakan `inject_skipped` → user **tak dapat notifikasi** bahwa sesi
+tertinggal LIMIT_HIT butuh aksi manual (hanya ada di audit `events`). Sedikit menggerus tujuan "jangan
+kehilangan progres tanpa ditunggui". **Perbaikan:** tambah cabang surface untuk `job_dispatch_pending`
+`inject_skipped` (level `warn`/`error`, body dari label `reason`/`reachable` terkontrol — bukan output) →
+`deliver`. Non-blocking; kandidat digabung ke slice I-17 (periodic-probe) atau Notifier-desktop. **Sumber:**
+`src/daemon/supervisor.ts:204`, `src/notify/notifier.ts` (review 11 Jul).
+
 ### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
 Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
 `resumeCmd`), bukan CLI agent nyata di limit nyata: (a) apakah `claude`/`agy` hidup di prompt benar-benar
