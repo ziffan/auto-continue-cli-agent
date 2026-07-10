@@ -68,15 +68,20 @@ sekarang** (daemon belum dijalankan di alur normal; `acca run` = wrapper, bukan 
 yang dipicu daemon hidup). **Hilang otomatis saat M3d.5** mengganti dispatch dgn probe sungguhan (done/retry
 nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar ini.
 
-### I-4 — `reset-estimator` clock-time wrap tak DST-aware saat lewat tengah malam [P3, target M3/M4]
-`resolveClockTime` menambah `MS_PER_DAY` mentah untuk "next occurrence" alih-alih menghitung ulang wall-clock+1
-hari di zona target → meleset ±1 jam di ~2 hari transisi DST/tahun (detail GOTCHAS G-13). Non-blocking: jalur
-clock-scrape = fallback-of-fallback; sumber exact andal = ISO dari usage-probe. Perbaiki bila presisi reset
-lintas-tengah-malam jadi penting (kemungkinan saat wiring reset ke scheduler M3 / tampilan M4).
-
 ---
 
 ## Tertutup
+
+### I-4 — `reset-estimator` clock-time wrap tak DST-aware saat lewat tengah malam [P3] ✅ (11 Jul, `resolveClockTime` DST-correct)
+**RESOLVED (autonomous-run 11 Jul, Windows).** `resolveClockTime` dulu menambah `MS_PER_DAY` mentah ke instant UTC
+untuk "next occurrence" → di ~2 hari transisi DST/tahun meleset ±1 jam (hari lokal = 23/25 jam, bukan 24).
+**Fix:** cabang **UTC** tetap `+MS_PER_DAY` (benar, tanpa DST); cabang **zona IANA** kini menghitung ulang
+wall-clock SAMA di tanggal kalender berikutnya (`Date.UTC(…, day+1)` untuk normalisasi rollover → `resolveWallClockToUtc`,
+offset dihitung ulang DI tanggal itu). Pure, `now` injected. **+2 test** (`test/reset-estimator.test.ts`): wrap
+melintasi **spring-forward** (New York 7→8 Mar 2026, tetap 15:00 EDT=19:00Z, bukan 16:00) & **fall-back** (31 Okt→1 Nov,
+tetap 15:00 EST=20:00Z, bukan 14:00) — ekspektasi hand-verified via Intl, versi lama meleset tepat 1 jam di keduanya.
+**270/270 test** (2 skip POSIX), build+lint bersih, Tier-1 self-review. GOTCHAS G-13 ditandai teratasi. **Sumber:**
+`src/daemon/reset-estimator.ts`, G-13.
 
 ### I-16 — Probe agy `GetUserStatus` BUTA window MINGGUAN → dispatch keliru-resume [P1] ✅ (7 Jul, ditemukan+diperbaiki+live-verified)
 **Temuan (cross-check CodexBar 0.41.0) → CONFIRMED live → FIXED, semua 7 Jul (Windows, agy 1.0.16, sesi ber-PTY).**

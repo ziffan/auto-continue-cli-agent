@@ -14,6 +14,23 @@
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik); residual
   I-10 = konsolidasi sole-writer `scheduled_jobs` (refactor arsitektur lebih besar, di luar scope).
+- **Terakhir diupdate:** 2026-07-11 (autonomous-run, Windows) — **M4 Notifier di-MERGE ke `main` + I-4 DITUTUP.**
+  Sesi otonom terjadwal (cron one-shot, /autonomous-run) — Opus orkestrator, verifikasi gate sendiri. Dua hal:
+  **(1) Tier-1 review + merge branch `m4-notifier`** (`13ec9ea` merge, `31f734a` catatan): review baris-per-baris
+  `src/notify/notifier.ts` + wiring supervisor/run → **APPROVE**. Firewall PII/injection (G-9, ADR-008/013)
+  diverifikasi struktural (body notif hanya field terkontrol; `evidence`/`spec.args`/respons-probe tak di-echo;
+  FAILED.reason = `err.message` spawn, bukan output child, dipangkas 120); dekorator `EventsRepo` lengkap (interface
+  hanya `append` → nol method hilang); **NOL egress** (sink stderr lokal; Telegram=M-remote tak disentuh →
+  autonomous-safe). Gate diverifikasi sendiri Windows: build ✅ lint ✅ **268 pass/2 skip** (270/270 di Ubuntu).
+  Observasi minor → **I-18 baru** (`inject_skipped` gating-gagal tak ter-surface Notifier, P3). Branch lokal dihapus;
+  **`origin/m4-notifier` masih ada** (hapus remote butuh izin eksplisit user).
+  **(2) I-4 CLOSED** (`reset-estimator` DST-correct): `resolveClockTime` cabang zona IANA kini hitung ulang wall-clock
+  di tanggal besok (bukan `+MS_PER_DAY` mentah, G-13); cabang UTC tetap `+MS_PER_DAY`. Pure. **+2 test** wrap-lintas-DST
+  (spring-forward/fall-back New York, ekspektasi hand-verified Intl). **270/270 test**, build+lint bersih, Tier-1
+  self-review. GOTCHAS G-13 ditandai teratasi.
+  **Next (butuh user / bukan autonomous-safe):** M4 status-UX **terblokir pending TUI (Ink vs blessed, owner Ziffan,
+  jatuh tempo)**; I-17 periodic-probe loop (Tier-1 egress/state — bisa autonomous tapi lebih besar); Notifier desktop
+  (gate DEPENDENCY-POLICY). `main` di-push (`31f734a` + commit I-4 sesi ini).
 - **Terakhir diupdate:** 2026-07-10 (sesi Ubuntu, session-end ini) — **M4 SUB-TASK 1&2: Notifier core +
   proximity-engine (I-8 sebagian).** Modul `src/notify/notifier.ts` baru. Pola Opus-inline (Tier-1: jalur
   output user-facing + firewall PII G-9) + self-tier-review. Dua slice, satu commit:

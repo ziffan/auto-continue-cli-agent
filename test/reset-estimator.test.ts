@@ -105,6 +105,26 @@ describe('estimateReset — precedence: epochSeconds > isoTimestamp > relativeHo
       expect(result).toEqual({ resetAt: Date.UTC(2026, 0, 15, 15, 0, 0), source: 'exact' });
     });
 
+    it('wrap ke besok melintasi SPRING-FORWARD tetap 3pm wall-clock (I-4/G-13, DST-correct)', () => {
+      // DST New York mulai Min 8 Mar 2026 (02:00 EST→03:00 EDT; hari lokal = 23 jam). now = 3pm ET
+      // 7 Mar (EST) → target hari ini sudah lewat → next occurrence = 3pm ET 8 Mar (EDT, UTC-4 → 19:00Z).
+      // Hand-verified via Intl. Menambah MS_PER_DAY mentah (bug lama) → 20:00Z = 16:00 EDT (salah 1 jam).
+      const now = Date.UTC(2026, 2, 7, 20, 0, 0);
+      const hint: ResetHint = { clockTime: '3pm', timezone: 'America/New_York' };
+      const result = estimateReset(hint, { now, detectedAt: now });
+      expect(result).toEqual({ resetAt: Date.UTC(2026, 2, 8, 19, 0, 0), source: 'exact' });
+    });
+
+    it('wrap ke besok melintasi FALL-BACK tetap 3pm wall-clock (I-4/G-13, DST-correct)', () => {
+      // DST New York selesai Min 1 Nov 2026 (02:00 EDT→01:00 EST; hari lokal = 25 jam). now = 3pm ET
+      // 31 Okt (EDT) → next occurrence = 3pm ET 1 Nov (EST, UTC-5 → 20:00Z). Hand-verified via Intl.
+      // Menambah MS_PER_DAY mentah (bug lama) → 19:00Z = 14:00 EST (salah 1 jam).
+      const now = Date.UTC(2026, 9, 31, 19, 0, 0);
+      const hint: ResetHint = { clockTime: '3pm', timezone: 'America/New_York' };
+      const result = estimateReset(hint, { now, detectedAt: now });
+      expect(result).toEqual({ resetAt: Date.UTC(2026, 10, 1, 20, 0, 0), source: 'exact' });
+    });
+
     it('unparseable IANA timezone falls through to heuristic', () => {
       const now = 1_700_000_000_000;
       const detectedAt = now - 1_000;
