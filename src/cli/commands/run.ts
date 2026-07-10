@@ -4,6 +4,7 @@ import { closeDb, openDb } from '../../store/db.js';
 import { createEventsRepo } from '../../store/repositories/events.js';
 import { createScheduledJobsRepo } from '../../store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../../store/repositories/sessions.js';
+import { withNotifications } from '../../notify/notifier.js';
 import { runSession } from '../../daemon/process-wrapper.js';
 
 /** `acca run -- <tool> [args...]` — spawn CLI target via PTY, catat sesi ke store. */
@@ -21,7 +22,9 @@ export function registerRunCommand(program: Command): void {
       const db = openDb();
       try {
         const sessions = createSessionsRepo(db);
-        const events = createEventsRepo(db);
+        // M4: bungkus events dgn Notifier — transisi LIMIT_HIT/FAILED sesi INI (jalur wrapper user)
+        // ter-surface ke stderr (out-of-band, tak mengotori stdout TUI child).
+        const events = withNotifications(createEventsRepo(db));
         const jobs = createScheduledJobsRepo(db);
 
         const { waitForExit } = runSession(
