@@ -6,13 +6,43 @@
 
 ## Status saat ini
 
-- **Fase:** **M3d ENGINE LENGKAP + ACTUATION SEAMS + GATING + UTANG STRUKTURAL TERTUTUP.** Loop
+- **Fase:** **M4 DIMULAI — Notifier core ✅ (transisi→notif) + proximity-engine ✅ (wiring ditunda).**
+  M3d tertutup penuh (di bawah). Loop
   auto-continue tersambung end-to-end (deteksi→jadwal→probe→**inject-continue / resume-by-id NYATA**),
   semua Tier-1. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
   `runSession` direlokasi ke `daemon/process-wrapper.ts` (layer inversion ditutup) + resume-chain link;
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik); residual
   I-10 = konsolidasi sole-writer `scheduled_jobs` (refactor arsitektur lebih besar, di luar scope).
+- **Terakhir diupdate:** 2026-07-10 (sesi Ubuntu, session-end ini) — **M4 SUB-TASK 1&2: Notifier core +
+  proximity-engine (I-8 sebagian).** Modul `src/notify/notifier.ts` baru. Pola Opus-inline (Tier-1: jalur
+  output user-facing + firewall PII G-9) + self-tier-review. Dua slice, satu commit:
+  **(1) Notifier core:** pemetaan MURNI `notificationForEvent(event)→Notification|null` untuk transisi
+  layak-surface (**LIMIT_HIT · RESUMED [inject `status_change` + resume-by-id `job_dispatch_done resume_spawned`] ·
+  FAILED · BLOCKED [`job_dispatch_error status=BLOCKED`]**); RUNNING/EXITED/orphan-`exited`/event lain → null.
+  Dipasang sbg **DEKORATOR** atas `EventsRepo` (`withNotifications(events, deliver?)`) → tiap transisi yang
+  sudah ditulis ke `events` otomatis ter-surface **tanpa menyentuh call-site emisi**. Sink default = satu baris
+  **stderr** (out-of-band, tak mengotori stdout TUI child); desktop node-notifier = opt-in menyusul (gate dep).
+  **Firewall PII/injection (G-9, ADR-008/013):** body HANYA dari field terkontrol (label `source`/`reason` kita,
+  id sesi) — `evidence` (snippet PTY) & respons probe & `spec.args` TAK PERNAH di-echo. `deliver` throw di-swallow
+  (surfacing tak boleh memutus lifecycle `append`). Wired 2 titik: `cli/commands/run.ts` (wrapper → LIMIT_HIT/FAILED
+  di terminal user) + `daemon/supervisor.ts` (+dep injectable `notify` → RESUMED/BLOCKED di journal daemon).
+  **(2) Proximity-engine (I-8):** `proximityNotifications(snapshot, thresholds)` MURNI — ambang default **0.90
+  five_hour / 0.75 weekly** (meniru CC, G-15), klasifikasi weekly (`/week/i`|`seven_day`) vs 5h, exhausted
+  (usedFraction=1)=wilayah LIMIT_HIT→dilewati. **Wiring sengaja DITUNDA** (slice terpisah): proximity baru
+  bermakna saat sesi AKTIF → butuh **loop probe periodik saat RUNNING**; probe yang ada hanya jalan saat reset
+  (usedFraction rendah). I-8 = "engine ready, wiring deferred".
+  **Verifikasi (Opus sendiri):** build ✅ · eslint ✅ · **270/270 test** (+26: `test/notifier.test.ts` 24 —
+  mapping tiap transisi + null-cases + firewall + decorator passthrough/swallow + proximity 6 cabang; +2 no-op
+  `notify` di supervisor-dispatch agar test senyap). **Live smoke e2e (PTY nyata):** fake-CLI cetak frasa limit CC
+  ASLI (`You've hit your session limit…`) → limit-watcher → `markLimitHit` → dekorator → `[acca warn] Usage limit
+  reached — Session #2j2g hit its usage limit (via output).` di stderr; **`evidence` TAK muncul** (firewall live).
+  **Catatan integrasi jujur:** RESUMED-via-inject muncul di stderr daemon (journal), bukan terminal user (desain
+  baseline). **BLOCKED** cuma event `job_dispatch_error` — status sesi tak pernah di-set BLOCKED oleh dispatch
+  (gap kecil, di luar scope; notifier menangkap dari event). **Docs:** ISSUES (I-8 downgrade→engine-ready + I-17
+  baru periodic-probe loop), MILESTONES M4, DECISIONS Change Log, CONTEXT. **Next:** (1) M4 Notifier desktop
+  (node-notifier gate dep) / (2) **I-17** periodic-probe monitor loop → wiring proximity nyata / (3) M4 status-UX
+  (butuh pending TUI Ink-vs-blessed diputus dulu). `main`→branch `m4-notifier`, di-push sesi ini.
 - **Terakhir diupdate:** 2026-07-07 (sesi Windows, session-end ini) — **UTANG STRUKTURAL M3d DITUTUP:
   I-14 (relokasi runSession + resume-chain) + I-10 (daemon re-arm lintas-proses).** Pola Opus-orkestrator
   inline (seam security-sensitive: schema/migrasi + IPC state) + Tier-1 self-review. Dua slice, dua commit,

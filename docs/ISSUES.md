@@ -14,13 +14,24 @@ benar melanjutkan percakapan di sesi wrapper baru. Ini sekelas verifikasi yang g
 asli (tak bisa dipaksa) — tangkap **opportunistik** saat limit 5-jam habis. Keystroke pasti agy = TBD
 (ADR-014 catatan agy: kandidat "continue"/Enter). **Sumber:** smoke Sub-task 1&2 (6 Jul).
 
-### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13]
+### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13] — ENGINE READY (10 Jul), wiring→I-17
 Claude Code menampilkan warning ~90% (window 5-jam) & ~75% (mingguan) di terminal, tapi itu **UI-only,
 tak di-persist** (G-15) → jangan scrape. Sinyalnya sudah tersedia via usage-probe: `usedFraction` (parser
-M3c). Implementasikan proximity-monitor yang threshold `usedFraction` (default **0.90 five_hour**, **0.75
-seven_day** — meniru default Claude Code sendiri; agy: `1-remainingFraction` per model) → emit notifikasi/
-indikator "perkiraan sisa" dini. Basis fitur US-13 (prediksi proaktif, backlog) + indikator proximity di
-`acca status` (M4). Wire saat Usage-Probe live + Notifier ada (M4).
+M3c). **ENGINE SELESAI (10 Jul, `src/notify/notifier.ts`):** `proximityNotifications(snapshot, thresholds)`
+MURNI — ambang default **0.90 five_hour / 0.75 weekly** (meniru CC), klasifikasi window weekly (`/week/i`|
+`seven_day`) vs 5h (session/five_hour/5h/label-model agy), exhausted (usedFraction=1)=wilayah LIMIT_HIT→dilewati;
+body tanpa PII (G-9). 6 test cabang hijau. **WIRING DITUNDA → I-17:** proximity baru bermakna saat sesi AKTIF
+dipakai; probe yang ada hanya jalan saat reset (usedFraction rendah di sana) → butuh loop probe periodik saat
+RUNNING. Basis fitur US-13 (prediksi proaktif, backlog) + indikator proximity di `acca status` (M4 status-UX).
+
+### I-17 — Loop probe usage PERIODIK saat RUNNING (mewiring proximity I-8 + refresh usage `acca status`) [P2, target M4]
+Belum ada mekanisme yang mem-probe usage secara **berkala selama sesi RUNNING** — probe (`adapter.probeUsage`)
+hanya dipicu job `probe` yang di-enqueue **saat LIMIT_HIT** (jatuh tempo di reset_at). Akibatnya: (a) engine
+proximity (I-8) tak punya sumber snapshot proaktif untuk di-surface; (b) `acca status` tak bisa menampilkan
+usage terkini. **Butuh:** slice yang menjadwalkan probe periodik (mis. job `probe` recurring / timer scheduler)
+untuk sesi RUNNING, panggil `proximityNotifications` atas hasilnya → `deliver` via Notifier, dan cache snapshot
+terakhir untuk `acca status`. Serial dgn supervisor (Tier-1: state-machine + egress + PII). Interval default
+di-tune (hemat kuota: probe LS agy murah, CC OAuth = egress). **Sumber:** desain M4 Notifier (10 Jul).
 
 ### I-7 — Skema agy `GetUserStatus` direkonsiliasi ke respons LIVE Ubuntu (5 Jul) [P3] ✅ (live-verify)
 **RESOLVED (5 Jul, live Ubuntu 24.04 / agy 1.0.16):** GetUserStatus ditembak dari sesi agy NYATA ber-PTY → HTTP 200.
