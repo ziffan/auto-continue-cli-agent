@@ -195,9 +195,16 @@ respons LS exhausted (field absent); set jalur continue agy = **alive/inject** (
   **live smoke PTY** (frasa limit CC asli → `[acca warn] …` stderr, evidence tak bocor).
 - **✅ Proximity ENGINE (I-8):** `proximityNotifications(snapshot, thresholds)` murni (0.90 5h / 0.75 weekly,
   exhausted dilewati). **Wiring DITUNDA → I-17** (butuh loop probe periodik saat RUNNING; probe kini hanya saat reset).
+- **✅ `acca log` (US-8) — 11 Jul (autonomous-run, Windows):** perintah read-only `acca log [sessionId] [-n <limit>]`
+  → `events.listRecent`/`listBySession` (repo +2 method baca) → `formatEventLine` (PURE, exported). **Firewall (G-9,
+  ADR-013):** summary HANYA dari **allowlist** field terkontrol (`to/from/source/reason/action/status/kind/jobId/
+  newSessionId/run_at/attempts/exitCode/where/reachable`) — `evidence`/`spec`/kunci tak dikenal TAK PERNAH di-dump;
+  parse payload defensif. Dekorator `withNotifications` di-`{...events}` (teruskan method baca; menutup fragilitas
+  "method hilang"). Subagent Sonnet + tier-review Opus (firewall + type-soundness). **279/279 test** (+9), build+lint
+  bersih. Merender ke stdout lokal (bukan egress).
 - **Sisa M4:** (1) Notifier desktop (node-notifier, gate dep) · (2) **I-17** periodic-probe loop → wiring proximity
   nyata + refresh usage `acca status` · (3) `acca status` TUI lengkap — **butuh pending TUI (Ink vs blessed) diputus
-  dulu** (owner Ziffan) · (4) `acca log`. AC-4/AC-5 belum diklaim.
+  dulu** (owner Ziffan). AC-4/AC-5 belum diklaim (AC-5 notif transisi ✅ engine; AC-4 status usage butuh I-17).
 
 ## M-remote — Remote-control Telegram (tier A+B+C)
 **Slice (bertahap per tier, satu kanal Telegram — ADR-011):**

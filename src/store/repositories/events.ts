@@ -7,6 +7,16 @@ export interface AppendEventInput {
   payload: unknown;
 }
 
+/** Baris mentah tabel `events` — `payload` TETAP string JSON mentah (parsing = urusan pemanggil,
+ *  bukan repo; lihat firewall di `notify/notifier.ts` & formatter di `cli/commands/log.ts`). */
+export interface StoredEvent {
+  id: number;
+  session_id: string | null;
+  type: string;
+  payload: string;
+  created_at: number;
+}
+
 /** Repositori `events` — append-only (tak ada UPDATE/DELETE), CONVENTIONS.md. */
 export function createEventsRepo(db: DatabaseInstance) {
   return {
@@ -19,6 +29,20 @@ export function createEventsRepo(db: DatabaseInstance) {
         payload: JSON.stringify(input.payload),
         created_at: nowMs(),
       });
+    },
+
+    listRecent(limit: number): StoredEvent[] {
+      return db
+        .prepare<[number], StoredEvent>('SELECT * FROM events ORDER BY created_at DESC, id DESC LIMIT ?')
+        .all(limit);
+    },
+
+    listBySession(sessionId: string, limit: number): StoredEvent[] {
+      return db
+        .prepare<[string, number], StoredEvent>(
+          'SELECT * FROM events WHERE session_id = ? ORDER BY created_at DESC, id DESC LIMIT ?',
+        )
+        .all(sessionId, limit);
     },
   };
 }

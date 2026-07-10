@@ -14,8 +14,8 @@
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik); residual
   I-10 = konsolidasi sole-writer `scheduled_jobs` (refactor arsitektur lebih besar, di luar scope).
-- **Terakhir diupdate:** 2026-07-11 (autonomous-run, Windows) — **M4 Notifier di-MERGE ke `main` + I-4 DITUTUP.**
-  Sesi otonom terjadwal (cron one-shot, /autonomous-run) — Opus orkestrator, verifikasi gate sendiri. Dua hal:
+- **Terakhir diupdate:** 2026-07-11 (autonomous-run, Windows) — **M4: Notifier di-MERGE + I-4 DITUTUP + `acca log` ✅.**
+  Sesi otonom terjadwal (cron one-shot, /autonomous-run) — Opus orkestrator, verifikasi gate sendiri. Tiga slice:
   **(1) Tier-1 review + merge branch `m4-notifier`** (`13ec9ea` merge, `31f734a` catatan): review baris-per-baris
   `src/notify/notifier.ts` + wiring supervisor/run → **APPROVE**. Firewall PII/injection (G-9, ADR-008/013)
   diverifikasi struktural (body notif hanya field terkontrol; `evidence`/`spec.args`/respons-probe tak di-echo;
@@ -28,6 +28,14 @@
   di tanggal besok (bukan `+MS_PER_DAY` mentah, G-13); cabang UTC tetap `+MS_PER_DAY`. Pure. **+2 test** wrap-lintas-DST
   (spring-forward/fall-back New York, ekspektasi hand-verified Intl). **270/270 test**, build+lint bersih, Tier-1
   self-review. GOTCHAS G-13 ditandai teratasi.
+  **(3) `acca log` (US-8) di-tambah** (subagent Sonnet + tier-review Opus): perintah read-only riwayat event
+  (`acca log [sessionId] -n <limit>`) → events-repo +2 method baca (`listRecent`/`listBySession`) + `formatEventLine`
+  PURE. **Firewall G-9/ADR-013:** summary hanya dari **allowlist** field terkontrol; `evidence`/`spec`/kunci tak dikenal
+  tak pernah di-dump (payload masa depan bisa bawa PII probe) — diuji (SECRET/spec-arg tak bocor). Dekorator
+  `withNotifications` diperbaiki ke `{...events}` (teruskan method baca; menutup permanen fragilitas "method hilang").
+  Type-soundness dipulihkan (`fakeEvents` stub method baca; diverifikasi nol error struktural via `tsc`). **279/279
+  test** (+9), build+lint bersih. Render stdout lokal (bukan egress). *(Catatan pra-eksisten: `tsconfig.eslint.json`
+  rootDir=src menolak file `test/` (TS6059) → test tak ter-typecheck di gate; orthogonal, kandidat follow-up.)*
   **Next (butuh user / bukan autonomous-safe):** M4 status-UX **terblokir pending TUI (Ink vs blessed, owner Ziffan,
   jatuh tempo)**; I-17 periodic-probe loop (Tier-1 egress/state — bisa autonomous tapi lebih besar); Notifier desktop
   (gate DEPENDENCY-POLICY). `main` di-push (`31f734a` + commit I-4 sesi ini).
