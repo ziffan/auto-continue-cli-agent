@@ -121,23 +121,29 @@ function resolveClockTime(clockTime: string, timezone: string | undefined, now: 
   const tz = timezone?.trim();
   const isUtc = tz === undefined || tz === '' || /^(utc|gmt)$/i.test(tz);
 
-  let candidate: number;
   if (isUtc) {
     const nowDate = new Date(now);
-    candidate = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), parsed.hour, parsed.minute, 0, 0);
-  } else {
-    try {
-      const { year, month, day } = getDatePartsInZone(now, tz);
-      candidate = resolveWallClockToUtc(year, month, day, parsed.hour, parsed.minute, tz);
-    } catch {
-      // RangeError: zona IANA tak dikenal Intl → tak bisa resolusi exact.
-      return null;
-    }
+    let candidate = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), parsed.hour, parsed.minute, 0, 0);
+    // UTC tak ber-DST → "next occurrence" = tambah 24 jam mentah aman.
+    if (candidate <= now) candidate += MS_PER_DAY;
+    return candidate;
   }
 
-  // "Next occurrence": kalau kandidat sudah lewat (atau persis sekarang), itu jam kemarin/hari-ini-sudah-lewat.
-  if (candidate <= now) candidate += MS_PER_DAY;
-  return candidate;
+  try {
+    const today = getDatePartsInZone(now, tz);
+    let candidate = resolveWallClockToUtc(today.year, today.month, today.day, parsed.hour, parsed.minute, tz);
+    if (candidate <= now) {
+      // "Next occurrence" DST-correct (I-4/G-13): wall-clock SAMA di tanggal kalender berikutnya pada
+      // zona, dengan offset dihitung ulang DI tanggal itu — BUKAN menambah MS_PER_DAY mentah (yang
+      // meleset ±1 jam di hari transisi DST karena hari lokal = 23/25 jam, bukan tepat 24).
+      const next = new Date(Date.UTC(today.year, today.month, today.day + 1));
+      candidate = resolveWallClockToUtc(next.getUTCFullYear(), next.getUTCMonth(), next.getUTCDate(), parsed.hour, parsed.minute, tz);
+    }
+    return candidate;
+  } catch {
+    // RangeError: zona IANA tak dikenal Intl → tak bisa resolusi exact.
+    return null;
+  }
 }
 
 export function estimateReset(hint: ResetHint | undefined, opts: EstimateOpts): ResetEstimate {

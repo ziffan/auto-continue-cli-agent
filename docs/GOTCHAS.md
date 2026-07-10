@@ -175,7 +175,11 @@ perlu `cmd.exe /c` (belum diperlukan; PATHEXT memprioritaskan `.EXE`). **Sumber:
 
 ## Detector / Reset Estimator (M2)
 
-### G-13 — `reset-estimator` clock-time "next occurrence" bisa meleset ±1 jam di hari transisi DST
+### G-13 — `reset-estimator` clock-time "next occurrence" bisa meleset ±1 jam di hari transisi DST ✅ TERATASI (I-4, 11 Jul)
+> **Status:** diperbaiki 11 Jul (I-4 CLOSED). Cabang zona IANA kini hitung ulang wall-clock di tanggal besok
+> (bukan `+MS_PER_DAY` mentah); +2 test wrap-lintas-DST (spring-forward/fall-back). Entri di bawah dipertahankan
+> sebagai catatan sejarah + penjelasan teknik.
+
 **Jebakan:** saat `resolveClockTime` harus wrap ke "besok" (jam target sudah lewat hari ini), ia menambah
 **`MS_PER_DAY` (86.400.000 ms) ke instant UTC**, bukan menghitung ulang wall-clock+1-hari di zona target.
 Di ~2 hari transisi DST/tahun, menambah tepat 24 jam ms bisa mendaratkan wall-clock di jam berbeda (23/25 jam),
