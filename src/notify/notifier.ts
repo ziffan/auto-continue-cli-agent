@@ -1,0 +1,205 @@
+// M4 — Notifier: surface transisi sesi yang penting bagi user (LIMIT_HIT / RESUMED / FAILED /
+// BLOCKED). Engine MURNI + injectable: pemetaan event→notifikasi (`notificationForEvent`) tak
+// menyentuh I/O; pengiriman (`deliver`) di-inject (default = satu baris ke stderr). Dipasang sebagai
+// DEKORATOR atas `EventsRepo` (`withNotifications`) — setiap transisi yang sudah ditulis ke tabel
+// `events` otomatis ter-surface tanpa menyentuh tiap call-site emisi (proc-wrapper & supervisor).
+//
+// FIREWALL PII / injection (G-9, ADR-008/013): body notifikasi HANYA dibangun dari field
+// TERKONTROL/terstruktur (status, label `source`/`reason` yang kita sendiri hasilkan) — TIDAK PERNAH
+// meng-echo teks bebas dari sumber tak tepercaya (`evidence` = potongan output PTY; respons probe).
+// Pesan error spawn kita sendiri (FAILED.reason) boleh disurface tapi dipangkas. Redaksi rahasia
+// penuh untuk streaming output = urusan M-remote (`remote/redact.ts`), bukan slice ini.
+
+import type { UsageSnapshot } from '../shared/types.js';
+import type { AppendEventInput, EventsRepo } from '../store/repositories/events.js';
+
+export type NotificationEvent = 'LIMIT_HIT' | 'RESUMED' | 'FAILED' | 'BLOCKED' | 'PROXIMITY';
+export type NotificationLevel = 'info' | 'warn' | 'error';
+
+export interface Notification {
+  event: NotificationEvent;
+  level: NotificationLevel;
+  title: string;
+  body: string;
+  sessionId: string | null;
+}
+
+export type NotificationDeliver = (n: Notification) => void;
+
+/** Batas panjang teks error spawn kita sendiri yang disurface (FAILED). */
+const MAX_REASON_LEN = 120;
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
+}
+function str(v: unknown): string | undefined {
+  return typeof v === 'string' ? v : undefined;
+}
+function shortId(id: string | null): string {
+  return id ? `#${id}` : '#?';
+}
+function clip(s: string): string {
+  return s.length > MAX_REASON_LEN ? `${s.slice(0, MAX_REASON_LEN - 1)}…` : s;
+}
+
+/**
+ * Pure: petakan satu event `append` → Notification bila layak-surface, else `null`. Hanya membaca
+ * field TERKONTROL dari payload (lihat firewall di header). RUNNING/EXITED & event non-transisi →
+ * `null` (bukan noise untuk user).
+ */
+export function notificationForEvent(input: AppendEventInput): Notification | null {
+  const p = asRecord(input.payload);
+  const sid = input.session_id;
+
+  if (input.type === 'status_change') {
+    const to = str(p.to);
+    if (to === 'LIMIT_HIT') {
+      const source = str(p.source);
+      return {
+        event: 'LIMIT_HIT',
+        level: 'warn',
+        title: 'Usage limit reached',
+        // `source` = label detektor kita ('output'/'hook'/…), bukan isi output → aman. `evidence`
+        // (snippet PTY) sengaja TIDAK disertakan (firewall).
+        body: `Session ${shortId(sid)} hit its usage limit${source ? ` (via ${source})` : ''}.`,
+        sessionId: sid,
+      };
+    }
+    if (to === 'RESUMED') {
+      // Jalur inject-continue (ADR-014 §1): reason = label kita ('inject_continue').
+      const reason = str(p.reason);
+      return {
+        event: 'RESUMED',
+        level: 'info',
+        title: 'Session resumed',
+        body: `Session ${shortId(sid)} resumed${reason ? ` (${reason})` : ''}.`,
+        sessionId: sid,
+      };
+    }
+    if (to === 'FAILED') {
+      // reason = pesan Error spawn KITA sendiri (mis. "Executable tak ditemukan…") — terkontrol,
+      // berguna untuk user bertindak; dipangkas. Bukan output PTY / respons pihak ketiga.
+      const reason = str(p.reason);
+      return {
+        event: 'FAILED',
+        level: 'error',
+        title: 'Session failed',
+        body: `Session ${shortId(sid)} failed${reason ? `: ${clip(reason)}` : '.'}`,
+        sessionId: sid,
+      };
+    }
+    // RUNNING / EXITED / orphan 'exited' (lowercase) → tak di-surface.
+    return null;
+  }
+
+  // Resume-by-id (proc `exited`, ADR-014 §3): dispatch men-spawn sesi wrapper BARU dan menandai sesi
+  // lama RESUMED lewat `job_dispatch_done` (bukan `status_change`) — surface juga sebagai "resumed".
+  if (input.type === 'job_dispatch_done' && str(p.action) === 'resume_spawned') {
+    const newId = str(p.newSessionId) ?? null;
+    return {
+      event: 'RESUMED',
+      level: 'info',
+      title: 'Session resumed',
+      body: `Session ${shortId(sid)} resumed as ${shortId(newId)}.`,
+      sessionId: sid,
+    };
+  }
+
+  // AC-8: cwd asli hilang → resume diblokir (jalur `job_dispatch_error`, status sesi belum di-set
+  // BLOCKED oleh dispatch). reason = label kita ('cwd_missing').
+  if (input.type === 'job_dispatch_error' && str(p.status) === 'BLOCKED') {
+    const reason = str(p.reason);
+    return {
+      event: 'BLOCKED',
+      level: 'error',
+      title: 'Resume blocked',
+      body: `Session ${shortId(sid)} blocked${reason ? `: ${reason}` : ''} — manual action needed.`,
+      sessionId: sid,
+    };
+  }
+
+  return null;
+}
+
+// ── Proximity monitor (I-8) — engine murni, BELUM di-wire ──────────────────────────────────────
+// Ambang "mendekati limit" dari snapshot usage-probe (bukan transisi event). Meniru default Claude
+// Code sendiri: ~90% window 5-jam / ~75% window mingguan (G-15). agy = per-bucket weekly+5h
+// (`parseAgyQuotaSummary`, G-31) atau per-model 5-jam (`parseAgyUserStatus`). CATATAN wiring (belum
+// dilakukan, slice terpisah): proximity baru bermakna saat sesi AKTIF dipakai → butuh loop probe
+// PERIODIK saat RUNNING; probe yang ada hanya berjalan saat reset (usedFraction rendah di sana).
+// I-8 = "engine ready, wiring deferred".
+
+export interface ProximityThresholds {
+  /** Ambang window jangka-pendek (5-jam/session). Default 0.90 (meniru Claude Code). */
+  fiveHour: number;
+  /** Ambang window mingguan (7-hari). Default 0.75 (meniru Claude Code). */
+  weekly: number;
+}
+
+export const DEFAULT_PROXIMITY_THRESHOLDS: ProximityThresholds = { fiveHour: 0.9, weekly: 0.75 };
+
+/** kind → window mingguan? (CC: 'weekly_*'/'seven_day'; agy summary: 'weekly'). Sisanya (session/
+ *  five_hour/5h/label-model agy) = window 5-jam. Model label agy = nama model, BUKAN PII (G-9). */
+function isWeeklyKind(kind: string): boolean {
+  return /week/i.test(kind) || kind === 'seven_day';
+}
+
+/**
+ * Pure: dari `UsageSnapshot` (hasil usage-probe), hasilkan notifikasi "mendekati limit" untuk tiap
+ * window yang `usedFraction` sudah menembus ambang tapi belum penuh. `usedFraction === 1` (exhausted)
+ * = wilayah LIMIT_HIT (di-surface jalur lain) → dilewati. Body hanya dari field terkontrol (tool,
+ * kind/window, persen) — tak ada PII (G-9). Tak menyentuh I/O; caller yang mengirim ke `deliver`.
+ */
+export function proximityNotifications(
+  snapshot: UsageSnapshot,
+  thresholds: ProximityThresholds = DEFAULT_PROXIMITY_THRESHOLDS,
+): Notification[] {
+  const out: Notification[] = [];
+  for (const limit of snapshot.limits) {
+    if (limit.usedFraction >= 1) continue; // exhausted = LIMIT_HIT, bukan proximity.
+    const weekly = isWeeklyKind(limit.kind);
+    const threshold = weekly ? thresholds.weekly : thresholds.fiveHour;
+    if (limit.usedFraction < threshold) continue;
+    const pct = Math.round(limit.usedFraction * 100);
+    out.push({
+      event: 'PROXIMITY',
+      level: 'warn',
+      title: 'Approaching usage limit',
+      body: `${snapshot.tool} ${weekly ? 'weekly' : '5h'} usage at ${pct}% (${limit.kind}).`,
+      sessionId: null,
+    });
+  }
+  return out;
+}
+
+/** Format satu baris out-of-band untuk sink stderr. */
+export function formatNotification(n: Notification): string {
+  return `[acca ${n.level}] ${n.title} — ${n.body}`;
+}
+
+/** Deliver default: satu baris ke stderr (out-of-band → tak mengotori stdout TUI child). Desktop
+ *  (node-notifier) = opt-in menyusul di belakang gate DEPENDENCY-POLICY. */
+export const stderrDeliver: NotificationDeliver = (n) => {
+  process.stderr.write(`${formatNotification(n)}\n`);
+};
+
+/**
+ * Dekorator `EventsRepo`: teruskan `append` apa adanya lalu surface bila layak. Kegagalan `deliver`
+ * di-swallow — surfacing TAK BOLEH memutus jalur lifecycle sesi (append = jalur kritikal). `deliver`
+ * di-inject (test/desktop); default stderr.
+ */
+export function withNotifications(events: EventsRepo, deliver: NotificationDeliver = stderrDeliver): EventsRepo {
+  return {
+    append(input: AppendEventInput): void {
+      events.append(input);
+      const n = notificationForEvent(input);
+      if (n) {
+        try {
+          deliver(n);
+        } catch {
+          // Surfacing gagal (mis. stderr tertutup) — abaikan; audit tetap tersimpan di `events`.
+        }
+      }
+    },
+  };
+}

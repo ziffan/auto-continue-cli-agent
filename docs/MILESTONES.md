@@ -179,10 +179,25 @@ respons LS exhausted (field absent); set jalur continue agy = **alive/inject** (
 > M3d.6→M3d.7 (continue, serial, setelah probe siap). M3d.8 memanfaatkan eksperimen sesi ini → bisa duluan.
 > Semua Tier-1 → tier-review Opus wajib. Fixture/observasi live = sumber kebenaran, bukan asumsi.
 
-## M4 — Notifikasi + Monitor UX
+## M4 — Notifikasi + Monitor UX ← **fase sekarang**
 **Slice:** notifikasi desktop/CLI pada transisi LIMIT_HIT/RESUMED/FAILED; `acca status` TUI lengkap
 (usage best-effort + indikator "perkiraan" + loading/empty/error state); `acca log`.
 **Selesai bila:** AC-4, AC-5 lulus; UX states eksplisit teruji.
+
+**Progres (10 Jul, Ubuntu):**
+- **✅ Notifier core (`src/notify/notifier.ts`):** pemetaan MURNI `notificationForEvent(event)→Notification|null`
+  untuk transisi layak-surface (LIMIT_HIT · RESUMED [inject `status_change` + resume-by-id `job_dispatch_done
+  resume_spawned`] · FAILED · BLOCKED [`job_dispatch_error status=BLOCKED`]); dipasang sbg **dekorator** atas
+  `EventsRepo` (`withNotifications`) → surface otomatis tanpa sentuh call-site. Sink default = stderr (out-of-band);
+  desktop node-notifier = opt-in menyusul (gate dep). **Firewall PII (G-9):** body hanya field terkontrol,
+  `evidence`/probe/`spec.args` tak di-echo; `deliver` throw di-swallow (tak putus lifecycle). Wired: `cli/commands/run.ts`
+  + `daemon/supervisor.ts` (+dep `notify`). Tier-1 self-review. **270/270 test** (+26), build+lint bersih,
+  **live smoke PTY** (frasa limit CC asli → `[acca warn] …` stderr, evidence tak bocor).
+- **✅ Proximity ENGINE (I-8):** `proximityNotifications(snapshot, thresholds)` murni (0.90 5h / 0.75 weekly,
+  exhausted dilewati). **Wiring DITUNDA → I-17** (butuh loop probe periodik saat RUNNING; probe kini hanya saat reset).
+- **Sisa M4:** (1) Notifier desktop (node-notifier, gate dep) · (2) **I-17** periodic-probe loop → wiring proximity
+  nyata + refresh usage `acca status` · (3) `acca status` TUI lengkap — **butuh pending TUI (Ink vs blessed) diputus
+  dulu** (owner Ziffan) · (4) `acca log`. AC-4/AC-5 belum diklaim.
 
 ## M-remote — Remote-control Telegram (tier A+B+C)
 **Slice (bertahap per tier, satu kanal Telegram — ADR-011):**
