@@ -15,6 +15,7 @@ import { createMetaRepo } from '../store/repositories/meta.js';
 import { createScheduledJobsRepo } from '../store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../store/repositories/sessions.js';
 import { requestInject, type InjectRequestResult } from './inject-continue.js';
+import { withNotifications, type NotificationDeliver } from '../notify/notifier.js';
 import { createIpcServer } from './ipc-server.js';
 import { reconcileOrphans } from './reconcile.js';
 import { createScheduler, type JobDispatch, type JobResult, type TimerHandle } from './scheduler.js';
@@ -48,6 +49,9 @@ export interface SupervisorDeps {
    *  in-process (spawn CLI target di `spec.cwd`, catat sesi baru, host socket kontrol → re-injectable).
    *  Di-inject di test → tak spawn proses nyata. */
   spawnResume?: (spec: SpawnSpec, session: Session) => ResumeSpawnResult;
+  /** M4: sink notifikasi transisi daemon (RESUMED/BLOCKED/…). Default = stderr (journal service).
+   *  Di-inject di test (no-op/capture) supaya assertion event tak tercemar noise stderr. */
+  notify?: NotificationDeliver;
 }
 
 /** Hasil spawn resume-by-id. `sessionId` = id sesi wrapper BARU yang melanjutkan percakapan lama. */
@@ -72,7 +76,9 @@ export interface Supervisor {
 /** Bangun supervisor dari `deps`. Repo dibuat sekali dari `deps.db` dan dipakai untuk handler IPC. */
 export function createSupervisor(deps: SupervisorDeps): Supervisor {
   const sessions = createSessionsRepo(deps.db);
-  const events = createEventsRepo(deps.db);
+  // M4: transisi daemon (RESUMED via inject/resume-by-id, BLOCKED) ter-surface lewat dekorator ini.
+  // Sesi hasil resume-by-id (spawnResumeFn di bawah) memakai `events` yang SAMA → transisinya ikut.
+  const events = withNotifications(createEventsRepo(deps.db), deps.notify);
   const meta = createMetaRepo(deps.db);
   const jobs = createScheduledJobsRepo(deps.db);
 

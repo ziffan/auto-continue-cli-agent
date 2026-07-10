@@ -118,6 +118,8 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
       // spawnResume SELALU di-inject untuk cabang exited — default runSession akan men-spawn
       // proses `claude` NYATA di mesin ini (fatal untuk unit test).
       spawnResume: opts.spawnResume,
+      // M4: no-op notify → transisi (RESUMED/BLOCKED) tak menulis ke stderr saat test.
+      notify: () => {},
       // deps.dispatch SENGAJA tidak diisi — memakai dispatch nyata di dalam createSupervisor.
     });
 
@@ -319,6 +321,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
       now: () => nowRef.value,
       setTimer: manual.setTimer,
       clearTimer: manual.clearTimer,
+      notify: () => {},
     });
 
     await supervisor.start(); // tak ada job pending → scheduler disarmed (tak ada timer).
