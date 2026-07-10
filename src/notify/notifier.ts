@@ -189,7 +189,12 @@ export const stderrDeliver: NotificationDeliver = (n) => {
  * di-inject (test/desktop); default stderr.
  */
 export function withNotifications(events: EventsRepo, deliver: NotificationDeliver = stderrDeliver): EventsRepo {
+  // Spread repo asli lalu override `append` saja: `EventsRepo` kini juga punya method BACA
+  // (listRecent/listBySession, M4 `acca log`). Dekorator yang cuma expose `append` akan (a) tak
+  // memenuhi tipe `EventsRepo` (error tsc) & (b) menyembunyikan method baca dari konsumen repo
+  // terbungkus. Logika append (forward → notificationForEvent → deliver dgn try/catch swallow) TAK berubah.
   return {
+    ...events,
     append(input: AppendEventInput): void {
       events.append(input);
       const n = notificationForEvent(input);

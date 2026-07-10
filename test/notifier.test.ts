@@ -168,7 +168,9 @@ describe('proximityNotifications (I-8) — engine murni', () => {
 describe('withNotifications — dekorator EventsRepo', () => {
   function fakeEvents(): { repo: EventsRepo; appended: AppendEventInput[] } {
     const appended: AppendEventInput[] = [];
-    return { repo: { append: (i) => appended.push(i) }, appended };
+    // listRecent/listBySession = stub no-op: EventsRepo kini punya method baca (M4 `acca log`),
+    // dekorator men-spread & meneruskannya; test ini hanya menyoal jalur `append`.
+    return { repo: { append: (i) => appended.push(i), listRecent: () => [], listBySession: () => [] }, appended };
   }
 
   it('meneruskan append ke repo asli lalu deliver untuk event layak-surface', () => {
