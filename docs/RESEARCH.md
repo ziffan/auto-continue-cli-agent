@@ -305,14 +305,33 @@ pre-resume** (dasar uji §5b; #2 terbukti end-to-end — quotaInfo non-nil, TODO
   (pengumuman developers.googleblog; diskusi gemini-cli#27274). Binary `gemini` 0.42.0 di mesin ini praktis
   legacy → fokus MVP ke agy makin tervalidasi.
 
-## 4c. Terpasang di mesin ini (snapshot 2 Jul 2026, re-cek 3 Jul 2026, Windows PC)
+## 4c. Terpasang di mesin ini (snapshot 2 Jul 2026, re-cek 3–4 Jul Windows, **re-cek 11 Jul Ubuntu**)
 
 | Tool | Binary | Versi | Catatan |
 |---|---|---|---|
-| Claude Code | `C:\Users\ziffa\.local\bin\claude.exe` | **2.1.200** (release terbaru **2.1.201**) | ≥2.1.80 → `rate_limits` ada di statusLine JSON; `api/oauth/usage` 200 OK (§2). Binary on-disk yang dibungkus supervisor = **2.1.200**; runtime sesi = 2.1.201 (updater belum tulis-ulang binary standalone) |
-| Antigravity CLI | `C:\Users\ziffa\AppData\Local\agy\bin\agy.exe` | **1.0.16** | ≥1.0.4 → `--conversation <id>` resume |
+| Claude Code | `~/.local/bin/claude` (Ubuntu) / `…\.local\bin\claude.exe` (Win) | **2.1.207** (11 Jul; sebelumnya 2.1.200/201 Win) | ≥2.1.80 → `rate_limits` ada di statusLine JSON; `api/oauth/usage` 200 OK (§2). 2.1.202–207 nol perubahan spek-kritis (blockquote 11 Jul) |
+| Antigravity CLI | `~/.local/bin/agy` (Ubuntu) / `…\agy\bin\agy.exe` (Win) | **1.1.1** (11 Jul; sebelumnya 1.0.16 — naik **minor**) | ≥1.0.4 → `--conversation <id>` resume (tetap). 1.1.0→1.1.1 nol perubahan schema/endpoint; 3 delta perilaku (blockquote 11 Jul) |
 | Gemini CLI | `...\npm\gemini.ps1` | 0.42.0 | terpisah; bukan target MVP |
+| Node.js | — | **24.14.1** (Ubuntu sesi ini) | tetap 24.x LTS (ADR-003; mesin-lock v24.18.0) |
 
+> **Re-cek versi 11 Jul 2026 (Ubuntu, mesin sesi ini):** CC **2.1.201→2.1.207**, agy **1.0.16→1.1.1** (naik **minor**),
+> Node 24.18.0(Win-lock)→**24.14.1** (tetap 24.x). Delta diverifikasi dari CHANGELOG resmi kedua CLI:
+> - **CC 2.1.202–2.1.207 = NOL dampak spek-kritis** — StopFailure hook, skema `rate_limits`/statusLine, `api/oauth/usage`,
+>   resume (`--resume`/`-c`/`--conversation`), limit≠exit **semua tetap**; **auto-continue native belum ada** →
+>   **risiko #4 tetap belum terpicu** (namun demand naik: #13354 41+ upvote + gelombang duplikat baru
+>   #35744/#26775/#38263/#36320/#47276 — **pantau tiap sesi**). Bonus positif (bukan spek): **2.1.206 memperbaiki**
+>   `claude --resume`/`--continue` tak responsif keyboard saat startup + input terabaikan sebelum `--resume` di Windows
+>   → menyehatkan actuation resume-by-id (relevan I-15).
+> - **agy 1.0.16→1.1.1 = NOL perubahan schema/endpoint** yang kita andalkan (quota/usage, LS `GetUserStatus`/
+>   `RetrieveUserQuotaSummary`, port-discovery, OAuth, `--conversation` **semua tak tersentuh** di changelog) → parser &
+>   probe (G-24/G-31/G-23/G-17) tetap valid; fixture detektor `Individual quota reached` (G-19) tak berubah (nol entri
+>   quota/limit-message). **TIGA delta PERILAKU (bukan schema) dicatat:** (a) **1.1.1 print-mode** `agy -p` tak lagi baca
+>   stdin bila prompt via flag (workaround G-18a tak wajib lagi); (b) **1.1.1 print-mode** server-fail kini **stderr +
+>   exit≠0** (bukan "silent empty exit 0" — **G-18c berubah**) — positif, detektor agy tak bergantung print-mode; (c)
+>   **1.1.0 jadikan `request-review` mode DEFAULT** (jeda sebelum tulis-file, `f` accept/reject) → **behavioral, relevan
+>   ke gating/actuation inject-continue** (state prompt agy beda; bisa di-neutralize `--mode default`) → **G-33** + catatan
+>   I-15. **Live re-verify LS schema di 1.1.1 = opportunistik (I-15)**, tak wajib (changelog nol LS-change).
+>
 > **Re-cek versi 4 Jul 2026:** release CC terbaru = **2.1.201** (delta dari 2.1.200 = **satu baris**: "Sonnet 5
 > sessions no longer use the mid-conversation system role for harness reminders" — perubahan harness-prompt Sonnet 5,
 > **tak menyentuh** StopFailure/`rate_limits`/`api/oauth/usage`/resume/limit≠exit). **Risiko #4 tetap belum terpicu**
