@@ -162,10 +162,13 @@ enqueue job `probe` ke `scheduled_jobs` saat LIMIT_HIT, tapi scheduler daemon **
 - **Verifikasi:** +4 test (scheduler.rearm cross-process, supervisor rearm-over-IPC **real socket**,
   notifyDaemonRearm live+dead-socket). **Live smoke DUA PROSES:** `acca daemon` nyata (pid 13904) idle → proses
   terpisah tulis job + kirim rearm → daemon dispatch (blocked/cwd_missing) **tanpa restart**. Tier-1 self-review.
-- **Residual (bukan blocker, dibuka sbg pertimbangan future):** konsolidasi **sole-writer** `scheduled_jobs`
-  (daemon ambil-alih kepemilikan lifecycle sesi, bukan wrapper) = refactor arsitektur lebih besar — sengaja
-  di luar scope slice ini. Bootstrap-exception MAP.md (wrapper tulis `sessions`+`scheduled_jobs`) tetap berlaku
-  sampai konsolidasi itu. Lihat catatan MAP.md.
+- **Residual → RESOLVED by-design (11 Jul, ADR-017):** konsolidasi **sole-writer** penuh (daemon ambil-alih lifecycle
+  sesi wrapper) **DITOLAK**. Investigasi jalur-penulis membuktikan: auto-continue toh sudah daemon-dependent, desain
+  wrapper-tulis-lalu-`rearm` + recovery-saat-start sudah resilient (AC-7), tak ada write-race nyata. Konsolidasi penuh
+  hanya menukar resilience "tulis-sekarang-recover-nanti" + mode monitoring standalone demi invariant tanpa manfaat.
+  **Batas kepemilikan di-scope ulang ADR-017:** wrapper = penulis SAH lifecycle sesinya + enqueue `probe`; daemon =
+  sole *coordinator*/dispatcher + reconciler (bukan sole *writer*). Bootstrap-exception MAP.md kini **permanen by-design**,
+  bukan utang. Revisit hanya bila multi-node (v2) menuntut. Lihat DECISIONS ADR-017 + MAP §Kontrak.
 
 ### I-13 — Gating inject-continue foreground/idle belum dihitung [P2] ✅ (7 Jul, `7dffcbe`)
 **RESOLVED:** ADR-014 poin (ii) foreground=agent-bukan-shell & (iii) idle-bukan-mid-turn kini **dihitung &
