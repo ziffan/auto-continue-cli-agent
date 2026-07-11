@@ -40,8 +40,10 @@
   filename=id `--resume` (**G-34**) — TAPI korelasi racy → **sengaja ditunda** (butuh live-verify, audit §6; jalur robust=hook `SessionStart`).
   **Docs:** ISSUES (A-2/A-1-paruh CLOSED + I-20..I-28 dari A-1..A-15), MILESTONES (M3e baru + M4 AC-4 ⚠), GOTCHAS G-34, DECISIONS
   Change Log, CONTEXT. **Next konkret:** (1) **R2b** capture `cli_session_id` (gabung hook `SessionStart` I-23, live-verify); (2) **R3**
-  siklus-limit-2 (I-21); (3) **R4** agy-exited (I-22 — **butuh keputusan user**: opsi #3+egress oauth2 vs surface-manual). Branch
-  `m3e-loop-correction` **belum di-push** (ff-merge ke `main` di bawah).
+  siklus-limit-2 (I-21); (3) **R4** agy-exited — **keputusan LOCK sesi ini (Ziffan → ADR-018): Opsi 1** (probe standalone
+  opsi #3 + egress `oauth2.googleapis.com` masuk whitelist NFR; otonomi penuh, rekomendasi Opus Opsi-3 di-override). Impl R4 =
+  2 slice (guard minimal probe-impossible dulu; lalu probe OAuth Tier-1 + live-verify). Branch `m3e-loop-correction` di-ff-merge
+  ke `main` (`7c03848`+`6a6a76f`); **ADR-018 + propagasi keputusan di-commit setelahnya** (di bawah). **`main` belum di-push ke origin.**
 - **Terakhir diupdate:** 2026-07-11 (sesi Ubuntu, session-end) — **DELTA-CHECK VERSI + I-19 gate + ADR-017 + gate-docs; di-merge & di-push ke `main` (`82bd336`).**
   Sesi buka: sinkron lokal ke `origin/main` (lokal ketinggalan 12 commit; `m4-notifier` sudah ter-merge → docs awalnya basi).
   Empat pekerjaan, 4 commit di branch `m4-version-delta` → **ff-merge ke `main` + push** (branch dihapus lokal):

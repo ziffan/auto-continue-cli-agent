@@ -27,13 +27,17 @@ sesi RESUMED yang masih hidup berhenti dipantau. Flow PROJECT §4 langkah 10 ("K
 yang kena limit 2× (persona target) hanya ter-rescue sekali. **Remedi:** transisi RESUMED→RUNNING (wrapper tandai saat
 inject diterima) + un-latch watcher pasca-inject + monitor mencakup sesi hidup + test siklus 2×. **Sumber:** audit A-3.
 
-### I-22 — agy resume-by-id sesi MATI mustahil (probe butuh LS hidup; opsi #3 ADR-010 belum ada) [P1, butuh keputusan user]
+### I-22 — agy resume-by-id sesi MATI: implement opsi #3 (probe standalone OAuth) [P1] — **keputusan LOCK (ADR-018), impl pending**
 Job `probe` agy pada sesi `exited` → PID mati → `discoverLocalPorts` kosong → throw → `'retry'` backoff cap 60m
-**selamanya, senyap**. Jalur pre-resume standalone (`retrieveUserQuota` OAuth, opsi #3) belum ada + token on-disk stale
-(G-1) butuh refresh via `oauth2.googleapis.com` (egress di luar whitelist NFR). **Keputusan user:** opsi #3 + egress
-oauth2 (ADR baru men-supersede scope egress) ATAU fresh-launch snapshot ATAU terima "agy exited = manual". **Minimal
-tanpa keputusan:** deteksi "probe impossible" (agy + exited) → event + notif `PROBE_IMPOSSIBLE` + stop retry senyap.
-**Sumber:** audit A-4.
+**selamanya, senyap**. **KEPUTUSAN 11 Jul (Ziffan → ADR-018): Opsi 1** — implement probe standalone pre-resume
+(`retrieveUserQuota`) + refresh token via **`oauth2.googleapis.com`** (masuk egress whitelist NFR). Otonomi penuh agy-exited.
+**Dua slice (M3e/R4):**
+1. **Guard minimal — LEBIH DULU (kecil, independen):** deteksi agy+exited+probe-impossible → notif `PROBE_IMPOSSIBLE` +
+   **stop retry** (tutup bug loop-senyap). Aman dikerjakan tanpa nunggu #2.
+2. **Probe standalone (Tier-1: creds + egress, butuh live-verify):** refresh token `oauth2.googleapis.com` (client-id
+   Gemini CLI) → `retrieveUserQuota` → `UsageSnapshot`. Mitigasi ADR-018: allowlist host ketat (`guardEgress`), token
+   dibaca-saja (tak di-log), PII firewall (G-9), refresh pre-resume-only. Live-verify: token disk stale (G-1) → flow
+   refresh harus terbukti balas 200 + body-sukses (yang ADR-010 tunda ke M3). **Sumber:** audit A-4, ADR-018.
 
 ### I-23 — Deteksi limit CC PRIMER (hook `StopFailure`) belum diimplementasi [P2]
 ADR-001/CLAUDE.md §7 tetapkan hook `StopFailure` matcher `rate_limit` sbg jalur deteksi **primer**; yang ada hanya

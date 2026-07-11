@@ -406,6 +406,37 @@ terbuka** — ditolak: keputusan menggantung mengundang relitigasi tiap sesi; le
 
 ---
 
+## ADR-018: Probe agy pre-resume standalone (opsi #3) + `oauth2.googleapis.com` masuk egress whitelist
+**Status:** **Accepted** (locked 2026-07-11, owner Ziffan) — *immutable; revisi = ADR baru yang men-supersede.*
+Meresolusi keputusan yang **ADR-010 sengaja tunda** ("bila opsi #3 dipilih, NFR egress wajib + `oauth2.googleapis.com`").
+**Context:** I-22/A-4 (audit 11 Jul). agy = dual-limit; saat sesi agy **MATI** (`exited`: reboot/crash/terminal ditutup)
+lalu limitnya reset, dispatch tak bisa **probe** kuota karena probe agy wajib **LS hidup** (port lokal dari PID hidup) —
+PID mati → `discoverLocalPorts` kosong → `'retry'` backoff cap 60m **selamanya, senyap**. Jalur pre-resume standalone
+(`retrieveUserQuota` OAuth di `cloudcode-pa.googleapis.com`, opsi #3 ADR-010) **belum diimplementasi**, dan token on-disk
+`oauth_creds.json` **stale** (G-1: agy refresh in-memory, tak nulis disk) → butuh **refresh token sendiri via
+`oauth2.googleapis.com`** (+ client-id Gemini CLI), egress **di luar whitelist NFR**. (CC tak kena — probe CC = HTTP
+standalone ke `api.anthropic.com`, sudah whitelist.)
+**Decision:** **Adopt opsi #3.** Implement probe agy standalone pre-resume: refresh token via `oauth2.googleapis.com`
+→ `retrieveUserQuota` → normalisasi ke `UsageSnapshot`. **Tambah `oauth2.googleapis.com` ke NFR §Security egress
+whitelist** (host baru, khusus refresh token OAuth Gemini). Memberi **auto-resume penuh agy-exited** (parity dgn CC) —
+owner memilih otonomi penuh di atas surface-manual.
+**Consequences:**
+- (+) Loop auto-continue lengkap lintas-tool; agy mati saat limit tetap ter-rescue otomatis (JTBD inti — limit reset
+  jam 02:00 saat user jauh dari mesin).
+- (−) **Attack surface egress melebar 1 host** (`oauth2.googleapis.com`). **Mitigasi wajib di impl:** allowlist host ketat
+  (`guardEgress`, non-allowlist → `EgressBlockedError`); token diperlakukan **kredensial** (dibaca-saja, tak di-log/echo —
+  pola `credentials.ts`); body respons tak pernah masuk pesan error + PII firewall (G-9); refresh **hanya saat pre-resume**
+  (bukan polling). Client-id Gemini CLI = infra-config, bukan kredensial akun.
+- **Implementasi = slice tersendiri (M3e/R4, Tier-1: creds + egress)**, butuh **live-verify** flow refresh token nyata
+  (G-1: token disk stale → refresh harus terbukti balas 200 + `retrieveUserQuota` body-sukses, yang ADR-010 tunda ke M3).
+- **Guard minimal dikerjakan LEBIH DULU** (independen, tak menunggu R4 penuh): agy+exited+probe-impossible → surface notif
+  `PROBE_IMPOSSIBLE` + **stop retry** (tutup bug loop-senyap A-4) supaya tak ada regresi selama flow OAuth belum jadi.
+- Revisit bila endpoint `oauth2`/`retrieveUserQuota` (undocumented) tak stabil.
+**Alternatives Rejected:** **Opsi 2 fresh-launch** (spawn agy throwaway ber-PTY untuk bind LS) — rapuh (print-mode quota
+nil G-7 → butuh PTY interaktif; timing LS 2–4s G-23; agy tak boleh konkuren G-19; throwaway lifecycle). **Opsi 3
+"agy-exited = manual"** — paling aman/least-privilege tapi owner tolak (mau otonomi penuh). **Status quo** (silent 60m
+retry) — bug.
+
 ## Pending decisions (belum diputuskan)
 
 | Keputusan | Owner | Target |
@@ -413,6 +444,7 @@ terbuka** — ditolak: keputusan menggantung mengundang relitigasi tiap sesi; le
 | ~~Retensi arsip transcript/sesi (berapa lama sebelum purge)~~ → **diputuskan 5 Jul (Ziffan): TIDAK PERNAH purge** — retensi tak terbatas (arsip `archived_at`, tak ada job purge). Selaras penuh prinsip "no hard delete". *Nilai konfigurasi, tak mengubah engine ADR-004.* | — | ✅ selesai |
 | ~~Format IPC CLI ↔ daemon~~ → **diputuskan: ADR-015** (Node `net` unix socket / named pipe, NDJSON) | — | ✅ selesai |
 | ~~TUI library final (Ink vs blessed) untuk `acca status`~~ → **diputuskan 11 Jul (Ziffan): TANPA TUI lib — plain ANSI render.** `acca status` = snapshot sekali-cetak (extend `status.ts` yg ada + karakter bar `▓▓░` + warna ANSI), `watch acca status` utk refresh; footer aksi = command terpisah (`resume-now`/`cancel`/`log`). Nol dependency baru (paling selaras DEPENDENCY-POLICY + cross-platform). Ink/blessed ditolak: dep berat/tua vs kebutuhan monitor sederhana. Live-refresh TUI = backlog bila kelak perlu. | — | ✅ selesai |
+| ~~**Kebijakan resume agy sesi MATI** (I-22/A-4: probe butuh LS hidup; opsi #3 + egress oauth2 vs fresh-launch vs manual)~~ → **diputuskan 11 Jul (Ziffan): Opsi 1 = ADR-018** (adopt opsi #3 + `oauth2.googleapis.com` masuk egress whitelist; otonomi penuh). Impl = slice M3e/R4 + live-verify; guard minimal (surface probe-impossible) lebih dulu. | — | ✅ selesai |
 | Lisensi repo (MIT vs proprietary) — terkait rencana komersialisasi | Ziffan | sebelum publik |
 | ~~Mekanisme probe usage Antigravity~~ → **ADR-010 (hybrid) LOCKED 3 Jul malam** (opsi #2 terbukti; residual #3/#1 = impl-tuning M3) | — | ✅ selesai |
 | ~~**Strategi continue sesi interaktif yang masih hidup** (inject "continue" ke PTY vs kill→resume-by-id; kebijakan default + gating)~~ → **diputuskan: ADR-014** (inject-ke-PTY preferred + gating ketat; fallback resume-by-id; gating-gagal = manual) | — | ✅ selesai (3 Jul malam) |
@@ -424,6 +456,7 @@ terbuka** — ditolak: keputusan menggantung mengundang relitigasi tiap sesi; le
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-11 (M3e/R4, keputusan agy-exited) | **ADR-018 baru + di-LOCK (Accepted, owner Ziffan).** Meresolusi pending yang **ADR-010 tunda**: kebijakan resume agy sesi MATI (I-22/A-4). **Opsi 1 dipilih** — adopt opsi #3 (probe standalone `retrieveUserQuota` + refresh token via `oauth2.googleapis.com`) → **`oauth2.googleapis.com` masuk NFR §Security egress whitelist** (host baru). Otonomi penuh agy-exited (parity CC), owner pilih di atas surface-manual (rekomendasi Opus = Opsi 3 least-privilege, di-override). Konsekuensi: attack surface egress +1 host (mitigasi: allowlist ketat + creds dibaca-saja + PII firewall + refresh pre-resume-only); impl = slice M3e/R4 Tier-1 + **live-verify** refresh token (G-1 stale); **guard minimal (probe-impossible → surface + stop retry)** lebih dulu (tutup bug loop-senyap). Dampak docs: NFR §Security egress (+oauth2.googleapis.com), ISSUES I-22, MILESTONES M3e/R4, DECISIONS Pending+Change Log, CONTEXT. |
 | 2026-07-11 (M3e, audit pra-M-remote) | **Re-prioritas: M-remote DITUNDA, M3e "koreksi loop" disisipkan sbg gate — TANPA ADR baru.** Audit menyeluruh (`docs/audit/AUDIT-2026-07-11.md`) menemukan **4 P1 di jalur resume/continue** yang lolos 308 test (seam actuation di-stub → id resume tak pernah diuji thd kontrak CLI nyata; siklus limit-2 tak punya test). Klaim "loop auto-continue penuh selesai" = **overstated** (yang live cuma proxy). Keputusan: tutup R1–R3 dulu (M-remote tier B `resume-now` akan expose jalur rusak; I-15 pasti gagal di A-1). **Dua fix implementasi (dalam ADR-014, bukan ADR baru): R1** — default `spawnResumeFn` konsumsi `waitForExit` (unhandledRejection dulu mematikan daemon) + tak keliru markResumed saat spawn gagal; **R2a** — resume-by-id pakai `cli_session_id`; absen → **BLOCKED jujur** (bukan spawn id supervisor yang dijamin ditolak CLI). Penangkapan `cli_session_id` (R2b) sengaja ditunda: **butuh live-verify** (audit §6: jangan ✅ actuation tanpa smoke jalur default) → jalur robust = hook `SessionStart`. Juga koreksi klaim AC-4 (overclaim → I-24). Dampak docs: MILESTONES (M3e baru + M4 AC-4 ⚠), ISSUES (A-2/A-1-paruh CLOSED + I-20..I-28), GOTCHAS G-34, CONTEXT. **Proses:** tambah kelas test "kontrak integrasi" (invarian lintas-slice) + DoD actuation = live smoke jalur default. |
 | 2026-07-11 (delta-check session, Ubuntu) | **ADR-017 baru + di-LOCK (Accepted).** Memformalkan residual I-10 sebagai **by-design**: wrapper `acca run` (pemilik PTY) = penulis SAH lifecycle sesinya sendiri + enqueue `probe`; **daemon = sole COORDINATOR/dispatcher + reconciler, bukan sole *writer***. Konsolidasi sole-writer penuh **DITOLAK** (bikin daemon dependency-keras `acca run`, hapus resilience daemon-optional, demi invariant tanpa write-race nyata — auto-continue toh sudah daemon-dependent; desain rearm+recovery sudah resilient/AC-7). Tidak men-supersede ADR-002/015 — scope-ulang invariant "penulis tunggal" (dulu konvensi MAP + pengecualian bootstrap). Dampak docs: MAP §Kontrak (pengecualian bootstrap → permanen by-design, rujuk ADR-017), ISSUES (residual I-10 → RESOLVED by-design), CONTEXT. |
 | 2026-07-11 (autonomous-run, Windows) | **Pending "TUI library `acca status`" DITUTUP (owner Ziffan): TANPA TUI lib — plain ANSI render** (extend `status.ts` + bar `▓▓░` + ANSI; `watch` utk refresh; footer=command terpisah). Nol dep baru (selaras DEPENDENCY-POLICY/ADR-003-004 few-deps + cross-platform); Ink (dep berat) & blessed (tua, TS lemah) ditolak; live-refresh TUI=backlog. Framing "Ink vs blessed" ditantang → jawaban = tak butuh lib. *Nilai tooling, tak mengubah engine.* Dampak docs: DECISIONS Pending, ARCHITECTURE §3 (baris CLI framework koreksi "Ink"→plain-render), MILESTONES M4 (status-UX unblocked; usage-bar tetap butuh sumber data I-17), CONTEXT. **Catatan:** slice `acca status` usage-view penuh (AC-4) tetap bergantung **I-17** (loop probe periodik → cache snapshot) sbg sumber data. |
