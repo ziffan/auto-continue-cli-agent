@@ -2,7 +2,8 @@
 
 > Format Nygard. ADR *Accepted* immutable — revisi = ADR baru yang men-supersede.
 > Status per ADR: **Proposed** (masih bisa berubah) / Accepted / Deprecated / Superseded.
-> Status per 2026-07-04: **SEMUA ADR Accepted (locked) = ADR-001…016.** ADR-001 di-**Accept 4 Jul** setelah
+> Status per 2026-07-11: **SEMUA ADR Accepted (locked) = ADR-001…017.** (ADR-017, 11 Jul: wrapper=penulis-sah
+> lifecycle-sesinya + daemon=sole-coordinator-bukan-sole-writer → menutup residual I-10 by-design.) ADR-001 di-**Accept 4 Jul** setelah
 > verifikasi terakhir tertutup: pesan limit CC ASLI (4 Jul pagi) + **pesan limit agy TUI ASLI + varian quota-habis
 > (4 Jul, `Individual quota reached`, limit≠exit, `remainingFraction` absent)**. **Tak ada lagi ADR Proposed.**
 > Accepted = immutable. ADR-005 & ADR-008 di-lock **termasuk** revisi Telegram 3 Jul (bot token = infra-secret;
@@ -366,6 +367,45 @@ non-blocking — model langganan, bukan pay-per-token).
 
 ---
 
+## ADR-017: Wrapper `acca run` = penulis SAH lifecycle sesinya sendiri (+ enqueue `probe`); daemon = sole *coordinator*/dispatcher, bukan sole *writer* — konsolidasi penuh DITOLAK
+**Status:** **Accepted** (locked 2026-07-11) — *immutable; revisi = ADR baru yang men-supersede.* Menutup residual I-10
+("konsolidasi sole-writer `scheduled_jobs`") sebagai **keputusan by-design**, bukan utang tertunda. Tidak men-supersede
+ADR-002/015 — meng-**scope ulang** invariant "penulis tunggal" (yang selama ini hidup sbg konvensi MAP + pengecualian bootstrap).
+**Context:** MAP.md §Kontrak menetapkan "daemon = penulis tunggal `sessions`/`scheduled_jobs`" dengan **pengecualian bootstrap
+M1**: `acca run` = wrapper pemilik PTY → menulis `sessions` (RUNNING→EXITED/FAILED) + enqueue `scheduled_jobs` (`probe` saat
+LIMIT_HIT) langsung via repo. I-10 (Option A, 7 Jul) menutup celah cross-process re-arm (IPC `rearm` best-effort + recovery-saat-
+`start()`, AC-7) tapi meninggalkan residual terbuka: "konsolidasi sole-writer penuh = refactor arsitektur lebih besar, di luar
+scope." **Investigasi jalur-penulis 11 Jul** (`process-wrapper.ts`/`supervisor.ts`) menemukan: (1) **auto-continue SUDAH
+daemon-dependent** — scheduler yang men-dispatch `probe`/`resume` hidup **di daemon**; wrapper tak punya scheduler → tanpa daemon,
+job hanya mengendap. (2) Desain sekarang **resilient**: wrapper tulis lokal → `rearm` best-effort → daemon hidup re-arm seketika;
+daemon mati saat enqueue → recovery-saat-`start()` tetap jamin job tak hilang (AC-7). (3) Konsolidasi penuh = `acca run` stream
+SEMUA write via IPC → **daemon jadi dependency KERAS** `acca run` (mematikan mode monitoring standalone), memperbesar permukaan IPC
+(create/setPid/limitHit/exit/fail) + failure-mode, dan **menukar resilience "tulis-sekarang-recover-nanti" demi kerapian invariant**
+— net-value meragukan (tak ada write-race nyata untuk dikonsolidasi).
+**Decision:** Formalkan pengecualian bootstrap sebagai **desain permanen**. Batas kepemilikan state di-scope ulang eksplisit:
+1. **Wrapper `acca run` (proses pemilik PTY) = penulis SAH** untuk (a) lifecycle sesinya sendiri (`sessions`:
+   create/setPid/markLimitHit/markExited/markFailed/markResumed) & (b) enqueue `probe` ke `scheduled_jobs` saat LIMIT_HIT.
+   Bukan pelanggaran — penulis = proses yang MEMEGANG sumber kebenaran runtime (PTY + deteksi limit dari output-nya).
+2. **Daemon = sole COORDINATOR/dispatcher + reconciler**, bukan sole *writer*: pemilik tunggal **scheduler** (dispatch
+   `probe`/`resume`), rekonsiliasi orphan saat start (AC-7/I-3), re-arm atas IPC `rearm` (I-10). Daemon juga menulis sesi hasil
+   actuation resume-by-id — konsisten karena di situ **daemon-lah pemilik PTY** sesi baru.
+3. **Konsistensi lintas-proses** dijaga dua mekanisme yang sudah ada: recovery-saat-`start()` (jaminan keras, AC-7) + `rearm`
+   IPC best-effort (jaminan latensi). Tak ada penulis konkuren pada BARIS yang sama (wrapper menulis sesinya; daemon menulis
+   dispatch job & sesi hasil-resume) + SQLite WAL transaksional (ADR-004) → tak ada write-race untuk dikonsolidasi.
+4. **Konsolidasi sole-writer penuh (daemon ambil-alih lifecycle sesi wrapper) DITOLAK** untuk MVP.
+**Consequences:** (+) Residual I-10 tertutup tanpa refactor berisiko; `acca run` tetap jalan tanpa daemon (monitoring/deteksi) —
+daemon wajib hanya untuk **actuation** (auto-continue), yang memang sifatnya. (+) Batas kepemilikan state kini eksplisit &
+dapat-dipertahankan (bukan "utang menunggu" yang mengundang relitigasi). (+) Selaras M5 (daemon always-on tetap koordinator tunggal).
+(−) "Penulis tunggal" harfiah tak tercapai — dua proses menulis `sessions`/`scheduled_jobs` (baris berbeda); mitigasi = pembagian
+baris tegas + WAL + recovery/rearm. (−) Bila kelak butuh multi-writer ketat (multi-node v2), keputusan ini di-revisit via ADR baru.
+**Alternatives Rejected:** **Konsolidasi sole-writer penuh** (daemon owns lifecycle, `acca run` stream via IPC) — ditolak:
+daemon jadi dependency-keras (mematikan standalone), permukaan IPC + failure-mode membesar, resilience "tulis-sekarang-recover-nanti"
+hilang, demi invariant tanpa write-race nyata (revisit bila multi-node v2). **Enqueue `probe` murni via IPC tanpa tulis lokal** —
+ditolak: kehilangan jaminan AC-7 (daemon mati saat enqueue → job hilang, tak pernah ter-recover). **Biarkan sebagai residual
+terbuka** — ditolak: keputusan menggantung mengundang relitigasi tiap sesi; lebih baik diputus tegas.
+
+---
+
 ## Pending decisions (belum diputuskan)
 
 | Keputusan | Owner | Target |
@@ -384,6 +424,7 @@ non-blocking — model langganan, bukan pay-per-token).
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-11 (delta-check session, Ubuntu) | **ADR-017 baru + di-LOCK (Accepted).** Memformalkan residual I-10 sebagai **by-design**: wrapper `acca run` (pemilik PTY) = penulis SAH lifecycle sesinya sendiri + enqueue `probe`; **daemon = sole COORDINATOR/dispatcher + reconciler, bukan sole *writer***. Konsolidasi sole-writer penuh **DITOLAK** (bikin daemon dependency-keras `acca run`, hapus resilience daemon-optional, demi invariant tanpa write-race nyata — auto-continue toh sudah daemon-dependent; desain rearm+recovery sudah resilient/AC-7). Tidak men-supersede ADR-002/015 — scope-ulang invariant "penulis tunggal" (dulu konvensi MAP + pengecualian bootstrap). Dampak docs: MAP §Kontrak (pengecualian bootstrap → permanen by-design, rujuk ADR-017), ISSUES (residual I-10 → RESOLVED by-design), CONTEXT. |
 | 2026-07-11 (autonomous-run, Windows) | **Pending "TUI library `acca status`" DITUTUP (owner Ziffan): TANPA TUI lib — plain ANSI render** (extend `status.ts` + bar `▓▓░` + ANSI; `watch` utk refresh; footer=command terpisah). Nol dep baru (selaras DEPENDENCY-POLICY/ADR-003-004 few-deps + cross-platform); Ink (dep berat) & blessed (tua, TS lemah) ditolak; live-refresh TUI=backlog. Framing "Ink vs blessed" ditantang → jawaban = tak butuh lib. *Nilai tooling, tak mengubah engine.* Dampak docs: DECISIONS Pending, ARCHITECTURE §3 (baris CLI framework koreksi "Ink"→plain-render), MILESTONES M4 (status-UX unblocked; usage-bar tetap butuh sumber data I-17), CONTEXT. **Catatan:** slice `acca status` usage-view penuh (AC-4) tetap bergantung **I-17** (loop probe periodik → cache snapshot) sbg sumber data. |
 | 2026-07-10 (Ubuntu) | **M4 Notifier core + proximity-engine (I-8 sebagian) — TANPA ADR baru** (dalam ADR-008/013 firewall + ADR-016 workflow). Modul `src/notify/notifier.ts`: pemetaan murni event→notifikasi + dekorator `withNotifications` atas `EventsRepo` (surface transisi LIMIT_HIT/RESUMED/FAILED/BLOCKED tanpa sentuh call-site) + sink stderr default. **Keputusan implementasi (dicatat, bukan ADR):** (a) seam = **dekorator events-repo** (bukan notify() eksplisit tiap site) → future-proof; (b) **firewall PII struktural** — body notif hanya dari field terkontrol, teks bebas tak tepercaya (`evidence` PTY, respons probe, `spec.args`) tak pernah di-echo → slice ini **tak butuh** `remote/redact.ts` (itu tetap urusan M-remote streaming); (c) sink baseline = stderr (out-of-band), desktop node-notifier = opt-in menyusul di belakang gate DEPENDENCY-POLICY. Proximity engine (I-8) selesai tapi **wiring ditunda → I-17** (butuh loop probe periodik saat RUNNING). Pola Opus-inline (Tier-1 user-facing output + PII) + self-tier-review. Dampak docs: ISSUES (I-8 engine-ready + I-17 baru), MILESTONES M4, CONTEXT. Keputusan ADR tak berubah. |
 | 2026-07-07 (Windows) | **Utang struktural M3d ditutup (I-14 + I-10) — TANPA ADR baru** (dalam ADR-002/014/015). **I-14:** `runSession` direlokasi `cli/run-core.ts`→`daemon/process-wrapper.ts` (menegakkan arah dependency MAP: daemon = pemilik engine wrapper, bukan di-import dari cli/) + kolom `sessions.resumed_from` (migrasi `0002`, `schema_version`=2) menautkan rantai resume (dulu longgar via event). Dipilih `resumed_from` bukan reuse `cli_session_id` (semantik beda: id milik CLI). **I-10:** celah cross-process re-arm ditutup lewat **Option A (IPC notify)** — bukan konsolidasi sole-writer: `scheduler.rearm()` baca store segar + perintah IPC `rearm` **tanpa payload** (injection firewall konsisten ADR-008/013, G-26) + `notifyDaemonRearm` best-effort di wrapper. **Residual (dibuka, bukan diputuskan):** konsolidasi sole-writer `scheduled_jobs` (daemon ambil-alih lifecycle sesi) = refactor lebih besar, di luar scope. Dampak docs: GOTCHAS G-30, ISSUES (I-14/I-10 CLOSED), DATA-MODEL (kolom `resumed_from`), MILESTONES M3d, CONTEXT. Keputusan ADR tak berubah. |
