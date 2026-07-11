@@ -14,6 +14,22 @@
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik); residual
   I-10 = konsolidasi sole-writer `scheduled_jobs` (refactor arsitektur lebih besar, di luar scope).
+- **Terakhir diupdate:** 2026-07-11 (sesi Ubuntu, session-start) — **DELTA-CHECK VERSI CC 2.1.207 + agy 1.1.1 (docs-only).**
+  Sesi buka: sinkron lokal ke `origin/main` (lokal `main` ketinggalan 12 commit; branch `m4-notifier` sudah di-merge →
+  docs yang kubaca awalnya basi). Lalu delta-check versi (argumen /session-start user): terpasang kini **CC 2.1.207**
+  (dari 2.1.200/201) & **agy 1.1.1** (naik **minor** dari 1.0.16), Node 24.14.1. Diverifikasi dari CHANGELOG resmi:
+  **(1) CC 2.1.202–207 = NOL dampak spek-kritis** (StopFailure/`rate_limits`/`api/oauth/usage`/resume/limit≠exit tetap;
+  auto-continue native belum ada → **risiko #4 belum terpicu**, walau demand naik: #13354 + gelombang duplikat baru
+  #35744/#26775/#38263/#36320/#47276 — pantau). Bonus: **2.1.206 perbaiki bug keyboard `--resume`/`--continue`** →
+  sehatkan resume-by-id (I-15). **(2) agy 1.0.16→1.1.1 = NOL perubahan schema/endpoint** (quota/LS `GetUserStatus`/
+  `RetrieveUserQuotaSummary`/port/OAuth/`--conversation` tak tersentuh) → parser/probe (G-24/G-31/G-23/G-17) + fixture
+  `Individual quota reached` (G-19) tetap valid. **3 delta PERILAKU dicatat:** (a)&(b) 1.1.1 ubah print-mode (tak baca
+  stdin w/ flag-prompt; server-fail→stderr+exit≠0) → **G-18 dianotasi** (jebakan lama spesifik ≤1.0.16); (c) **1.1.0
+  jadikan `request-review` mode DEFAULT** (jeda pre-write, `f`) → **G-33 baru** (relevan gating/actuation inject-continue;
+  pertimbangkan `--mode default`) + catatan I-15. **Live re-verify LS schema 1.1.1 = opportunistik (I-15)**, tak wajib.
+  **Docs:** RESEARCH §4c (tabel versi + blockquote 11 Jul), GOTCHAS (G-33 baru + G-18 anotasi + Change Log), ISSUES I-15
+  (+catatan agy 1.1.x/CC 2.1.207), CONTEXT. **Tak ada kode disentuh** (docs-only, branch `m4-version-delta`). **Next
+  (butuh user pilih arah):** M-remote tier A / M5 deploy / Notifier desktop (dep gate) / I-19 gate-fix; opportunistik I-15.
 - **Terakhir diupdate:** 2026-07-11 (autonomous-run, Windows) — **M4 INTI SELESAI (AC-4 ✅ + AC-5 ✅): Notifier + proximity + I-17 usage-monitor + `acca status` usage-view + `acca log`; +I-4 fix + keputusan TUI.**
   Sesi otonom terjadwal (cron one-shot, /autonomous-run) — Opus orkestrator, verifikasi gate sendiri, 3 subagent Sonnet. Ringkas:
   **(1) Tier-1 review + merge branch `m4-notifier`** (`13ec9ea` merge, `31f734a` catatan): review baris-per-baris

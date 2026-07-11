@@ -83,6 +83,11 @@ Progresi teramati: `0.2565 → 0.117 → 0.0055 → [absent]`. **Sumber:** FINDI
 **Cara benar:** `child.stdin.end()` segera setelah spawn; **jangan** skip-permissions (batasi "jawab teks, tanpa tool");
 deteksi limit agy **jangan** dari stdout print-mode — pakai rendering TUI (pola `Individual quota reached`, G-19) atau
 probe LS (G-17). **Sumber:** FINDINGS F5/F6/F11, 4 Jul.
+**⚠ Anotasi versi (agy 1.1.1, 11 Jul):** jebakan **(a)** & **(c)** ini **spesifik agy ≤1.0.16**. CHANGELOG 1.1.1: `agy -p`
+**tak lagi baca stdin** bila prompt via flag → `child.stdin.end()` (a) tak lagi wajib (tetap harmless). Print-mode yang gagal
+server-side kini **tulis error ke stderr + exit≠0** (bukan "stdout kosong exit 0") → **(c) tak berlaku di 1.1.1**. Positif,
+tapi **tetap jangan** andalkan print-mode utk deteksi limit agy (server-fail vs quota-reached belum diverifikasi terpisah di
+1.1.1) — jalur andal tetap TUI/LS. **Sumber:** delta-check versi 11 Jul (RESEARCH §4c).
 
 ### G-19 — Pesan limit agy TUI ASLI + agy tetap HIDUP (limit≠exit) + tak boleh sesi konkuren
 **Jebakan/Fakta:** pesan limit agy interaktif (kuota 5-jam=0, credit off) =
@@ -304,6 +309,18 @@ resetTime, description}`. (`RetrieveUserQuota` singular = 404 di LS — bukan it
 ke `UsageLimit[]`; absent remainingFraction = exhausted (G-17). Redaksi displayName grup/plan (PII, G-9). **Sumber:**
 spike I-16 (ISSUES), CodexBar `docs/antigravity.md` (mereka prioritas `RetrieveUserQuotaSummary`).
 
+### G-33 — agy 1.1.0+ jadikan `request-review` sbg **mode default** → state prompt agy saat idle BEDA (jeda pre-write, bukan hanya prompt kosong)
+**Jebakan/Fakta (CHANGELOG agy 1.1.0, delta-check 11 Jul — belum live-verify):** mulai agy **1.1.0**, mode eksekusi default =
+**`request-review`**: agy **berhenti sebelum operasi tulis-file** untuk menampilkan diff preview line-level, menunggu `f`
+(accept/reject per-perubahan). Ini **menggeser state "diam di prompt"** yang jadi asumsi gating inject-continue (ADR-014
+poin iii, idle-tracker G-29) & actuation resume-by-id: agy yang "berhenti" mungkin bukan idle-at-prompt biasa, melainkan
+**menunggu review** — penanda footer/idle bisa beda. **Dampak:** (a) gating idle agy (yang memang masih `undefined`/TBD sampai
+I-15) makin perlu diverifikasi terhadap state review; (b) inject `continue`/Enter ke agy yang sedang menunggu `f` bisa
+ber-efek tak diinginkan. **Cara benar:** saat live-verify agy (I-15), tentukan penanda idle/foreground **untuk 1.1.x** dan
+pertimbangkan meluncurkan agy dgn **`--mode default`** (flag baru 1.1.0) agar perilaku dapat-diprediksi bila review-pause
+mengganggu auto-continue. Bukan schema break (LS/quota tak berubah) — murni **perilaku TUI/eksekusi**. **Sumber:** delta-check
+versi 11 Jul (RESEARCH §4c), CHANGELOG agy 1.1.0.
+
 ---
 
 ## Actuation seams (M3d.6/M3d.7) — inject-continue & resume-by-id (6 Jul)
@@ -406,6 +423,7 @@ baru jalan setelah `intervalMs` (bukan saat start) — `acca status` kosong ~int
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-11 (delta-check versi, Ubuntu) | **G-33** baru (agy 1.1.0+ jadikan `request-review` mode DEFAULT → state prompt agy saat "berhenti" bisa = menunggu review, bukan idle-at-prompt → relevan gating/actuation inject-continue; pertimbangkan `--mode default`; belum live-verify). **G-18 dianotasi** (jebakan (a)&(c) spesifik ≤1.0.16; 1.1.1 ubah print-mode: tak baca stdin w/ flag-prompt + server-fail→stderr+exit≠0). Dari delta-check CC 2.1.207 + agy 1.1.1 (RESEARCH §4c 11 Jul). |
 | 2026-07-11 (autonomous-run, Windows) | G-32 (timer engine baru yang di-wire ke supervisor via `setTimer`-bersama wajib opt-in `startUsageMonitor`, else `fire()`/`armedCount` test scheduler pecah; probe pertama setelah intervalMs). Dari wiring I-17 usage-monitor. |
 | 2026-07-11 (autonomous-run, Windows) | G-13 ditandai **TERATASI** (I-4): `resolveClockTime` cabang zona IANA hitung ulang wall-clock di tanggal besok (DST-correct), bukan `+MS_PER_DAY` mentah. |
 | 2026-07-07 (Windows, I-16 live) | G-31 (agy `GetUserStatus` = window 5-jam saja; kuota MINGGUAN hanya di `RetrieveUserQuotaSummary` → probe GetUserStatus-only buta weekly → risiko keliru-resume). Dari verifikasi live cross-check CodexBar (I-16 CONFIRMED). |
