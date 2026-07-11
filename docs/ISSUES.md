@@ -20,6 +20,11 @@ siap. **Sisa (issue ini):** benar-benar MENANGKAP id CLI → sampai itu ada, set
   di cwd sama) → **jalur robust = hook `SessionStart`** (payload beri id langsung; gabung ke I-23).
 - **agy:** printed resume cmd saat exit + `~/.gemini/` conversations dir (belum diinvestigasi).
 - **DoD:** live-verify dgn CLI nyata (audit §6: jangan ✅ actuation tanpa live smoke jalur default). **Sumber:** audit A-1.
+- **✅ PARUH agy TERPECAHKAN (live-verify 11 Jul, G-36):** sumber id agy = perintah yang agy **CETAK saat exit**
+  `agy --conversation=<uuid>` (andal, bukan racy) + `~/.gemini/antigravity-cli/conversations/<uuid>.db`. Resume-load
+  terbukti (`agy --conversation=<id>` memuat percakapan lama). **Sisa I-20:** (a) **CC** masih butuh hook `SessionStart`
+  (I-23) / G-34; (b) menghubungkan capture ini ke `setCliSessionId` di wrapper agy (tangkap dari output exit atau saat
+  spawn). Sampai wiring itu, resume-by-id agy exited masih BLOCKED (paruh korektness R2a), tapi **sumbernya kini pasti**.
 
 ### I-21 — Auto-continue hanya bekerja SEKALI per sesi hidup (siklus limit kedua tak terdeteksi) [P1]
 `limit-watcher` `latched` permanen + tak ada transisi RESUMED→RUNNING + monitor `listRunning` filter `RUNNING` saja →
@@ -57,6 +62,10 @@ baris header liveness daemon. **Sumber:** audit A-6.
 Opus habis, sesi jalan Sonnet) → blokir resume selamanya. Untuk agy `every` justru benar (dual-limit per grup, G-31).
 **Remedi:** pindah keputusan "usage available" ke adapter (`isUsageAvailable(snapshot)`) — CC pakai `five_hour`/`seven_day`
 global + `is_active`; agy semua bucket. **Sumber:** audit A-7.
+**✅ CONFIRMED live 11 Jul (agy 1.1.1):** `3p-5h` (dibagi Opus/Sonnet 4.6 + GPT-OSS) habis → `usedFraction=1`, sedangkan
+`gemini-5h` masih 100% (`usedFraction=0`, grup terpisah) → `every(usedFraction<1)` = **false** → resume terblokir walau
+Gemini penuh. Persis skenario yang issue ini antisipasi (per-grup untuk agy). Memperkuat perlu `isUsageAvailable(snapshot)`
+per-adapter. **Sumber:** I-15 live-verify 11 Jul.
 
 ### I-26 — ACL named pipe Windows belum diverifikasi (ADR-015 "owner-only") [P2, verifikasi di M5]
 Named pipe Node/libuv default **bisa di-connect user lain** di mesin sama (DACL bukan owner-only spt chmod 0600).
@@ -90,6 +99,18 @@ LS-change → diduga utuh, belum dibuktikan live); (b) tentukan penanda **idle/f
 default baru** (G-33) — agy yang "berhenti" bisa = menunggu review `f`, bukan idle-at-prompt; pertimbangkan `--mode default`
 bila mengganggu auto-continue. Catatan positif: CC **2.1.206** memperbaiki bug keyboard-input `--resume`/`--continue` saat
 startup → jalur resume-by-id lebih mulus di 2.1.207.
+
+**✅ SEBAGIAN BESAR TERVERIFIKASI untuk agy 1.1.1 (11 Jul, burn `3p-5h` ~11% ke limit, otorisasi user):**
+- **Deteksi limit (jalur produksi):** pesan TUI `Individual quota reached` NYATA di 1.1.1 → `matchAgyLimit` +
+  `antigravityAdapter.detect` fire benar (`{kind:'limit',source:'output'}`). **limit≠exit** dikonfirmasi (agy hidup di
+  prompt). (G-19 re-verified, G-33 dikoreksi.)
+- **Resume-by-id (paruh load):** `agy --conversation=<id>` **memuat percakapan lama utuh** di sesi baru, hidup di prompt
+  (G-36). Sumber id andal = cmd yang agy CETAK saat exit.
+- **SISA (genuinely butuh tunggu reset / sesi asli):** (a) **inject `continue` pasca-reset benar melanjutkan turn** —
+  butuh 3p-5h reset (~5 jam) lalu inject; belum. (b) **penanda idle/foreground agy mid-turn** (busy marker saat generate)
+  belum ditangkap presisi (idle-tracker agy masih `undefined`). (c) **CC** (`claude`) limit asli + inject/resume tetap
+  opportunistik (belum). **Efek:** gate keluar I-15 untuk **deteksi+resume-load agy** = LULUS; sisa = actuation inject
+  pasca-reset (agy+CC). **Sumber:** I-15 live-verify 11 Jul (scratchpad `agy-*.mjs`).
 
 ### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13] — ENGINE READY (10 Jul), wiring→I-17
 Claude Code menampilkan warning ~90% (window 5-jam) & ~75% (mingguan) di terminal, tapi itu **UI-only,
@@ -188,6 +209,10 @@ ketiga gate**. `tsconfig.eslint.json` tak bisa dipakai `tsc --noEmit` langsung k
   di data asli (sekaligus live-verify M3d.3 CC-probe yg dulu belum diuji limit asli).
 - **Sisa (opportunistik, sekelas I-15):** (a) loop daemon NYATA end-to-end (start `acca daemon` + sesi RUNNING → tick
   memicu probe+cache+notify) vs pemanggilan `probeUsage` langsung; (b) **agy** probe live (butuh sesi LS hidup ber-PTY).
+- **⚠ CAVEAT BARU (live-verify 11 Jul, G-35):** probe agy via **sesi LS hidup = snapshot saat launch, STALE dalam-sesi**
+  (tak refresh saat sesi membakar kuota). Monitor periodik yang probe sesi agy RUNNING panjang → angka **basi** →
+  proximity meleset. **Mitigasi:** untuk agy, kuota real-time butuh **probe FRESH** (sesi baru / standalone OAuth ADR-018),
+  atau andalkan deteksi limit dari **output TUI** (live, terbukti). CC OAuth-probe tak kena (HTTP standalone selalu fresh).
   Konsumen `acca status` baca cache = **slice status-UX** berikut.
 
 ### I-4 — `reset-estimator` clock-time wrap tak DST-aware saat lewat tengah malam [P3] ✅ (11 Jul, `resolveClockTime` DST-correct)

@@ -29,8 +29,11 @@ Fase: **Implementasi — M3e KOREKSI LOOP** (dari audit 11 Jul, `docs/audit/AUDI
 proximity + usage-monitor + `acca status` usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
 **KOREKSI (audit):** klaim "loop auto-continue penuh selesai" dulu **overstated** — 4 P1 di jalur resume/continue lolos test
 (seam actuation di-stub). Ditutup: daemon-crash saat spawn gagal (R1) + resume-by-id pakai `cli_session_id`/absen→BLOCKED (R2a).
-**Resume-by-id sesi mati masih BLOCKED sampai penangkapan `cli_session_id` (R2b) + live-verify.**
-**Berikutnya:** selesaikan M3e (R2b/R3/R4) — **M-remote & M5 DITUNDA** sampai gate keluar hijau.
+**Resume-by-id sesi mati masih BLOCKED sampai penangkapan `cli_session_id` (R2b) di-wire.**
+**Live-verify agy 1.1.1 (11 Jul, I-15):** paruh DETEKSI + RESUME-LOAD **LULUS** (pesan `Individual quota reached` + detektor
+fire + limit≠exit + `agy --conversation=<id>` load); **sumber id agy = cmd resume yang agy CETAK saat exit** (G-36). Sisa
+I-15 = inject `continue` pasca-reset (agy+CC) + penanda idle agy mid-turn.
+**Berikutnya:** selesaikan M3e (R2b-wire/R3/R4) — **M-remote & M5 DITUNDA** sampai gate keluar hijau.
 Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file itu dulu.
 
 ## 3. Peta dokumen (sumber kebenaran)
@@ -89,6 +92,7 @@ Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file 
   yang mati; wrapper proses = lifecycle + fallback. (RESEARCH §2, §2b–2c.)
 - **Antigravity CLI**: dual limit (refresh 5-jam + kuota mingguan); dua-duanya harus > 0.
   Kuota berkorelasi dengan beban kerja per-prompt (variabel). Ada opsi AI Credits untuk overage.
-  `/usage` di sesi hidup **stale** (snapshot saat launch) — opsi probe kuota: fresh-launch / LSP probe /
-  `retrieveUserQuota` (pending, RESEARCH §4b). Prior art: CodexBar (usage agy solved, §5b),
+  `/usage` **stale** di sesi hidup — probe LS `RetrieveUserQuotaSummary` sesi-hidup **JUGA stale** (snapshot launch, G-35) →
+  kuota real-time = fresh-launch / standalone `retrieveUserQuota` OAuth (**ADR-018 Accepted**: opsi #3 + egress
+  `oauth2.googleapis.com`). Resume-by-id agy = `agy --conversation=<id>` (cmd dicetak saat exit, G-36). Prior art: CodexBar (usage agy solved, §5b),
   claude-auto-retry (auto-continue CC via tmux, §5c).
