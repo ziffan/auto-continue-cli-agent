@@ -291,6 +291,40 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(payload.spec.cwd).toBe(realCwd);
   });
 
+  it('resume: proc_state exited + DEFAULT spawnResume + missing binary → daemon survives, old session NOT resumed, error surfaced (A-2)', async () => {
+    // Regresi A-2 (audit 11 Jul): jalankan DEFAULT spawnResumeFn (BUKAN stub) → runSession in-process.
+    // Arahkan resumeCmd ke binary yang tak ada di PATH supaya which() = null → runSession gagal SINKRON
+    // (markFailed + waitForExit REJECT) TANPA men-spawn proses nyata. Dulu: rejected promise di-drop →
+    // unhandledRejection mematikan daemon + sesi lama keliru RESUMED. Sekarang: ditangani + tak keliru.
+    adapters.claude.resumeCmd = vi.fn(() => ({ file: 'acca-nonexistent-binary-zzz', args: ['--resume', 'x'] }));
+
+    // spawnResume TIDAK di-inject → default runSession dipakai (jalur yang dulu tak pernah diuji).
+    const { db: database } = await setupAndFire({ sessionId: 's-resume-spawn-fail', procState: 'exited', cwd: process.cwd(), jobKind: 'resume' });
+
+    // Daemon selamat: fire()/stop() di setupAndFire resolve tanpa throw/unhandledRejection.
+    // Sesi lama TAK di-RESUMED (defect kedua A-2) — tetap LIMIT_HIT sampai resume benar-benar sukses.
+    const session = createSessionsRepo(database).getById('s-resume-spawn-fail');
+    expect(session?.status).toBe('LIMIT_HIT');
+
+    // Kegagalan di-surface (event) + job 'resume' dipertahankan untuk retry backoff (bukan dibuang).
+    const events = eventsFor(database, 's-resume-spawn-fail');
+    const err = events.find(
+      (e) => e.type === 'job_dispatch_error' && (e.payload as { action?: string }).action === 'resume_spawn_failed',
+    );
+    expect(err).toBeDefined();
+    const remaining = pendingJobs(database, 's-resume-spawn-fail');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.kind).toBe('resume');
+
+    // Sesi baru (hasil runSession gagal-sinkron) tercatat FAILED + resumed_from = sesi asal → bukti
+    // DEFAULT path benar-benar dijalankan (bukan stub), dan rantai resume (I-14) terjaga.
+    const newSessionId = (err?.payload as { newSessionId?: string }).newSessionId;
+    expect(typeof newSessionId).toBe('string');
+    const newSession = newSessionId ? createSessionsRepo(database).getById(newSessionId) : undefined;
+    expect(newSession?.status).toBe('FAILED');
+    expect(newSession?.resumed_from).toBe('s-resume-spawn-fail');
+  });
+
   it('rearm over IPC arms a job written by another process AFTER start (I-10 cross-process)', async () => {
     tempDir = join(tmpdir(), `acca-dispatch-test-${randomBytes(4).toString('hex')}`);
     process.env.ACCA_DATA_DIR = tempDir;
