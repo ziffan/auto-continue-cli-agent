@@ -45,11 +45,16 @@
   tool/kind/bar/pct; `scope` tak dirender) — diuji + **smoke render live 'SECRET' 0×**. **305/305 test** (+15). Smoke: bar
   37/36/92% CC + 74/10% agy render benar. **Also live smoke I-17:** `probeUsage()` CC NYATA → snapshot asli → proximity 0
   (benar) → data path terbukti.
+  **(6) I-18 CLOSED** (`ce50be5`): `inject_skipped` (sesi hidup gagal auto-continue) kini ter-surface Notifier
+  (`INJECT_SKIPPED` warn, otomatis via dekorator, tanpa ubah supervisor). **I-19 dibuka** (P3): file `test/` tak
+  ter-typecheck di gate mana pun (`tsconfig.eslint.json` rootDir TS6059) — kandidat perbaikan gate.
   **Status M4:** **inti SELESAI — AC-4 ✅ + AC-5 ✅.** Loop auto-continue (M3d) + Notifier + proximity + usage-monitor +
-  status usage-view + `acca log` semua jalan & bertes. **Sisa M4 = opsional:** Notifier **desktop** (node-notifier) — butuh
-  **gate DEPENDENCY-POLICY (dep baru = keputusan user)**. **Berikutnya (butuh user):** M-remote (Telegram, security-gate) /
-  M5 (service+hardening) — keduanya milestone besar butuh kehadiran+keputusan. `main` di-push berjenjang sepanjang sesi
-  (`5829ba7`→`d50c319`→`4ff1eac`→`96da41a`→ commit status-view ini).
+  status usage-view + `acca log` semua jalan & bertes (**306/306, 2 skip POSIX**). **Sisa M4 = opsional:** Notifier
+  **desktop** (node-notifier) — butuh **gate DEPENDENCY-POLICY (dep baru = keputusan user)**.
+  **NEXT STEP KONKRET (sesi berikutnya, semua butuh user memilih arah):** (1) **M-remote** tier A (Notifier→Telegram,
+  egress-only, mulai dari `remote/bot.ts` grammy long-polling) — milestone MVP terakhir, butuh security-gate; ATAU
+  (2) **M5** daemon-as-service (systemd/Task Scheduler); ATAU (3) Notifier desktop (putuskan dep node-notifier dulu).
+  Opportunistik kapan saja: I-15 (live-verify limit asli + agy). `main` di-push berjenjang penuh sesi (terakhir `ce50be5`).
 - **Terakhir diupdate:** 2026-07-10 (sesi Ubuntu, session-end ini) — **M4 SUB-TASK 1&2: Notifier core +
   proximity-engine (I-8 sebagian).** Modul `src/notify/notifier.ts` baru. Pola Opus-inline (Tier-1: jalur
   output user-facing + firewall PII G-9) + self-tier-review. Dua slice, satu commit:

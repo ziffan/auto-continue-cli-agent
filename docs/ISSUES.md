@@ -6,6 +6,16 @@
 
 ## Terbuka
 
+### I-19 — File `test/` tak ter-typecheck di gate mana pun (tsconfig.eslint.json rootDir TS6059) [P3]
+**Ditemukan 11 Jul (saat memulihkan type-soundness `notifier.test.ts`).** `npm run build` (tsconfig.json) **meng-exclude**
+`test/`; `npm run lint` (eslint type-aware) hanya menjalankan rule-spesifik, **bukan** full structural-diagnostics; vitest
+(esbuild) **membuang** tipe. Jadi error tipe di file test (mis. object literal yang tak lagi memenuhi interface yang melebar)
+**lolos ketiga gate**. `tsconfig.eslint.json` yang seharusnya bisa `tsc --noEmit`-kan test punya **`rootDir: src`** → semua
+file `test/**` → **TS6059** ("not under rootDir") → tak bisa dipakai sbg gate langsung. **Dampak:** regresi type di test tak
+tertangkap CI (harus manual). **Perbaikan (kandidat):** tsconfig khusus test (`rootDir`/`include` mencakup `test/`+`src/`,
+`noEmit`) + tambah script `typecheck:test` ke gate. Non-blocking (test tetap jalan; hanya type-safety-nya yang tak dijaga
+otomatis). **Sumber:** `tsconfig.eslint.json`, observasi wiring `acca log` (I-8/US-8).
+
 ### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
 Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
 `resumeCmd`), bukan CLI agent nyata di limit nyata: (a) apakah `claude`/`agy` hidup di prompt benar-benar
