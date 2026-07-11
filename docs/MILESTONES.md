@@ -179,12 +179,12 @@ respons LS exhausted (field absent); set jalur continue agy = **alive/inject** (
 > M3d.6→M3d.7 (continue, serial, setelah probe siap). M3d.8 memanfaatkan eksperimen sesi ini → bisa duluan.
 > Semua Tier-1 → tier-review Opus wajib. Fixture/observasi live = sumber kebenaran, bukan asumsi.
 
-## M4 — Notifikasi + Monitor UX (inti ✅ 11 Jul; **AC-4 dikoreksi ⚠ per audit — I-24**)
+## M4 — Notifikasi + Monitor UX (inti ✅ 11 Jul; **AC-4 ✅ lengkap 12 Jul — I-24 ditutup**)
 **Slice:** notifikasi desktop/CLI pada transisi LIMIT_HIT/RESUMED/FAILED; `acca status` lengkap
 (usage best-effort + indikator "perkiraan" + loading/empty/error state); `acca log`.
-**Selesai bila:** AC-4 ⚠ (usage-view + `acca log` ✅; **reset_at terjadwal + liveness daemon di `acca status` BELUM →
-I-24**, klaim AC-4 ✅ sebelumnya = overclaim, dikoreksi 11 Jul), AC-5 ✅ lulus; UX states eksplisit teruji ✅. (Sisa
-opsional: Notifier desktop = gate dep.)
+**Selesai bila:** AC-4 ✅ (usage-view + `acca log` ✅; **reset_at terjadwal + liveness daemon di `acca status` ✅ per
+I-24, 12 Jul** — kolom `reset` HH:MM+sumber + baris `daemon: HIDUP/MATI`; overclaim 11 Jul dikoreksi lalu benar-benar
+ditutup), AC-5 ✅ lulus; UX states eksplisit teruji ✅. (Sisa opsional: Notifier desktop = gate dep.)
 
 **Progres (10 Jul, Ubuntu):**
 - **✅ Notifier core (`src/notify/notifier.ts`):** pemetaan MURNI `notificationForEvent(event)→Notification|null`
