@@ -65,9 +65,11 @@ export interface SupervisorDeps {
   usageProbeIntervalMs?: number;
 }
 
-/** Hasil spawn resume-by-id. `sessionId` = id sesi wrapper BARU yang melanjutkan percakapan lama. */
+/** Hasil spawn resume-by-id. `sessionId` = id sesi wrapper BARU yang melanjutkan percakapan lama.
+ *  `spawnFailed` = spawn gagal (binary hilang dll) → dispatch TAK menandai sesi lama RESUMED (A-2). */
 export interface ResumeSpawnResult {
   sessionId?: string;
+  spawnFailed?: boolean;
 }
 
 /** Dilempar saat socket/pipe daemon sudah dipakai (instance daemon lain sudah berjalan). */
@@ -110,12 +112,20 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
   const spawnResumeFn: (spec: SpawnSpec, session: Session) => ResumeSpawnResult =
     deps.spawnResume ??
     ((spec, session) => {
-      const { sessionId: newId } = runSession(
+      const { sessionId: newId, waitForExit } = runSession(
         // resumedFrom = id sesi ASAL → baris sesi baru menautkan rantai resume (I-14).
         { file: spec.file, args: spec.args, cwd: spec.cwd ?? session.cwd, tool: session.tool, resumedFrom: session.id },
         { sessions, events, jobs },
       );
-      return { sessionId: newId };
+      // A-2 (audit 11 Jul): saat spawn GAGAL sinkron (mis. binary CLI hilang — skenario nyata daemon
+      // service dgn PATH minimal), `runSession` mengembalikan `waitForExit` yang REJECT. Bila promise
+      // ini di-drop, ia menjadi unhandledRejection → Node ≥15 mematikan DAEMON. Konsumsi di sini —
+      // kegagalan sudah tercatat oleh runSession (markFailed + status_change FAILED pada sesi baru).
+      void waitForExit.catch(() => undefined);
+      // runSession memanggil `markFailed` SEBELUM return pada jalur gagal-sinkron → deteksi via status
+      // sesi baru supaya dispatch TAK keliru menandai sesi lama RESUMED (A-2, defect kedua).
+      const spawnFailed = sessions.getById(newId)?.status === 'FAILED';
+      return { sessionId: newId, spawnFailed };
     });
 
   // Dispatch nyata (M3d.5 probe + M3d.6 resume-by-id + M3d.7 inject-continue gating). Setiap
@@ -240,9 +250,20 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
 
       const spec = adapter.resumeCmd(session.id, session.cwd);
       // Actuation spawn nyata (I-12 poin 2): jalankan wrapper PTY baru di `spec.cwd` (AC-8 — resume
-      // WAJIB di direktori kerja sesi asli). Bila spawn gagal (mis. binary hilang), `spawnResumeFn`
-      // melempar → ditangkap catch luar → event error + 'retry' (backoff berjenjang, tak spin cepat).
+      // WAJIB di direktori kerja sesi asli). Default `spawnResumeFn` (runSession in-process) TAK
+      // melempar saat spawn gagal — ia melapor `spawnFailed` (A-2: dulu jalur gagal jadi
+      // unhandledRejection yang mematikan daemon + keliru menandai sesi lama RESUMED).
       const spawned = spawnResumeFn(spec, session);
+      if (spawned.spawnFailed) {
+        // Sesi baru gagal spawn (mis. binary hilang) → JANGAN tandai sesi lama RESUMED. Surface +
+        // 'retry' (backoff berjenjang — mis. PATH transien; sesi lama tetap LIMIT_HIT, tak hilang).
+        events.append({
+          session_id: job.session_id,
+          type: 'job_dispatch_error',
+          payload: { jobId: job.id, action: 'resume_spawn_failed', newSessionId: spawned.sessionId },
+        });
+        return 'retry';
+      }
       sessions.markResumed(job.session_id);
       events.append({
         session_id: job.session_id,
