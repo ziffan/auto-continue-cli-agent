@@ -25,15 +25,18 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 ## 2. Status
 
 Fase: **Implementasi — M3e KOREKSI LOOP** (dari audit 11 Jul, `docs/audit/AUDIT-2026-07-11.md`). **M1–M3d + M4 inti bertes**
-(310 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup + Notifier +
+(340 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup + Notifier +
 proximity + usage-monitor + `acca status` usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
 **KOREKSI (audit):** klaim "loop auto-continue penuh selesai" dulu **overstated** — 4 P1 di jalur resume/continue lolos test
-(seam actuation di-stub). Ditutup: daemon-crash saat spawn gagal (R1) + resume-by-id pakai `cli_session_id`/absen→BLOCKED (R2a).
-**Resume-by-id sesi mati masih BLOCKED sampai penangkapan `cli_session_id` (R2b) di-wire.**
+(seam actuation di-stub). **Progres gate (12 Jul):** R1 (daemon-crash spawn-gagal) ✅ · R2a (resume pakai
+`cli_session_id`/absen→BLOCKED) ✅ · R3 (I-21 auto-continue multi-siklus per sesi hidup) ✅ · **R4 slice 1 (I-22 guard
+probe-impossible: agy+exited → BLOCKED + notif `PROBE_IMPOSSIBLE` + stop-retry, tutup bug loop-senyap) ✅**.
+**Resume-by-id sesi mati masih BLOCKED sampai penangkapan `cli_session_id` (R2b/I-20) di-wire.**
 **Live-verify agy 1.1.1 (11 Jul, I-15):** paruh DETEKSI + RESUME-LOAD **LULUS** (pesan `Individual quota reached` + detektor
 fire + limit≠exit + `agy --conversation=<id>` load); **sumber id agy = cmd resume yang agy CETAK saat exit** (G-36). Sisa
 I-15 = inject `continue` pasca-reset (agy+CC) + penanda idle agy mid-turn.
-**Berikutnya:** selesaikan M3e (R2b-wire/R3/R4) — **M-remote & M5 DITUNDA** sampai gate keluar hijau.
+**Berikutnya:** M3e sisa — R2b/I-20 (capture id CC), R4 slice 2 (I-22 probe standalone OAuth), I-15 live-verify actuation —
+**M-remote & M5 DITUNDA** sampai gate keluar hijau.
 Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file itu dulu.
 
 ## 3. Peta dokumen (sumber kebenaran)

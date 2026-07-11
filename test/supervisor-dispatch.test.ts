@@ -83,6 +83,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     cwd: string;
     jobKind: 'probe' | 'resume';
     cliSessionId?: string;
+    tool?: 'claude' | 'antigravity';
     requestInject?: SupervisorDeps['requestInject'];
     spawnResume?: SupervisorDeps['spawnResume'];
   }): Promise<{ db: DatabaseInstance }> {
@@ -94,7 +95,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     const sessions = createSessionsRepo(db);
     sessions.createSession({
       id: opts.sessionId,
-      tool: 'claude',
+      tool: opts.tool ?? 'claude',
       cwd: opts.cwd,
       status: 'LIMIT_HIT',
       proc_state: opts.procState,
@@ -217,6 +218,37 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     const errorEvent = events.find((e) => e.type === 'job_dispatch_error');
     expect(errorEvent).toBeDefined();
     expect((errorEvent?.payload as { error: string }).error).toContain('network boom');
+  });
+
+  it('probe: agy session already exited → probe_impossible, BLOCKED, done (no silent retry-loop, I-22)', async () => {
+    // I-22/A-4: probe usage agy butuh sesi hidup ber-PTY (LS bind hanya ber-PTY, port terikat PID).
+    // Sesi agy `exited` = PID mati = tak ada port → probeUsage dulu throw → outer catch → 'retry'
+    // backoff cap 60m SELAMANYA & senyap. Guard baru: hentikan (done) + BLOCKED + surface.
+    // probeUsage SENGAJA tak di-stub — guard harus fire SEBELUM adapter dipanggil (kalau terpanggil,
+    // probeAgyUsage nyata akan mencoba discoverLocalPorts pada PID test → hasil tak deterministik).
+    const { db: database } = await setupAndFire({
+      sessionId: 's-probe-agy-exited',
+      tool: 'antigravity',
+      procState: 'exited',
+      cwd: process.cwd(),
+      jobKind: 'probe',
+    });
+
+    // Job 'probe' dihapus (done terminal) — BUKAN dipertahankan untuk retry backoff.
+    const remaining = pendingJobs(database, 's-probe-agy-exited');
+    expect(remaining).toHaveLength(0);
+
+    // Status ditulis BLOCKED (butuh aksi manual sampai probe standalone OAuth slice 2 ada).
+    const session = createSessionsRepo(database).getById('s-probe-agy-exited');
+    expect(session?.status).toBe('BLOCKED');
+
+    const events = eventsFor(database, 's-probe-agy-exited');
+    const err = events.find((e) => e.type === 'job_dispatch_error');
+    expect(err).toBeDefined();
+    const payload = err?.payload as { action: string; reason: string; status: string };
+    expect(payload.action).toBe('probe_impossible');
+    expect(payload.reason).toBe('agy_exited_no_live_ls');
+    expect(payload.status).toBe('BLOCKED');
   });
 
   it('resume: proc_state alive + wrapper injects → inject_continue event + done (status transition owned by wrapper, R3)', async () => {
