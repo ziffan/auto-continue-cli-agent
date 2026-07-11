@@ -7,7 +7,7 @@
 ## Status saat ini
 
 - **Fase:** **M3e KOREKSI LOOP (dari audit 11 Jul) ← fase sekarang.** M4 inti ✅ (Notifier + proximity + usage-monitor +
-  `acca status` usage-view + `acca log`; **AC-4 dikoreksi ⚠** — reset_at + liveness daemon belum, I-24; AC-5 ✅). **M-remote DITUNDA.**
+  `acca status` usage-view + `acca log`; **AC-4 ✅** — reset_at terjadwal + liveness daemon di `acca status` (I-24 ditutup 12 Jul); AC-5 ✅). **M-remote DITUNDA.**
   **KOREKSI JUJUR (audit `docs/audit/AUDIT-2026-07-11.md`):** klaim lama "loop auto-continue penuh selesai & bertes" **OVERSTATED** —
   4 P1 di jalur resume/continue lolos 308 test (seam actuation di-stub). **Ditutup:** A-2 (daemon crash saat spawn gagal, R1) +
   A-1 paruh korektness (resume pakai `cli_session_id`, absen→BLOCKED, R2a) + **R3 (I-21) siklus-limit-2 (12 Jul)**. **Belum:**
@@ -34,8 +34,12 @@
   markRunningAfterInject + **siklus 2× repo-level**, onInjected, notifier, supervisor-dispatch di-update). **RESIDUAL (→ I-15):**
   repaint TUI baris limit lama ber-newline saat RUNNING bisa re-fire LIMIT_HIT palsu (G-37; sekelas idle-FP) — butuh live-verify
   agy/CC. **Docs:** GOTCHAS G-37 + changelog, ISSUES (I-21→Tertutup + gate-progress header), CONTEXT. Branch `m3e-r3-multicycle`
-  di-ff-merge ke `main` + push. **Next (butuh user hadir):** I-15 live-verify actuation inject/resume asli + I-20 capture
-  `cli_session_id` CC (keduanya butuh sesi CLI nyata) + I-22 R4 agy-exited.
+  di-ff-merge ke `main` + push. **Slice ke-2 (I-24/A-6, Sonnet + Opus tier-review):** `acca status` kini tampilkan
+  kolom **`reset`** (HH:MM lokal + sumber, wireframe §5) + baris **liveness daemon** (`HIDUP/MATI/belum pernah jalan` via
+  `getHeartbeat`+`isProcessAlive`) → **AC-4 kini benar-benar ✅** (overclaim 11 Jul ditutup). Pure/injectable, firewall G-9
+  utuh, **323 test** (+7). Di-commit terpisah. **Next (butuh user hadir / keputusan):** I-15 live-verify actuation
+  inject/resume asli + I-20 capture `cli_session_id` CC (butuh sesi CLI nyata) + I-22 R4 agy-exited (ADR-018 locked, impl).
+  Sisa autonomous-safe: I-25 (isUsageAvailable per-adapter, sentuh gate resume → hati-hati) · I-27 (genSessionId retry) · I-28 (housekeeping).
 - **Terakhir diupdate:** 2026-07-11 (sesi Windows, live-verify) — **I-15 LIVE-VERIFY agy 1.1.1 (opportunistik, user tawarkan window + otorisasi bakar `3p-5h` ~11%).**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → rencana kode (Sub-task A guard + B resume-cycle). User
   tawarkan agy Opus 4.6 sisa 11% utk test → **pivot ke live-verify** (I-15 = gate keluar M3e, opportunistik). Baseline

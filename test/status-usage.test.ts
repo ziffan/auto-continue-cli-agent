@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatUsageLines, renderUsageBar } from '../src/cli/commands/status.js';
+import { formatDaemonLiveness, formatResetCell, formatUsageLines, renderUsageBar } from '../src/cli/commands/status.js';
 
 describe('renderUsageBar', () => {
   it('0 → semua kosong', () => {
@@ -113,5 +113,53 @@ describe('formatUsageLines', () => {
   it('antigravity label benar', () => {
     const lines = formatUsageLines('antigravity', undefined, 1_000);
     expect(lines[0]).toContain('ANTIGRAVITY CLI');
+  });
+});
+
+// ── I-24 (audit A-6): kolom reset + liveness daemon ──────────────────────────────────────────
+
+describe('formatResetCell', () => {
+  it('null → "-"', () => {
+    expect(formatResetCell(null, null)).toBe('-');
+    expect(formatResetCell(null, 'exact')).toBe('-');
+  });
+
+  it('resetAt + source → "HH:MM (source)"', () => {
+    const epoch = new Date(2026, 6, 12, 3, 15).getTime();
+    expect(formatResetCell(epoch, 'exact')).toBe('03:15 (exact)');
+  });
+
+  it('resetAt tanpa source → "HH:MM" saja', () => {
+    const epoch = new Date(2026, 6, 12, 3, 15).getTime();
+    expect(formatResetCell(epoch, null)).toBe('03:15');
+  });
+
+  it('pad 2 digit utk jam/menit satu digit', () => {
+    const epoch = new Date(2026, 6, 12, 9, 5).getTime();
+    expect(formatResetCell(epoch, 'heuristic')).toBe('09:05 (heuristic)');
+  });
+});
+
+describe('formatDaemonLiveness', () => {
+  it('hb undefined → "belum pernah jalan"', () => {
+    expect(formatDaemonLiveness(undefined, 1_000, () => true)).toContain('belum pernah jalan');
+  });
+
+  it('hb ada + isAlive true → "HIDUP" + pid + umur', () => {
+    const nowMsVal = 1_000_000;
+    const hb = { at: nowMsVal - 5_000, pid: 123 };
+    const result = formatDaemonLiveness(hb, nowMsVal, () => true);
+    expect(result).toContain('HIDUP');
+    expect(result).toContain('pid 123');
+    expect(result).toContain('5s lalu');
+  });
+
+  it('hb ada + isAlive false → "MATI" + "tak hidup"', () => {
+    const nowMsVal = 1_000_000;
+    const hb = { at: nowMsVal - 90_000, pid: 456 };
+    const result = formatDaemonLiveness(hb, nowMsVal, () => false);
+    expect(result).toContain('MATI');
+    expect(result).toContain('tak hidup');
+    expect(result).toContain('1m lalu');
   });
 });

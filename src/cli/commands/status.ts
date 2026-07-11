@@ -5,7 +5,7 @@ import { createMetaRepo } from '../../store/repositories/meta.js';
 import { isProcessAlive } from '../../shared/proc.js';
 import type { Session, Tool, UsageLimit } from '../../shared/types.js';
 
-const COLUMNS = ['#id', 'tool', 'status', 'proc', 'pid', 'cwd', 'updated'] as const;
+const COLUMNS = ['#id', 'tool', 'status', 'reset', 'proc', 'pid', 'cwd', 'updated'] as const;
 
 // ── Usage-view (M4/AC-4) — helper PURE, unit-testable tanpa DB/commander ──────────────────────
 
@@ -80,6 +80,32 @@ export function formatUsageLines(tool: Tool, raw: string | undefined, nowMs: num
   return lines;
 }
 
+/** I-24 (audit A-6): format sel `reset` tabel sesi — `HH:MM` waktu LOKAL + sumber dalam kurung.
+ *  `resetAt === null` → sesi belum punya jadwal reset diketahui. Pakai getHours/getMinutes LOKAL
+ *  (bukan toISOString UTC) karena wireframe §5 menampilkan waktu lokal ("resume 03:15 WIB"). */
+export function formatResetCell(resetAt: number | null, resetSource: string | null): string {
+  if (resetAt === null) return '-';
+  const d = new Date(resetAt);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const time = `${hh}:${mm}`;
+  return resetSource === null ? time : `${time} (${resetSource})`;
+}
+
+/** I-24 (audit A-6): baris liveness daemon dicetak sebelum tabel sesi — `acca status` sebelumnya
+ *  tak pernah menyatakan hidup/mati-nya daemon (AC-4 over-claim, audit). Pure: `isAlive` di-inject
+ *  agar testable tanpa `process.kill` nyata. */
+export function formatDaemonLiveness(
+  hb: { at: number; pid: number } | undefined,
+  nowMs: number,
+  isAlive: (pid: number) => boolean,
+): string {
+  if (hb === undefined) return 'daemon: belum pernah jalan (jalankan `acca daemon`)';
+  const age = relativeAge(nowMs, hb.at);
+  if (isAlive(hb.pid)) return `daemon: HIDUP (pid ${hb.pid}, heartbeat ${age} lalu)`;
+  return `daemon: MATI (heartbeat ${age} lalu, pid ${hb.pid} tak hidup)`;
+}
+
 function toRow(session: Session): string[] {
   // Sesi 'alive' yang PID-nya sudah mati = orphan (wrapper mati keras sebelum markExited,
   // ISSUES I-1/I-3). Tandai di tampilan; jangan menulis DB (status = read-only).
@@ -91,6 +117,7 @@ function toRow(session: Session): string[] {
     idCell,
     session.tool,
     stale ? `${session.status} (basi)` : session.status,
+    formatResetCell(session.reset_at, session.reset_source),
     session.proc_state,
     session.pid === null ? '-' : String(session.pid),
     session.cwd,
@@ -123,6 +150,9 @@ export function registerStatusCommand(program: Command): void {
             console.log(line);
           }
         }
+        console.log('');
+
+        console.log(formatDaemonLiveness(meta.getHeartbeat(), Date.now(), isProcessAlive));
         console.log('');
 
         const sessions = createSessionsRepo(db);

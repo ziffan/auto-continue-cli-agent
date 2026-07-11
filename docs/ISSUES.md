@@ -47,12 +47,6 @@ ada issue yang melacaknya. **Remedi:** tulis settings hooks (`CLAUDE_CONFIG_DIR`
 socket kontrol per-sesi) → `feedSignal({type:'stopfailure',error})`. **Sekaligus sumber `cli_session_id` (I-20) via
 payload `SessionStart`.** **Sumber:** audit A-5.
 
-### I-24 — `acca status` tak tampilkan reset_at terjadwal & liveness daemon → AC-4 belum benar-benar lulus [P2]
-Tabel `status` tanpa `reset_at`/`reset_source` (padahal AC-4 = "usage + sesi + reset terjadwal", wireframe §5 tampilkan
-`LIMIT_HIT → resume 03:15 WIB`); `meta.getHeartbeat()` ada tapi tak pernah dibaca (NFR Observability minta liveness).
-MILESTONES/CONTEXT menandai AC-4 ✅ = **overclaim** (dikoreksi sesi ini). **Remedi:** kolom `reset` (HH:MM + sumber) +
-baris header liveness daemon. **Sumber:** audit A-6.
-
 ### I-25 — Gate resume `every(usedFraction<1)` terlalu ketat untuk CC [P2]
 `supervisor.ts` blokir resume bila **satu** limit exhausted. Untuk CC, model scoped yang tak dipakai sesi (mis. weekly
 Opus habis, sesi jalan Sonnet) → blokir resume selamanya. Untuk agy `every` justru benar (dual-limit per grup, G-31).
@@ -145,6 +139,15 @@ nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar i
 ---
 
 ## Tertutup
+
+### I-24 — `acca status` tak tampilkan reset_at terjadwal & liveness daemon → AC-4 [P2] ✅ (12 Jul, autonomous-run, Sonnet+Opus)
+**RESOLVED (Sonnet impl + Opus tier-review).** `acca status` kini: (1) **kolom `reset`** di tabel sesi —
+`formatResetCell(reset_at, reset_source)` pure → `HH:MM` waktu LOKAL + `(sumber)` (wireframe §5 "resume 03:15 WIB"),
+`null` → `-`; (2) **baris liveness daemon** sebelum tabel — `formatDaemonLiveness(getHeartbeat(), now, isProcessAlive)`
+pure/injectable → `HIDUP (pid X, heartbeat Ys lalu)` / `MATI (…tak hidup)` / `belum pernah jalan`. FIREWALL G-9 utuh
+(reset=timestamp/enum, liveness=pid+umur; nol PII). Liveness pakai pid-liveness `isProcessAlive` (konsisten orphan I-1;
+residual pid-recycle sama seperti I-1, diterima). **Verifikasi (Opus sendiri):** typecheck+lint+**323 test** (+7:
+formatResetCell 4 + formatDaemonLiveness 3). **AC-4 kini benar-benar ✅.** **Sumber:** audit A-6, `src/cli/commands/status.ts`.
 
 ### I-21 — Auto-continue hanya bekerja SEKALI per sesi hidup (siklus limit kedua tak terdeteksi) [P1] ✅ (12 Jul, R3, autonomous-run)
 **RESOLVED (M3e/R3, Opus inline Tier-1).** `RESUMED` bermakna DUA hal beda: terminal untuk resume-by-id (sesi lama
