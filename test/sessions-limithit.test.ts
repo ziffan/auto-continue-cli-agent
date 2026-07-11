@@ -98,3 +98,49 @@ describe('sessions.markRunningAfterInject (R3/I-21)', () => {
     expect(sessions.getById(id)?.detected_at).toBe(2);
   });
 });
+
+describe('sessions.markResumed guard (I-28/A-13)', () => {
+  it('LIMIT_HIT → RESUMED (jalur normal)', () => {
+    const sessions = createSessionsRepo(db);
+    const id = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id, tool: 'claude', cwd: process.cwd(), status: 'RUNNING', proc_state: 'alive' });
+    sessions.markLimitHit(id, { source: 'output', detectedAt: 1 });
+
+    expect(sessions.markResumed(id)).toBe(true);
+    expect(sessions.getById(id)?.status).toBe('RESUMED');
+  });
+
+  it('no-op (false) saat sesi sudah EXITED/FAILED — tak clobber terminal (race)', () => {
+    const sessions = createSessionsRepo(db);
+    const exitedId = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id: exitedId, tool: 'claude', cwd: process.cwd(), status: 'RUNNING', proc_state: 'alive' });
+    sessions.markExited(exitedId);
+    expect(sessions.markResumed(exitedId)).toBe(false);
+    expect(sessions.getById(exitedId)?.status).toBe('EXITED');
+
+    const failedId = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id: failedId, tool: 'claude', cwd: process.cwd(), status: 'RUNNING', proc_state: 'alive' });
+    sessions.markFailed(failedId);
+    expect(sessions.markResumed(failedId)).toBe(false);
+    expect(sessions.getById(failedId)?.status).toBe('FAILED');
+  });
+});
+
+describe('sessions.markBlocked (I-28/A-14)', () => {
+  it('LIMIT_HIT → BLOCKED (auto-continue mustahil, butuh manual)', () => {
+    const sessions = createSessionsRepo(db);
+    const id = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id, tool: 'claude', cwd: process.cwd(), status: 'LIMIT_HIT', proc_state: 'exited' });
+    expect(sessions.markBlocked(id)).toBe(true);
+    expect(sessions.getById(id)?.status).toBe('BLOCKED');
+  });
+
+  it('no-op (false) saat sesi sudah EXITED — tak clobber terminal', () => {
+    const sessions = createSessionsRepo(db);
+    const id = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id, tool: 'claude', cwd: process.cwd(), status: 'RUNNING', proc_state: 'alive' });
+    sessions.markExited(id);
+    expect(sessions.markBlocked(id)).toBe(false);
+    expect(sessions.getById(id)?.status).toBe('EXITED');
+  });
+});

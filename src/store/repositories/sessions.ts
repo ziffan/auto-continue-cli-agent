@@ -134,11 +134,31 @@ export function createSessionsRepo(db: DatabaseInstance) {
      *  yang sama (tetap 'alive'); resume-by-id spawn wrapper baru (sesi barunya sendiri). Guard
      *  `id` saja (transisi eksplisit oleh dispatch, bukan race liveness). Return true bila terupdate. */
     markResumed(id: string): boolean {
+      // I-28 (A-13): guard `status NOT IN ('EXITED','FAILED')` supaya transisi RESUMED tak
+      // meng-clobber sesi yang sudah terminal pada RACE (mis. proc lama keburu exit / reconciler
+      // menandai FAILED antara dispatch memutuskan resume & menulis RESUMED) — konsisten disiplin
+      // guard `markLimitHit`/`setReset`. Return false bila sesi sudah terminal (tak menulis).
       const info = db
         .prepare(
           `UPDATE sessions
            SET status = 'RESUMED', updated_at = @updated_at
-           WHERE id = @id`,
+           WHERE id = @id AND status NOT IN ('EXITED', 'FAILED')`,
+        )
+        .run({ id, updated_at: nowMs() });
+      return info.changes > 0;
+    },
+
+    /** I-28 (A-14): tandai sesi BLOCKED saat auto-continue mustahil dilanjutkan otomatis (cwd asli
+     *  hilang / `cli_session_id` absen) → butuh aksi manual user. Sebelumnya status BLOCKED = nilai
+     *  enum yang TAK PERNAH ditulis (dispatch cuma emit event+notif) → `acca status` tak pernah
+     *  menampilkannya. Kini konsisten: baris sesi mencerminkan kondisi terminal-butuh-manual. Guard
+     *  `NOT IN ('EXITED','FAILED')` (tak clobber terminal lain pada race). Return true bila terupdate. */
+    markBlocked(id: string): boolean {
+      const info = db
+        .prepare(
+          `UPDATE sessions
+           SET status = 'BLOCKED', updated_at = @updated_at
+           WHERE id = @id AND status NOT IN ('EXITED', 'FAILED')`,
         )
         .run({ id, updated_at: nowMs() });
       return info.changes > 0;
