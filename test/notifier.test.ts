@@ -130,10 +130,10 @@ describe('proximityNotifications (I-8) — engine murni', () => {
   it('5-jam menembus 0.90 → satu notif PROXIMITY warn', () => {
     const ns = proximityNotifications(snap([{ kind: 'five_hour', usedFraction: 0.92, resetAt: null }]));
     expect(ns).toHaveLength(1);
-    expect(ns[0].event).toBe('PROXIMITY');
-    expect(ns[0].level).toBe('warn');
-    expect(ns[0].body).toContain('5h');
-    expect(ns[0].body).toContain('92%');
+    expect(ns[0]?.event).toBe('PROXIMITY');
+    expect(ns[0]?.level).toBe('warn');
+    expect(ns[0]?.body).toContain('5h');
+    expect(ns[0]?.body).toContain('92%');
   });
 
   it('mingguan pakai ambang 0.75, bukan 0.90 (0.80 weekly → nyala, 0.80 five_hour → tidak)', () => {
@@ -142,7 +142,7 @@ describe('proximityNotifications (I-8) — engine murni', () => {
   });
 
   it('seven_day & agy "weekly" & "5h" terklasifikasi window dengan benar', () => {
-    expect(proximityNotifications(snap([{ kind: 'seven_day', usedFraction: 0.76, resetAt: null }]))[0].body).toContain(
+    expect(proximityNotifications(snap([{ kind: 'seven_day', usedFraction: 0.76, resetAt: null }]))[0]?.body).toContain(
       'weekly',
     );
     const agy = proximityNotifications(
@@ -155,8 +155,8 @@ describe('proximityNotifications (I-8) — engine murni', () => {
       ),
     );
     expect(agy).toHaveLength(2);
-    expect(agy[0].body).toContain('weekly');
-    expect(agy[1].body).toContain('5h');
+    expect(agy[0]?.body).toContain('weekly');
+    expect(agy[1]?.body).toContain('5h');
   });
 
   it('di bawah ambang → kosong; exhausted (usedFraction=1) → dilewati (wilayah LIMIT_HIT)', () => {
@@ -195,7 +195,7 @@ describe('withNotifications — dekorator EventsRepo', () => {
 
     expect(appended).toHaveLength(1); // passthrough
     expect(delivered).toHaveLength(1);
-    expect(delivered[0].event).toBe('LIMIT_HIT');
+    expect(delivered[0]?.event).toBe('LIMIT_HIT');
   });
 
   it('event tak-layak-surface → tetap append, TANPA deliver', () => {
