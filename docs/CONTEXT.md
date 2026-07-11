@@ -18,6 +18,26 @@
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+- **Terakhir diupdate:** 2026-07-11 (sesi Windows, live-verify) — **I-15 LIVE-VERIFY agy 1.1.1 (opportunistik, user tawarkan window + otorisasi bakar `3p-5h` ~11%).**
+  Sesi buka `/session-start` (proof-of-understanding lengkap) → rencana kode (Sub-task A guard + B resume-cycle). User
+  tawarkan agy Opus 4.6 sisa 11% utk test → **pivot ke live-verify** (I-15 = gate keluar M3e, opportunistik). Baseline
+  **nol-bakar dulu**, lalu bakar `3p-5h` (bucket 5-jam, reset 19:38Z, bounded) ke limit di sesi INTERAKTIF ber-PTY
+  (jalur produksi). **Semua via node-pty + import dist** (`shared/port-discovery`/`http` + `adapters/usage`/`patterns`).
+  **TEMUAN (semua docs diupdate):** (1) skema `RetrieveUserQuotaSummary`/`GetUserStatus` **tak berubah** di 1.1.1 →
+  parser valid; angka tervalidasi (`3p-5h` 0.1094 → `usedFraction 0.8906`). (2) **G-19 re-verified**: pesan `Individual
+  quota reached` IDENTIK + **limit≠exit** + detektor produksi (`matchAgyLimit`/`detect`) **fire benar** → **paruh DETEKSI
+  I-15 agy LULUS**. (3) **G-33 DIKOREKSI**: tak ada `request-review` mode (`--mode`=accept-edits/plan); idle marker =
+  footer `? for shortcuts`. (4) **G-36/R2b-agy TERPECAHKAN**: sumber id andal = cmd yang agy CETAK saat exit
+  `agy --conversation=<uuid>`; `.db` termuda racy (2 muncul). Resume-load terbukti (`--conversation=<id>` memuat percakapan
+  lama utuh, hidup di prompt → **paruh RESUME-load I-15 agy LULUS**). (5) **G-35 BARU**: probe agy via sesi LS hidup =
+  **snapshot launch-time, STALE dalam-sesi** (sesi burn beku 0.0712, fresh session=0) → caveat I-17 + **perkuat ADR-018**
+  (fresh/standalone probe). (6) **G-17 diperluas**: exhaustion = `remainingFraction` **0 present** ATAU absent (parser
+  benar keduanya). (7) **I-25/A-7 CONFIRMED live**: `3p-5h` habis → `every(<1)` blokir resume walau `gemini-5h` 100%.
+  **SISA I-15 (genuinely butuh reset/sesi asli, opportunistik):** inject `continue` pasca-reset (agy+CC), penanda idle
+  agy mid-turn, CC limit asli. **Verifikasi:** semua PII-firewalled (nol name/email di-print, redaktor rekursif).
+  **Docs:** GOTCHAS (G-35/G-36 baru + G-17/G-19/G-33 anotasi + Change Log), ISSUES (I-15/I-20-paruh-agy/I-25/I-17-caveat),
+  CONTEXT. **BELUM disentuh:** kode Sub-task A (guard probe-impossible) + B (resume-cycle) — lanjut sesi berikut. `main`
+  belum di-push (docs live-verify ini + backlog ADR-018/propagasi sebelumnya).
 - **Terakhir diupdate:** 2026-07-11 (sesi Windows, session-end ini) — **AUDIT PRA-M-REMOTE + M3e R1/R2a: 2 P1 loop ditutup.**
   Sesi buka `/session-start` → temukan audit menyeluruh untracked (`docs/AUDIT-2026-07-11.md`, dari sesi Claude sebelumnya) yang
   membalik prioritas: **4 P1 di jalur resume/continue** lolos 308 test (test men-stub seam yang justru cacat; satu test malah

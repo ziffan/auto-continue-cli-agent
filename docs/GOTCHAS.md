@@ -74,6 +74,10 @@ credit habis/off, bukan sesi-exit. **Sumber:** eksperimen limit agy ASLI 4 Jul (
 **Dampak:** `parseAgyUserStatus` (M3c) & probe live (M3d.4) bisa crash tepat saat sinyal terpenting (exhaustion).
 **Cara benar:** `remainingFraction` absent pada model target = **exhausted** (perlakukan 0/blokir), jangan crash.
 Progresi teramati: `0.2565 → 0.117 → 0.0055 → [absent]`. **Sumber:** FINDINGS F8, 4 Jul.
+**⚠ Diperluas (live-verify 11 Jul, agy 1.1.1):** exhaustion 5-jam bisa **`remainingFraction: 0` (present)** ATAU
+**absent** — teramati `3p-5h` habis = `0` (present, bukan absent) di 1.1.1, sedangkan Gemini 4 Jul = absent. Parser
+`parseAgyQuotaSummary`/`parseAgyUserStatus` BENAR untuk dua-duanya (`0`→`clamp01(1-0)=1`; absent→`1`). Jangan asumsi
+hanya salah satu bentuk. **Sumber:** I-15 live-verify 11 Jul.
 
 ### G-18 — `agy -p` (child_process) MENGGANTUNG bila stdin tak di-EOF; print-mode KOSONG saat limit; skip-permissions kontraproduktif
 **Jebakan (a):** `cp.execFile('agy', ['-p', prompt, ...])` tanpa menutup stdin child → agy print-mode **blok baca stdin**
@@ -97,6 +101,11 @@ Setelah pesan, agy **TETAP HIDUP** di prompt (footer `? for shortcuts` balik) �
 absolut LS. **Juga:** agy **tak mendukung sesi print konkuren** (state `~/.gemini`/LS/token di-share → hang) → burner/probe wajib sekuensial.
 **Dampak:** fixture detektor agy = pola `Individual quota reached` (bukan tebakan); gating continue agy = alive-path.
 **Cara benar:** korpus detektor agy pakai pesan ASLI ini; jangan spawn banyak sesi agy serentak. **Sumber:** FINDINGS F4/F10/F11, 4 Jul (`agy-REAL-limit-message.txt`).
+**✅ Re-verified live 11 Jul (agy 1.1.1):** pesan **IDENTIK** (`⚠ Individual quota reached. Please upgrade your
+subscription to increase your limits. Resets in 4h31m7s.` + `Error ID: …`), **limit≠exit tetap berlaku** (agy hidup di
+prompt `>` + footer `? for shortcuts`). `matchAgyLimit` + `antigravityAdapter.detect` **fire benar** atas output 1.1.1
+nyata (`{kind:'limit',source:'output',evidence:'Individual quota reached'}`) — detektor produksi live-validated (menutup
+paruh DETEKSI I-15 untuk agy). **Sumber:** I-15 live-verify 11 Jul (`agy-burn-interactive.mjs`).
 
 ## Claude Code
 
@@ -136,6 +145,18 @@ persis id yang dipakai `claude --resume <uuid>` (terkonfirmasi: id sesi berjalan
 **Dampak/guna:** basis penangkapan `cli_session_id` untuk resume-by-id (I-20/A-1) tanpa hook. **Jebakan:** ada juga entri
 **direktori** `<uuid>/` (tanpa `.jsonl`) di samping file — pilih **file** `.jsonl`. Dan korelasi "jsonl termuda pasca-spawn"
 **racy** bila dua sesi start di cwd sama → jalur robust = hook `SessionStart` (I-23). **Sumber:** investigasi R2 (11 Jul).
+
+### G-36 — agy cli_session_id (resume-by-id): sumber ANDAL = cmd yang agy CETAK saat exit; `.db` termuda = racy
+**Fakta (live-verify 11 Jul, agy 1.1.1 Windows, R2b/I-20):** analog G-34 untuk agy. Saat sesi agy interaktif ditutup
+(Ctrl-C 2×), agy **MENCETAK** perintah resume eksplisit: `Resume with -c (or command below): agy --conversation=<uuid>`
+— ini **sumber ANDAL** `cli_session_id` agy (bukan tebakan). Konversasi disimpan di
+`~/.gemini/antigravity-cli/conversations/<uuid>.db`; filename `<uuid>` = id `--conversation`. **Jebakan:** heuristik
+".db termuda pasca-spawn" **RACY** — satu sesi burn memunculkan **DUA** `.db` baru (`4f9a8638…` + `830255c2…`), hanya
+yang PERTAMA (yang dicetak) = id resume benar. **Verifikasi resume-load:** `agy --conversation=4f9a8638…` **memuat
+percakapan lama utuh** di sesi baru (isi turn sebelumnya tampil, agy hidup di prompt — paruh RESUME I-15 ✅). **Bentuk:**
+agy cetak `--conversation=<id>` (dgn `=`); adapter kita `resumeCmd` pakai `['--conversation', id]` (spasi) — Go-flag
+terima dua-duanya (bentuk `=` terverifikasi live; spasi = low-risk, verifikasi opportunistik). **Sumber:** I-15 live
+11 Jul (`agy-burn-interactive.mjs` + `agy-resume-verify.mjs`).
 
 ## Lingkungan / repo
 
@@ -319,6 +340,20 @@ resetTime, description}`. (`RetrieveUserQuota` singular = 404 di LS — bukan it
 ke `UsageLimit[]`; absent remainingFraction = exhausted (G-17). Redaksi displayName grup/plan (PII, G-9). **Sumber:**
 spike I-16 (ISSUES), CodexBar `docs/antigravity.md` (mereka prioritas `RetrieveUserQuotaSummary`).
 
+### G-35 — Probe usage agy via sesi LS HIDUP = snapshot saat launch, STALE dalam-sesi (bukan live)
+**Jebakan/Fakta (live-verify 11 Jul, agy 1.1.1 Windows, I-15):** `RetrieveUserQuotaSummary` (dan `GetUserStatus`) yang
+ditembak ke port LS milik **sesi agy yang sedang hidup** mengembalikan **snapshot kuota saat sesi itu LAUNCH** —
+**tidak** ter-refresh saat sesi membakar kuota. Terbukti: satu sesi agy dibakar 3 turn Opus berat sampai TUI
+`Individual quota reached`, tapi probe ke LS sesi itu **tetap** lapor `3p-5h remainingFraction=0.0712544` (angka PERSIS
+sama sepanjang hidup sesi), sementara **sesi baru** yang di-launch sedetik kemudian lapor `3p-5h=0`. Sekelas `/usage`
+stale (RESEARCH §4b): nilai beku di launch-time.
+**Dampak:** (a) **I-17 usage-monitor** yang probe periodik ke sesi RUNNING panjang akan membaca angka **basi**
+(launch-snapshot) → proximity meleset. (b) **Deteksi limit agy TAK BOLEH mengandalkan probe sesi-hidup** — sinyal LIVE
+andal = **output TUI** (`Individual quota reached`, limit-watcher — terbukti fire benar 1.1.1, G-19) ATAU **probe FRESH**
+(sesi baru / standalone OAuth ADR-018). Ini **memperkuat ADR-018** (probe pre-resume standalone = fresh, hindari cache
+sesi). **Cara benar:** untuk kuota real-time launch sesi baru / standalone probe; jangan percaya angka dari LS sesi yang
+sudah lama hidup. **Sumber:** I-15 live-verify 11 Jul (scratchpad `agy-burn-interactive.mjs`).
+
 ### G-33 — agy 1.1.0+ jadikan `request-review` sbg **mode default** → state prompt agy saat idle BEDA (jeda pre-write, bukan hanya prompt kosong)
 **Jebakan/Fakta (CHANGELOG agy 1.1.0, delta-check 11 Jul — belum live-verify):** mulai agy **1.1.0**, mode eksekusi default =
 **`request-review`**: agy **berhenti sebelum operasi tulis-file** untuk menampilkan diff preview line-level, menunggu `f`
@@ -330,6 +365,11 @@ ber-efek tak diinginkan. **Cara benar:** saat live-verify agy (I-15), tentukan p
 pertimbangkan meluncurkan agy dgn **`--mode default`** (flag baru 1.1.0) agar perilaku dapat-diprediksi bila review-pause
 mengganggu auto-continue. Bukan schema break (LS/quota tak berubah) — murni **perilaku TUI/eksekusi**. **Sumber:** delta-check
 versi 11 Jul (RESEARCH §4c), CHANGELOG agy 1.1.0.
+**⚠ DIKOREKSI (live-verify 11 Jul, agy 1.1.1):** dugaan "request-review = mode default → state idle beda" **TIDAK
+terkonfirmasi**. `agy --help` 1.1.1: `--mode` = `accept-edits`/`plan` (bukan `request-review`/`default`). Sesi live +
+pasca-limit: agy balik ke **input box normal** (`>` + footer `? for shortcuts`), **bukan** review-pause. Idle marker agy
+= footer `? for shortcuts` (mid-turn busy marker belum ditangkap presisi — kandidat idle-tracker agy, sisa I-15).
+`--mode default` yang entri ini usulkan **tak ada** di 1.1.1. **Sumber:** I-15 live-verify 11 Jul.
 
 ---
 
@@ -433,6 +473,7 @@ baru jalan setelah `intervalMs` (bukan saat start) — `acca status` kosong ~int
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-11 (I-15 live-verify, agy 1.1.1 Windows) | **G-35** (probe agy via sesi LS hidup = snapshot launch-time, STALE dalam-sesi → I-17 caveat + perkuat ADR-018 fresh-probe), **G-36** (cli_session_id agy = cmd resume yang agy CETAK saat exit `agy --conversation=<uuid>`; `.db` termuda racy; resume-load ✅). **G-17 diperluas** (exhaustion = `0` present ATAU absent), **G-19 re-verified** (pesan limit + detektor + limit≠exit ✅ di 1.1.1), **G-33 DIKOREKSI** (tak ada request-review mode; `--mode`=accept-edits/plan). Dari burn `3p-5h` ~11% ke limit (I-15, otorisasi user). |
 | 2026-07-11 (M3e/R2, audit) | **G-34** baru (encoding path transcript CC = `cwd.replace(/[^a-zA-Z0-9]/g,'-')`, filename=id `--resume`; racy → hook `SessionStart` robust). Dari investigasi penangkapan `cli_session_id` (I-20/A-1). |
 | 2026-07-11 (delta-check versi, Ubuntu) | **G-33** baru (agy 1.1.0+ jadikan `request-review` mode DEFAULT → state prompt agy saat "berhenti" bisa = menunggu review, bukan idle-at-prompt → relevan gating/actuation inject-continue; pertimbangkan `--mode default`; belum live-verify). **G-18 dianotasi** (jebakan (a)&(c) spesifik ≤1.0.16; 1.1.1 ubah print-mode: tak baca stdin w/ flag-prompt + server-fail→stderr+exit≠0). Dari delta-check CC 2.1.207 + agy 1.1.1 (RESEARCH §4c 11 Jul). |
 | 2026-07-11 (autonomous-run, Windows) | G-32 (timer engine baru yang di-wire ke supervisor via `setTimer`-bersama wajib opt-in `startUsageMonitor`, else `fire()`/`armedCount` test scheduler pecah; probe pertama setelah intervalMs). Dari wiring I-17 usage-monitor. |
