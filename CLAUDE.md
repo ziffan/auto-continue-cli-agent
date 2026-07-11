@@ -24,10 +24,13 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 
 ## 2. Status
 
-Fase: **Implementasi.** Spec LOCKED. **M1–M3d + M4 inti selesai & bertes** (308 test, 2 skip POSIX-only di Windows): loop auto-continue penuh
-(deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup / resume-by-id sesi mati) + Notifier +
+Fase: **Implementasi — M3e KOREKSI LOOP** (dari audit 11 Jul, `docs/audit/AUDIT-2026-07-11.md`). **M1–M3d + M4 inti bertes**
+(310 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup + Notifier +
 proximity + usage-monitor + `acca status` usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
-**Berikutnya:** M-remote (kontrol Telegram, security-gate) / M5 (deploy sebagai service). Belum dirilis/dipaketkan.
+**KOREKSI (audit):** klaim "loop auto-continue penuh selesai" dulu **overstated** — 4 P1 di jalur resume/continue lolos test
+(seam actuation di-stub). Ditutup: daemon-crash saat spawn gagal (R1) + resume-by-id pakai `cli_session_id`/absen→BLOCKED (R2a).
+**Resume-by-id sesi mati masih BLOCKED sampai penangkapan `cli_session_id` (R2b) + live-verify.**
+**Berikutnya:** selesaikan M3e (R2b/R3/R4) — **M-remote & M5 DITUNDA** sampai gate keluar hijau.
 Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file itu dulu.
 
 ## 3. Peta dokumen (sumber kebenaran)
