@@ -82,6 +82,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     procState: 'alive' | 'exited';
     cwd: string;
     jobKind: 'probe' | 'resume';
+    cliSessionId?: string;
     requestInject?: SupervisorDeps['requestInject'];
     spawnResume?: SupervisorDeps['spawnResume'];
   }): Promise<{ db: DatabaseInstance }> {
@@ -97,6 +98,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
       cwd: opts.cwd,
       status: 'LIMIT_HIT',
       proc_state: opts.procState,
+      cli_session_id: opts.cliSessionId ?? null,
       // pid = pid proses test ITU SENDIRI (selalu "alive") — supaya reconcileOrphans() yang
       // dijalankan supervisor.start() tidak diam-diam menulis-ulang proc_state 'alive'→'exited'
       // sebelum dispatch sempat berjalan (itu akan mengubah cabang yang diuji secara tak sengaja).
@@ -269,13 +271,14 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
       return { sessionId: 'new-session-1' };
     });
 
-    const { db: database } = await setupAndFire({ sessionId: 's-resume-exited-ok', procState: 'exited', cwd: realCwd, jobKind: 'resume', spawnResume });
+    const { db: database } = await setupAndFire({ sessionId: 's-resume-exited-ok', procState: 'exited', cwd: realCwd, jobKind: 'resume', cliSessionId: 'cc-uuid-abc123', spawnResume });
 
     // Spawn dipanggil TEPAT SEKALI, dengan cwd sesi ASLI (AC-8) + perintah resume-by-id yang benar.
     expect(spawnResume).toHaveBeenCalledTimes(1);
     expect(spawnCalls[0]?.cwd).toBe(realCwd);
     expect(spawnCalls[0]?.file).toBe('claude');
-    expect(spawnCalls[0]?.args).toEqual(['--resume', 's-resume-exited-ok']);
+    // A-1: resume WAJIB pakai cli_session_id (id milik CLI), BUKAN id supervisor 's-resume-exited-ok'.
+    expect(spawnCalls[0]?.args).toEqual(['--resume', 'cc-uuid-abc123']);
 
     const remaining = pendingJobs(database, 's-resume-exited-ok');
     expect(remaining).toHaveLength(0);
@@ -291,6 +294,29 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(payload.spec.cwd).toBe(realCwd);
   });
 
+  it('resume: proc_state exited + cwd exists but cli_session_id NULL → BLOCKED, NO spawn, old session NOT resumed (A-1)', async () => {
+    // Regresi A-1 (audit 11 Jul): tanpa cli_session_id, resume-by-id dulu men-spawn dgn id supervisor
+    // 4-char yang PASTI ditolak CLI nyata (+ keliru markResumed). Sekarang: BLOCKED + surface, tak spawn.
+    const spawnResume = vi.fn(() => ({ sessionId: 'should-not-happen' }));
+    // cwd ADA (process.cwd) → guard cwd_missing lolos; yang memblokir = cli_session_id absen.
+    const { db: database } = await setupAndFire({ sessionId: 's-resume-no-cliid', procState: 'exited', cwd: process.cwd(), jobKind: 'resume', spawnResume });
+
+    expect(spawnResume).not.toHaveBeenCalled(); // JANGAN spawn id yang dijamin salah.
+
+    const session = createSessionsRepo(database).getById('s-resume-no-cliid');
+    expect(session?.status).toBe('LIMIT_HIT'); // TAK di-RESUMED.
+
+    const remaining = pendingJobs(database, 's-resume-no-cliid');
+    expect(remaining).toHaveLength(0); // 'done' terminal (surface manual), bukan retry-spin.
+
+    const events = eventsFor(database, 's-resume-no-cliid');
+    const blocked = events.find((e) => e.type === 'job_dispatch_error');
+    const payload = blocked?.payload as { action: string; reason: string; status: string };
+    expect(payload.action).toBe('blocked');
+    expect(payload.reason).toBe('cli_session_id_missing');
+    expect(payload.status).toBe('BLOCKED');
+  });
+
   it('resume: proc_state exited + DEFAULT spawnResume + missing binary → daemon survives, old session NOT resumed, error surfaced (A-2)', async () => {
     // Regresi A-2 (audit 11 Jul): jalankan DEFAULT spawnResumeFn (BUKAN stub) → runSession in-process.
     // Arahkan resumeCmd ke binary yang tak ada di PATH supaya which() = null → runSession gagal SINKRON
@@ -299,7 +325,8 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     adapters.claude.resumeCmd = vi.fn(() => ({ file: 'acca-nonexistent-binary-zzz', args: ['--resume', 'x'] }));
 
     // spawnResume TIDAK di-inject → default runSession dipakai (jalur yang dulu tak pernah diuji).
-    const { db: database } = await setupAndFire({ sessionId: 's-resume-spawn-fail', procState: 'exited', cwd: process.cwd(), jobKind: 'resume' });
+    // cli_session_id diisi supaya lolos guard A-1 dan MENCAPAI jalur spawn (yang di sini gagal binary).
+    const { db: database } = await setupAndFire({ sessionId: 's-resume-spawn-fail', procState: 'exited', cwd: process.cwd(), jobKind: 'resume', cliSessionId: 'cc-uuid-fail' });
 
     // Daemon selamat: fire()/stop() di setupAndFire resolve tanpa throw/unhandledRejection.
     // Sesi lama TAK di-RESUMED (defect kedua A-2) — tetap LIMIT_HIT sampai resume benar-benar sukses.
