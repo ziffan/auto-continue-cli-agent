@@ -79,6 +79,30 @@ describe('createInjectHandler (wrapper side)', () => {
     expect(writes).toEqual([CONTINUE_TOKEN]);
   });
 
+  it('R3: memanggil onInjected TEPAT SEKALI, SETELAH write (gating lulus)', () => {
+    const calls: string[] = [];
+    const handler = createInjectHandler({
+      isAlive: () => true,
+      write: () => calls.push('write'),
+      onInjected: () => calls.push('onInjected'),
+    });
+
+    expect(handler()).toEqual({ injected: true, reason: null });
+    // Urutan penting: token ditulis dulu, lalu transisi RUNNING + un-latch (state konsisten sebelum
+    // output turn baru mengalir). onInjected tepat sekali.
+    expect(calls).toEqual(['write', 'onInjected']);
+  });
+
+  it('R3: TIDAK memanggil onInjected saat gating menolak (tak ada transisi/un-latch tanpa inject)', () => {
+    const onInjected = vi.fn();
+    const write = vi.fn();
+    const handler = createInjectHandler({ isAlive: () => false, write, onInjected });
+
+    expect(handler()).toEqual({ injected: false, reason: 'proc_not_alive' });
+    expect(write).not.toHaveBeenCalled();
+    expect(onInjected).not.toHaveBeenCalled();
+  });
+
   it('INJECTION FIREWALL: ignores IPC args entirely — writes only the hardcoded literal', () => {
     const writes: string[] = [];
     const handler = createInjectHandler({ isAlive: () => true, write: (t) => writes.push(t) });

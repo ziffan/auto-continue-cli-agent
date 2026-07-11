@@ -203,12 +203,12 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         // lokal + menulis token literal (I-12 poin 1). Token TAK PERNAH dilewatkan lewat IPC ini.
         const outcome = await requestInjectFn(session);
         if (outcome.injected) {
-          sessions.markResumed(job.session_id);
-          events.append({
-            session_id: job.session_id,
-            type: 'status_change',
-            payload: { to: 'RESUMED', reason: 'inject_continue' },
-          });
+          // R3 (I-21): transisi status (kembali RUNNING, BUKAN RESUMED-terminal) + un-latch limit-watcher
+          // dilakukan WRAPPER (pemilik PTY & penulis lifecycle sesinya, ADR-017) di dalam handler inject
+          // — supaya siklus limit BERIKUTNYA di sesi hidup yang sama terdeteksi & dipantau lagi
+          // (auto-continue tak lagi one-shot per sesi). Daemon hanya mencatat audit; notifikasi "resumed"
+          // ke user disurface dari event `job_dispatch_done action:inject_continue` (paralel dengan
+          // `resume_spawned` untuk resume-by-id).
           events.append({
             session_id: job.session_id,
             type: 'job_dispatch_done',

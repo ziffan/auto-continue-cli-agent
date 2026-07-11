@@ -10,6 +10,8 @@
 > **4 P1 di jalur resume/continue** yang lolos 308 test (test men-stub seam yang justru cacat). Detail lengkap +
 > bukti baris-per-baris + rencana remedi R1–R8 ada di file audit — entri di bawah = ringkas + pointer. **Gate keluar
 > sebelum M-remote:** I-20..I-22 (R1–R3) selesai + I-15 live-verify LULUS dgn CLI nyata.
+> **Progres gate (12 Jul):** R1 (A-2/I—daemon-crash) ✅ · R2a (A-1 korektness) ✅ · **R3 (I-21 multi-siklus) ✅** ·
+> **sisa: I-20 capture `cli_session_id` (CC) + I-22 R4 agy-exited + I-15 live-verify actuation inject/resume asli.**
 
 ### I-20 — Capture `cli_session_id` (R2b, penangkap id CLI untuk resume-by-id) [P1, blocker M-remote]
 **Konteks:** A-1. Paruh korektness sudah ditutup R2a (`df3904b`): resume-by-id kini pakai `session.cli_session_id`;
@@ -25,12 +27,6 @@ siap. **Sisa (issue ini):** benar-benar MENANGKAP id CLI → sampai itu ada, set
   terbukti (`agy --conversation=<id>` memuat percakapan lama). **Sisa I-20:** (a) **CC** masih butuh hook `SessionStart`
   (I-23) / G-34; (b) menghubungkan capture ini ke `setCliSessionId` di wrapper agy (tangkap dari output exit atau saat
   spawn). Sampai wiring itu, resume-by-id agy exited masih BLOCKED (paruh korektness R2a), tapi **sumbernya kini pasti**.
-
-### I-21 — Auto-continue hanya bekerja SEKALI per sesi hidup (siklus limit kedua tak terdeteksi) [P1]
-`limit-watcher` `latched` permanen + tak ada transisi RESUMED→RUNNING + monitor `listRunning` filter `RUNNING` saja →
-sesi RESUMED yang masih hidup berhenti dipantau. Flow PROJECT §4 langkah 10 ("Kembali ke 3") tak terjadi: sesi panjang
-yang kena limit 2× (persona target) hanya ter-rescue sekali. **Remedi:** transisi RESUMED→RUNNING (wrapper tandai saat
-inject diterima) + un-latch watcher pasca-inject + monitor mencakup sesi hidup + test siklus 2×. **Sumber:** audit A-3.
 
 ### I-22 — agy resume-by-id sesi MATI: implement opsi #3 (probe standalone OAuth) [P1] — **keputusan LOCK (ADR-018), impl pending**
 Job `probe` agy pada sesi `exited` → PID mati → `discoverLocalPorts` kosong → throw → `'retry'` backoff cap 60m
@@ -149,6 +145,24 @@ nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar i
 ---
 
 ## Tertutup
+
+### I-21 — Auto-continue hanya bekerja SEKALI per sesi hidup (siklus limit kedua tak terdeteksi) [P1] ✅ (12 Jul, R3, autonomous-run)
+**RESOLVED (M3e/R3, Opus inline Tier-1).** `RESUMED` bermakna DUA hal beda: terminal untuk resume-by-id (sesi lama
+digantikan) tapi SALAH untuk inject-continue (proses yang SAMA berlanjut) — menandai sesi hidup `RESUMED`-terminal
+membekukan `markLimitHit` (guard RUNNING) + `limit-watcher.latched` permanen + usage-monitor (`listRunning` filter
+RUNNING) berhenti memantau → auto-continue one-shot per sesi hidup (persona sesi panjang kena limit >1× tak
+ter-rescue lagi). **Fix:** (1) `sessions.markRunningAfterInject` — inject-continue sukses → sesi kembali **RUNNING**
+(bersihkan `detected_at`/`detect_source`/`reset_at`/`reset_source`; `proc_state` tetap alive; guard IN
+('LIMIT_HIT','RESUMED') tak clobber EXITED/FAILED). (2) `limit-watcher.unlatch()` (reset `latched`+buffer). (3)
+Transisi+un-latch ditulis **WRAPPER** via `createInjectHandler({onInjected})` (ADR-017: wrapper penulis lifecycle
+sesinya; urutan set-RUNNING **lalu** unlatch supaya guard-RUNNING siap). (4) Daemon alive-branch berhenti menulis
+status (hapus `markResumed`+`status_change RESUMED`); notif "resumed" pindah ke `notifier` mapping
+`job_dispatch_done action:inject_continue` (paralel `resume_spawned`). Usage-monitor **tak diubah** — sesi kembali
+RUNNING otomatis terpantau lagi (menutup gejala ke-3 tanpa kode). **Verifikasi (Opus sendiri):** typecheck+lint+
+**316 test** hijau (+6: unlatch re-arm output/signal + buffer-reset, markRunningAfterInject + **siklus 2× repo-level**,
+onInjected called/not-called, notifier inject_continue→RESUMED, supervisor-dispatch di-update). **Residual (→ I-15,
+belum):** repaint TUI baris limit lama ber-newline saat RUNNING bisa re-fire LIMIT_HIT palsu (G-37; sekelas idle
+false-positive) — konfirmasi perilaku repaint agy/CC saat limit asli. **Sumber:** audit A-3, R3.
 
 ### A-2 — Spawn-gagal resume-by-id = unhandled rejection → daemon CRASH [P1] ✅ (11 Jul, R1 `9027dc4`)
 **RESOLVED (M3e/R1, Opus inline Tier-1).** Default `spawnResumeFn` membuang `waitForExit` dari `runSession`; pada spawn

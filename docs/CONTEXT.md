@@ -9,15 +9,33 @@
 - **Fase:** **M3e KOREKSI LOOP (dari audit 11 Jul) ← fase sekarang.** M4 inti ✅ (Notifier + proximity + usage-monitor +
   `acca status` usage-view + `acca log`; **AC-4 dikoreksi ⚠** — reset_at + liveness daemon belum, I-24; AC-5 ✅). **M-remote DITUNDA.**
   **KOREKSI JUJUR (audit `docs/audit/AUDIT-2026-07-11.md`):** klaim lama "loop auto-continue penuh selesai & bertes" **OVERSTATED** —
-  4 P1 di jalur resume/continue lolos 308 test (seam actuation di-stub). **Ditutup sesi ini:** A-2 (daemon crash saat spawn gagal, R1) +
-  A-1 paruh korektness (resume pakai `cli_session_id`, absen→BLOCKED, R2a). **Belum:** R2b capture id (I-20), R3 siklus-limit-2 (I-21),
-  R4 agy-exited (I-22, butuh keputusan user), R5–R8. **Gate keluar sebelum M-remote:** R1–R3 + I-15 live-verify LULUS CLI nyata.
+  4 P1 di jalur resume/continue lolos 308 test (seam actuation di-stub). **Ditutup:** A-2 (daemon crash saat spawn gagal, R1) +
+  A-1 paruh korektness (resume pakai `cli_session_id`, absen→BLOCKED, R2a) + **R3 (I-21) siklus-limit-2 (12 Jul)**. **Belum:**
+  R2b capture id (I-20), R4 agy-exited (I-22, butuh keputusan user), R5–R8. **Gate keluar sebelum M-remote:** R1–R3 ✅ + I-15
+  live-verify actuation LULUS CLI nyata (masih HARD-STOP unattended — butuh user hadir).
   Sisanya di bawah masih akurat. M3d tertutup penuh. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
   `runSession` direlokasi ke `daemon/process-wrapper.ts` (layer inversion ditutup) + resume-chain link;
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+- **Terakhir diupdate:** 2026-07-12 (autonomous-run terjadwal 02:16, Windows) — **R3 (I-21) DITUTUP: auto-continue multi-siklus per sesi hidup + agy live-verify = HARD-STOP unattended.**
+  Cron one-shot `/autonomous-run` fire 02:16 (dijadwalkan sesi malam untuk window reset agy Opus 4.6). **Fokus utama (agy/CC
+  live-verify inject pasca-reset) = HARD-STOP:** upaya menggerakkan sesi `agy` hidup via node-pty **diblokir auto-classifier**
+  (`--dangerously-skip-permissions` = spawn agentic-CLI approval-off unattended = outward-facing, tepat kelas HARD-STOP skill).
+  Tak di-workaround (agy tanpa flag → hang di prompt izin). **Pivot ke backlog autonomous-safe → R3/I-21 (P1, gate-exit).**
+  **R3 (Opus inline Tier-1, branch `m3e-r3-multicycle`):** `RESUMED` bermakna beda per jalur — terminal untuk resume-by-id
+  tapi SALAH untuk inject-continue (proses SAMA berlanjut) → sesi hidup dibekukan RESUMED-terminal = auto-continue one-shot
+  (persona sesi panjang kena limit >1× tak ter-rescue). **Fix:** `sessions.markRunningAfterInject` (inject sukses → sesi kembali
+  RUNNING, bersihkan field limit, proc_state alive) + `limit-watcher.unlatch()` + transisi/un-latch ditulis **WRAPPER** via
+  `createInjectHandler({onInjected})` (ADR-017; urutan set-RUNNING→unlatch) + daemon alive-branch berhenti tulis status
+  (notif "resumed" pindah ke `notifier` `job_dispatch_done inject_continue`). Usage-monitor **tak diubah** (sesi kembali RUNNING
+  otomatis terpantau lagi). **Verifikasi (Opus sendiri):** typecheck+lint+**316 test** (+6: unlatch re-arm+buffer-reset,
+  markRunningAfterInject + **siklus 2× repo-level**, onInjected, notifier, supervisor-dispatch di-update). **RESIDUAL (→ I-15):**
+  repaint TUI baris limit lama ber-newline saat RUNNING bisa re-fire LIMIT_HIT palsu (G-37; sekelas idle-FP) — butuh live-verify
+  agy/CC. **Docs:** GOTCHAS G-37 + changelog, ISSUES (I-21→Tertutup + gate-progress header), CONTEXT. Branch `m3e-r3-multicycle`
+  di-ff-merge ke `main` + push. **Next (butuh user hadir):** I-15 live-verify actuation inject/resume asli + I-20 capture
+  `cli_session_id` CC (keduanya butuh sesi CLI nyata) + I-22 R4 agy-exited.
 - **Terakhir diupdate:** 2026-07-11 (sesi Windows, live-verify) — **I-15 LIVE-VERIFY agy 1.1.1 (opportunistik, user tawarkan window + otorisasi bakar `3p-5h` ~11%).**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → rencana kode (Sub-task A guard + B resume-cycle). User
   tawarkan agy Opus 4.6 sisa 11% utk test → **pivot ke live-verify** (I-15 = gate keluar M3e, opportunistik). Baseline

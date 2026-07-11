@@ -115,33 +115,9 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
   // token literal tetap berlaku).
   const idleTracker = createIdleTracker({ tool: spec.tool });
 
-  let exited = false;
-  const controlPath = sessionControlSocketPath(id);
-  const controlServer = createIpcServer({
-    inject: createInjectHandler({
-      isAlive: () => !exited,
-      write: (text) => ptyProcess.write(text),
-      foregroundIsAgent: () => foregroundIsAgent(ptyProcess.pid),
-      idle: () => idleTracker.isIdle(),
-    }),
-  });
-  controlServer
-    .listen(controlPath)
-    .then(() => {
-      // Race listen-vs-exit: bila proses sudah keluar sebelum listen selesai, tutup segera supaya
-      // tak ada socket/pipe menggantung (mencegah handle bocor yang menahan event-loop).
-      if (exited) void controlServer.close();
-    })
-    .catch((err: unknown) => {
-      deps.events.append({
-        session_id: id,
-        type: 'control_socket_error',
-        payload: { error: err instanceof Error ? err.message : String(err) },
-      });
-    });
-
   // M3d.1 — seam Detector→sesi live: engine murni (tak akses store/IPC, ADR-008/013), transisi
-  // state dilakukan di sini oleh pemanggil saat `onLimit` menyala (sekali, latched).
+  // state dilakukan di sini oleh pemanggil saat `onLimit` menyala (sekali per latch). Didefinisikan
+  // SEBELUM control server supaya handler inject (`onInjected`) bisa memanggil `watcher.unlatch()` (R3).
   const watcher = createLimitWatcher({
     tool: spec.tool,
     onLimit: (result) => {
@@ -163,6 +139,45 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
       if (scheduled) void notifyDaemonRearm();
     },
   });
+
+  let exited = false;
+  const controlPath = sessionControlSocketPath(id);
+  const controlServer = createIpcServer({
+    inject: createInjectHandler({
+      isAlive: () => !exited,
+      write: (text) => ptyProcess.write(text),
+      foregroundIsAgent: () => foregroundIsAgent(ptyProcess.pid),
+      idle: () => idleTracker.isIdle(),
+      // R3 (I-21): inject sukses → kembalikan sesi HIDUP ini ke RUNNING + un-latch watcher supaya
+      // siklus limit BERIKUTNYA (persona sesi panjang kena limit >1×) terdeteksi lagi. Wrapper =
+      // penulis sah lifecycle sesinya (ADR-017); daemon hanya mencatat audit + notifikasi RESUMED.
+      onInjected: () => {
+        const back = deps.sessions.markRunningAfterInject(id);
+        if (back) {
+          deps.events.append({
+            session_id: id,
+            type: 'status_change',
+            payload: { to: 'RUNNING', reason: 'inject_continue' },
+          });
+        }
+        watcher.unlatch();
+      },
+    }),
+  });
+  controlServer
+    .listen(controlPath)
+    .then(() => {
+      // Race listen-vs-exit: bila proses sudah keluar sebelum listen selesai, tutup segera supaya
+      // tak ada socket/pipe menggantung (mencegah handle bocor yang menahan event-loop).
+      if (exited) void controlServer.close();
+    })
+    .catch((err: unknown) => {
+      deps.events.append({
+        session_id: id,
+        type: 'control_socket_error',
+        payload: { error: err instanceof Error ? err.message : String(err) },
+      });
+    });
 
   const dataSub = ptyProcess.onData((data: string) => {
     process.stdout.write(data);

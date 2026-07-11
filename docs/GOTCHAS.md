@@ -467,12 +467,31 @@ ber-`setTimer`-bersama ke supervisor harus mengikuti pola gate ini (atau injeksi
 baru jalan setelah `intervalMs` (bukan saat start) — `acca status` kosong ~interval awal (diterima; fast-first-probe
 = kandidat follow-up). **Sumber:** wiring I-17, `src/daemon/supervisor.ts`, `test/usage-monitor-wiring.test.ts`.
 
+### G-37 — Auto-continue multi-siklus: sesi inject-continue kembali RUNNING (bukan RESUMED-terminal); un-latch watcher punya residual TUI-repaint
+**Jebakan/Fakta (R3/I-21, 12 Jul):** `RESUMED` punya DUA arti berbeda per jalur — untuk **resume-by-id** (proc
+`exited`) ia terminal (sesi lama digantikan sesi baru); untuk **inject-continue** (proc `alive`, jalur primer
+ADR-014 §1) proses yang SAMA berlanjut → menandainya `RESUMED`-terminal membekukan sesi: `markLimitHit` (guard
+`status='RUNNING'`) menolak siklus limit berikutnya + `limit-watcher` `latched` permanen + usage-monitor
+(`listRunning` filter `RUNNING`) berhenti memantau → **auto-continue cuma bekerja SEKALI per sesi hidup**
+(persona sesi panjang kena limit >1× tak ter-rescue lagi). **Cara benar:** inject-continue sukses → sesi kembali
+**RUNNING** (`sessions.markRunningAfterInject`, bersihkan field limit, `proc_state` tetap alive) + `watcher.unlatch()`
++ transisi/un-latch ditulis **WRAPPER** (pemilik PTY & penulis lifecycle sesinya, ADR-017), daemon hanya mencatat
+audit; notifikasi "resumed" pindah dari `status_change RESUMED` ke event `job_dispatch_done action:inject_continue`
+(paralel `resume_spawned`). Urutan WAJIB: set RUNNING **lalu** unlatch (biar `markLimitHit` guard-RUNNING siap saat
+latch dibuka). **RESIDUAL (butuh live-verify I-15, belum):** bila TUI agy/CC me-**repaint** baris pesan limit LAMA
+**dengan newline** selagi sesi sudah RUNNING (pasca-inject, sebelum limit asli berikutnya) → watcher bisa re-fire
+**LIMIT_HIT palsu** → probe/inject spuriousi. Dimitigasi: `unlatch()` me-reset buffer (buang parsial lama) + TUI
+umumnya repaint in-place tanpa `\n`. Sekelas residual idle-false-positive (G-29) — konfirmasi perilaku repaint
+agy/CC saat limit asli. **Sumber:** R3/I-21, `src/daemon/{limit-watcher,process-wrapper,supervisor,inject-continue}.ts`,
+`src/store/repositories/sessions.ts`, `src/notify/notifier.ts`.
+
 ---
 
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-12 (autonomous-run, R3/I-21) | **G-37** baru (auto-continue multi-siklus: inject-continue → sesi kembali RUNNING bukan RESUMED-terminal, transisi+un-latch ditulis wrapper (ADR-017), notif "resumed" pindah ke `job_dispatch_done inject_continue`; RESIDUAL TUI-repaint bisa re-fire LIMIT_HIT palsu → live-verify I-15). Dari implementasi R3 (I-21 CLOSED). |
 | 2026-07-11 (I-15 live-verify, agy 1.1.1 Windows) | **G-35** (probe agy via sesi LS hidup = snapshot launch-time, STALE dalam-sesi → I-17 caveat + perkuat ADR-018 fresh-probe), **G-36** (cli_session_id agy = cmd resume yang agy CETAK saat exit `agy --conversation=<uuid>`; `.db` termuda racy; resume-load ✅). **G-17 diperluas** (exhaustion = `0` present ATAU absent), **G-19 re-verified** (pesan limit + detektor + limit≠exit ✅ di 1.1.1), **G-33 DIKOREKSI** (tak ada request-review mode; `--mode`=accept-edits/plan). Dari burn `3p-5h` ~11% ke limit (I-15, otorisasi user). |
 | 2026-07-11 (M3e/R2, audit) | **G-34** baru (encoding path transcript CC = `cwd.replace(/[^a-zA-Z0-9]/g,'-')`, filename=id `--resume`; racy → hook `SessionStart` robust). Dari investigasi penangkapan `cli_session_id` (I-20/A-1). |
 | 2026-07-11 (delta-check versi, Ubuntu) | **G-33** baru (agy 1.1.0+ jadikan `request-review` mode DEFAULT → state prompt agy saat "berhenti" bisa = menunggu review, bukan idle-at-prompt → relevan gating/actuation inject-continue; pertimbangkan `--mode default`; belum live-verify). **G-18 dianotasi** (jebakan (a)&(c) spesifik ≤1.0.16; 1.1.1 ubah print-mode: tak baca stdin w/ flag-prompt + server-fail→stderr+exit≠0). Dari delta-check CC 2.1.207 + agy 1.1.1 (RESEARCH §4c 11 Jul). |

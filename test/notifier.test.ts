@@ -39,6 +39,20 @@ describe('notificationForEvent — transisi yang layak-surface', () => {
     expect(n?.body).toContain('inject_continue');
   });
 
+  it('RESUMED via inject-continue (job_dispatch_done inject_continue) → info (R3: status kini RUNNING)', () => {
+    // R3 (I-21): sesi hidup kembali RUNNING (bukan RESUMED-terminal) supaya siklus limit berikutnya
+    // terdeteksi → notifikasi "resumed" ke user pindah dari status_change ke event dispatch ini.
+    const n = notificationForEvent({
+      session_id: 'kcb3',
+      type: 'job_dispatch_done',
+      payload: { jobId: 3, action: 'inject_continue' },
+    });
+    expect(n?.event).toBe('RESUMED');
+    expect(n?.level).toBe('info');
+    expect(n?.body).toContain('#kcb3');
+    expect(n?.body).toContain('inject-continue');
+  });
+
   it('RESUMED via resume-by-id (job_dispatch_done resume_spawned) → info, menautkan sesi baru', () => {
     const n = notificationForEvent({
       session_id: 'old1',
@@ -97,7 +111,6 @@ describe('notificationForEvent — event yang TIDAK di-surface', () => {
     { session_id: 's', type: 'status_change', payload: { to: 'exited', reason: 'orphan_reconciled' } },
     { session_id: null, type: 'daemon_error', payload: { where: 'scheduler_timer' } },
     { session_id: 's', type: 'job_dispatch_pending', payload: { action: 'still_limited' } },
-    { session_id: 's', type: 'job_dispatch_done', payload: { action: 'inject_continue' } },
     { session_id: 's', type: 'control_socket_error', payload: { error: 'boom' } },
     { session_id: 's', type: 'probe_scheduled', payload: {} },
   ];

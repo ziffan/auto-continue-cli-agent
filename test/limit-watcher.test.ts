@@ -79,6 +79,43 @@ describe('createLimitWatcher — feedOutput', () => {
   });
 });
 
+describe('createLimitWatcher — unlatch (R3/I-21: deteksi siklus limit >1× per sesi hidup)', () => {
+  it('setelah onLimit fire + latched, unlatch() membuka deteksi siklus limit BERIKUTNYA', () => {
+    const { watcher, getCalls } = makeCounter('claude');
+    watcher.feedOutput('usage limit reached\n');
+    expect(getCalls()).toBe(1);
+    watcher.feedOutput('usage limit reached\n'); // masih latched → diabaikan
+    expect(getCalls()).toBe(1);
+
+    watcher.unlatch(); // auto-continue berhasil di-inject → siap deteksi siklus berikutnya
+    watcher.feedOutput('usage limit reached\n');
+    expect(getCalls()).toBe(2); // siklus limit KEDUA terdeteksi (bukan lagi one-shot)
+  });
+
+  it('unlatch juga membuka jalur feedSignal (StopFailure) untuk siklus berikutnya', () => {
+    const { watcher, getCalls } = makeCounter('claude');
+    watcher.feedSignal({ type: 'stopfailure', error: 'rate_limit' });
+    expect(getCalls()).toBe(1);
+    watcher.feedSignal({ type: 'stopfailure', error: 'rate_limit' });
+    expect(getCalls()).toBe(1);
+    watcher.unlatch();
+    watcher.feedSignal({ type: 'stopfailure', error: 'rate_limit' });
+    expect(getCalls()).toBe(2);
+  });
+
+  it('unlatch me-reset buffer → sisa baris parsial limit lama tak langsung re-fire', () => {
+    const { watcher, getCalls } = makeCounter('claude');
+    watcher.feedOutput('usage limit reached\n');
+    expect(getCalls()).toBe(1);
+    // baris limit lama tersisa di buffer TANPA newline (belum ter-classify)
+    watcher.feedOutput('...tail usage limit reached tanpa newline');
+    watcher.unlatch(); // buffer di-reset
+    // newline yang datang kemudian TIDAK melengkapi baris limit lama (sudah dibuang) → tak fire
+    watcher.feedOutput('\n');
+    expect(getCalls()).toBe(1);
+  });
+});
+
 describe('createLimitWatcher — feedSignal', () => {
   it('stopfailure rate_limit fires once; a second rate_limit signal does not fire again', () => {
     const { watcher, getCalls } = makeCounter('claude');

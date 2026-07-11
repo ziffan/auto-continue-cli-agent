@@ -27,6 +27,13 @@ export interface LimitWatcher {
   feedOutput(chunk: string): void;
   /** Umpan sinyal non-output langsung (mis. hook StopFailure, exitcode) — di-classify apa adanya. */
   feedSignal(signal: DetectSignal): void;
+  /** R3 (I-21): buka latch setelah auto-continue berhasil di-inject ke sesi HIDUP ini, supaya siklus
+   *  limit BERIKUTNYA (persona sesi panjang yang kena limit >1×) terdeteksi lagi — tanpa ini
+   *  auto-continue cuma bekerja SEKALI per sesi hidup. Buffer di-reset supaya sisa parsial baris limit
+   *  lama (bila ada) tak langsung re-fire; pesan limit baru datang dengan newline sendiri. Pemanggil
+   *  (wrapper) menjamin sesi sudah kembali RUNNING sebelum/berbarengan un-latch → `markLimitHit`
+   *  (guard RUNNING) siap menerima siklus berikutnya. */
+  unlatch(): void;
 }
 
 /** Buffer tanpa newline melebihi ini (mis. progress-bar `\r`-only) → dipangkas, sisakan ekor. */
@@ -75,6 +82,11 @@ export function createLimitWatcher(deps: LimitWatcherDeps): LimitWatcher {
         latched = true;
         deps.onLimit(result);
       }
+    },
+
+    unlatch(): void {
+      latched = false;
+      buffer = '';
     },
   };
 }

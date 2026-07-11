@@ -219,7 +219,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect((errorEvent?.payload as { error: string }).error).toContain('network boom');
   });
 
-  it('resume: proc_state alive + wrapper injects → RESUMED + inject_continue event + done', async () => {
+  it('resume: proc_state alive + wrapper injects → inject_continue event + done (status transition owned by wrapper, R3)', async () => {
     const injected: InjectRequestResult = { reachable: true, injected: true, reason: null };
     const requestInject = vi.fn((): Promise<InjectRequestResult> => Promise.resolve(injected));
 
@@ -230,17 +230,22 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     const remaining = pendingJobs(database, 's-resume-alive-ok');
     expect(remaining).toHaveLength(0); // done → job removed, no spin
 
+    // R3 (I-21): daemon TAK lagi menulis status pada jalur inject — transisi RUNNING + un-latch watcher
+    // dilakukan WRAPPER via `onInjected` (ADR-017). `requestInject` di-stub di sini (tanpa wrapper nyata)
+    // → status tetap LIMIT_HIT. Transisi wrapper diuji terpisah (inject-continue.test.ts + sessions/
+    // limit-watcher). Daemon di sini hanya mencatat audit + memicu notifikasi RESUMED via event dispatch.
     const session = createSessionsRepo(database).getById('s-resume-alive-ok');
-    expect(session?.status).toBe('RESUMED');
+    expect(session?.status).toBe('LIMIT_HIT');
     expect(session?.proc_state).toBe('alive'); // inject-continue melanjutkan proses yang SAMA
 
     const events = eventsFor(database, 's-resume-alive-ok');
     const done = events.find((e) => e.type === 'job_dispatch_done');
     expect((done?.payload as { action: string }).action).toBe('inject_continue');
-    const statusChange = events.find(
+    // Daemon TIDAK lagi meng-emit `status_change RESUMED` (wrapper yang meng-emit `RUNNING`).
+    const resumedStatusChange = events.find(
       (e) => e.type === 'status_change' && (e.payload as { to?: string }).to === 'RESUMED',
     );
-    expect(statusChange).toBeDefined();
+    expect(resumedStatusChange).toBeUndefined();
   });
 
   it('resume: proc_state alive + wrapper unreachable → inject_skipped event + done (no spin, no status change)', async () => {
