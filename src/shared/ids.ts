@@ -15,3 +15,19 @@ export function genSessionId(): string {
   }
   return id;
 }
+
+/** I-27 (audit A-9): hasilkan id sesi yang dijamin belum dipakai. `genSessionId` 4-char (≈1 jt
+ *  kombinasi) + retensi never-purge → probabilitas birthday-collision naik seiring baris bertambah;
+ *  tanpa cek, tabrakan PK membuat `createSession` throw `SQLITE_CONSTRAINT_PRIMARYKEY` → `acca run`
+ *  gagal MISTERIUS. Coba ulang sampai `exists(id)` false; `maxTries` habis → throw pesan JELAS (bukan
+ *  constraint SQLite mentah). `exists` di-inject (repo `getById`) → testable tanpa DB & race-tolerant
+ *  (INSERT tetap dijaga PK constraint bila ada race lintas-proses tepat di antara cek & insert). */
+export function genUniqueSessionId(exists: (id: string) => boolean, maxTries = 8): string {
+  for (let i = 0; i < maxTries; i++) {
+    const id = genSessionId();
+    if (!exists(id)) return id;
+  }
+  throw new Error(
+    `Gagal menghasilkan id sesi unik setelah ${maxTries} percobaan — store mungkin terlalu penuh (arsipkan sesi lama atau perpanjang ID_LENGTH).`,
+  );
+}
