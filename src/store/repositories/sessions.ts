@@ -58,6 +58,18 @@ export function createSessionsRepo(db: DatabaseInstance) {
       });
     },
 
+    /** Simpan id sesi milik CLI target (Claude Code transcript uuid / agy conversation id) begitu
+     *  tertangkap. Dipakai resume-by-id (`claude --resume <cli_session_id>`); tanpa ini resume PASTI
+     *  ditolak CLI (A-1). Penangkapan id-nya = slice terpisah (transcript CC / printed cmd agy).
+     *  Guard `id` saja (penulisan eksplisit oleh penangkap, bukan race liveness). */
+    setCliSessionId(id: string, cliSessionId: string): void {
+      db.prepare('UPDATE sessions SET cli_session_id = @cli, updated_at = @updated_at WHERE id = @id').run({
+        id,
+        cli: cliSessionId,
+        updated_at: nowMs(),
+      });
+    },
+
     markExited(id: string): void {
       db.prepare(
         `UPDATE sessions

@@ -238,6 +238,20 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         return 'done';
       }
 
+      // A-1 (audit 11 Jul): resume-by-id WAJIB pakai id sesi milik CLI (`claude --resume <uuid>` /
+      // `agy --conversation <id>`), BUKAN id supervisor 4-char. Tanpa `cli_session_id`, resume PASTI
+      // ditolak CLI nyata → BLOCKED (surface manual), JANGAN spawn proses yang dijamin gagal +
+      // JANGAN keliru menandai sesi lama RESUMED. Penangkapan `cli_session_id` (transcript CC /
+      // printed cmd agy) = slice terpisah yang butuh live-verify (setCliSessionId sudah siap).
+      if (!session.cli_session_id) {
+        events.append({
+          session_id: job.session_id,
+          type: 'job_dispatch_error',
+          payload: { jobId: job.id, action: 'blocked', reason: 'cli_session_id_missing', status: 'BLOCKED' },
+        });
+        return 'done';
+      }
+
       const adapter = adapters[session.tool];
       if (!adapter?.resumeCmd) {
         events.append({
@@ -248,7 +262,7 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         return 'retry';
       }
 
-      const spec = adapter.resumeCmd(session.id, session.cwd);
+      const spec = adapter.resumeCmd(session.cli_session_id, session.cwd);
       // Actuation spawn nyata (I-12 poin 2): jalankan wrapper PTY baru di `spec.cwd` (AC-8 — resume
       // WAJIB di direktori kerja sesi asli). Default `spawnResumeFn` (runSession in-process) TAK
       // melempar saat spawn gagal — ia melapor `spawnFailed` (A-2: dulu jalur gagal jadi
