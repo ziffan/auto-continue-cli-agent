@@ -24,7 +24,10 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 
 ## 2. Status
 
-Fase: **Perencanaan (Doc-First) — Bagian 2**. Belum ada kode fitur.
+Fase: **Implementasi.** Spec LOCKED. **M1–M3d + M4 inti selesai & bertes** (306 test): loop auto-continue penuh
+(deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup / resume-by-id sesi mati) + Notifier +
+proximity + usage-monitor + `acca status` usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
+**Berikutnya:** M-remote (kontrol Telegram, security-gate) / M5 (deploy sebagai service). Belum dirilis/dipaketkan.
 Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file itu dulu.
 
 ## 3. Peta dokumen (sumber kebenaran)
