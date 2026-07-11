@@ -127,6 +127,16 @@ proaktif (~90% window 5-jam, ~75% mingguan) yang muncul di terminal **TIDAK di-p
 sendiri = 90% (5-jam) / 75% (mingguan) → default US-13. **Sumber:** limit 5-jam asli tertangkap 4 Jul 2026
 (transcript sesi, `isApiErrorMessage:true`); RESEARCH §2b, ISSUES I-8.
 
+### G-34 — Encoding path transcript CC = `cwd.replace(/[^a-zA-Z0-9]/g,'-')`; filename = id `--resume`
+**Fakta (verifikasi empiris 11 Jul, Windows, `~/.claude/projects/`):** transcript sesi Claude Code ada di
+`~/.claude/projects/<cwd-encoded>/<uuid>.jsonl` di mana `<cwd-encoded>` = **setiap karakter non-alfanumerik cwd diganti
+`-`** (`:`, `\`, `/`, `.`, spasi, dan `-` itu sendiri → semua jadi `-`). Contoh nyata: `D:\PROYEK\auto-continue-cli-agent`
+→ `D--PROYEK-auto-continue-cli-agent`; `C:\Users\ziffa` → `C--Users-ziffa`. **`<uuid>`** (nama file minus `.jsonl`) =
+persis id yang dipakai `claude --resume <uuid>` (terkonfirmasi: id sesi berjalan cocok dgn nama file jsonl-nya).
+**Dampak/guna:** basis penangkapan `cli_session_id` untuk resume-by-id (I-20/A-1) tanpa hook. **Jebakan:** ada juga entri
+**direktori** `<uuid>/` (tanpa `.jsonl`) di samping file — pilih **file** `.jsonl`. Dan korelasi "jsonl termuda pasca-spawn"
+**racy** bila dua sesi start di cwd sama → jalur robust = hook `SessionStart` (I-23). **Sumber:** investigasi R2 (11 Jul).
+
 ## Lingkungan / repo
 
 ### G-6 — Git CRLF pada docs (Windows)
@@ -423,6 +433,7 @@ baru jalan setelah `intervalMs` (bukan saat start) — `acca status` kosong ~int
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-11 (M3e/R2, audit) | **G-34** baru (encoding path transcript CC = `cwd.replace(/[^a-zA-Z0-9]/g,'-')`, filename=id `--resume`; racy → hook `SessionStart` robust). Dari investigasi penangkapan `cli_session_id` (I-20/A-1). |
 | 2026-07-11 (delta-check versi, Ubuntu) | **G-33** baru (agy 1.1.0+ jadikan `request-review` mode DEFAULT → state prompt agy saat "berhenti" bisa = menunggu review, bukan idle-at-prompt → relevan gating/actuation inject-continue; pertimbangkan `--mode default`; belum live-verify). **G-18 dianotasi** (jebakan (a)&(c) spesifik ≤1.0.16; 1.1.1 ubah print-mode: tak baca stdin w/ flag-prompt + server-fail→stderr+exit≠0). Dari delta-check CC 2.1.207 + agy 1.1.1 (RESEARCH §4c 11 Jul). |
 | 2026-07-11 (autonomous-run, Windows) | G-32 (timer engine baru yang di-wire ke supervisor via `setTimer`-bersama wajib opt-in `startUsageMonitor`, else `fire()`/`armedCount` test scheduler pecah; probe pertama setelah intervalMs). Dari wiring I-17 usage-monitor. |
 | 2026-07-11 (autonomous-run, Windows) | G-13 ditandai **TERATASI** (I-4): `resolveClockTime` cabang zona IANA hitung ulang wall-clock di tanggal besok (DST-correct), bukan `+MS_PER_DAY` mentah. |

@@ -6,6 +6,73 @@
 
 ## Terbuka
 
+> **Audit 11 Jul (`docs/audit/AUDIT-2026-07-11.md`) → I-20..I-28.** Audit menyeluruh pra-M-remote menemukan
+> **4 P1 di jalur resume/continue** yang lolos 308 test (test men-stub seam yang justru cacat). Detail lengkap +
+> bukti baris-per-baris + rencana remedi R1–R8 ada di file audit — entri di bawah = ringkas + pointer. **Gate keluar
+> sebelum M-remote:** I-20..I-22 (R1–R3) selesai + I-15 live-verify LULUS dgn CLI nyata.
+
+### I-20 — Capture `cli_session_id` (R2b, penangkap id CLI untuk resume-by-id) [P1, blocker M-remote]
+**Konteks:** A-1. Paruh korektness sudah ditutup R2a (`df3904b`): resume-by-id kini pakai `session.cli_session_id`;
+absen → BLOCKED (bukan spawn id supervisor 4-char yang dijamin ditolak CLI). `setCliSessionId(id, cliId)` repo sudah
+siap. **Sisa (issue ini):** benar-benar MENANGKAP id CLI → sampai itu ada, setiap resume-by-id sesi `exited` = BLOCKED.
+- **CC:** encoding transcript **terverifikasi empiris 11 Jul** = `~/.claude/projects/<cwd.replace(/[^a-zA-Z0-9]/g,'-')>/<uuid>.jsonl`,
+  filename `<uuid>` = id `claude --resume <uuid>` (lihat G-34). Korelasi "jsonl termuda pasca-spawn" = **racy** (dua sesi
+  di cwd sama) → **jalur robust = hook `SessionStart`** (payload beri id langsung; gabung ke I-23).
+- **agy:** printed resume cmd saat exit + `~/.gemini/` conversations dir (belum diinvestigasi).
+- **DoD:** live-verify dgn CLI nyata (audit §6: jangan ✅ actuation tanpa live smoke jalur default). **Sumber:** audit A-1.
+
+### I-21 — Auto-continue hanya bekerja SEKALI per sesi hidup (siklus limit kedua tak terdeteksi) [P1]
+`limit-watcher` `latched` permanen + tak ada transisi RESUMED→RUNNING + monitor `listRunning` filter `RUNNING` saja →
+sesi RESUMED yang masih hidup berhenti dipantau. Flow PROJECT §4 langkah 10 ("Kembali ke 3") tak terjadi: sesi panjang
+yang kena limit 2× (persona target) hanya ter-rescue sekali. **Remedi:** transisi RESUMED→RUNNING (wrapper tandai saat
+inject diterima) + un-latch watcher pasca-inject + monitor mencakup sesi hidup + test siklus 2×. **Sumber:** audit A-3.
+
+### I-22 — agy resume-by-id sesi MATI mustahil (probe butuh LS hidup; opsi #3 ADR-010 belum ada) [P1, butuh keputusan user]
+Job `probe` agy pada sesi `exited` → PID mati → `discoverLocalPorts` kosong → throw → `'retry'` backoff cap 60m
+**selamanya, senyap**. Jalur pre-resume standalone (`retrieveUserQuota` OAuth, opsi #3) belum ada + token on-disk stale
+(G-1) butuh refresh via `oauth2.googleapis.com` (egress di luar whitelist NFR). **Keputusan user:** opsi #3 + egress
+oauth2 (ADR baru men-supersede scope egress) ATAU fresh-launch snapshot ATAU terima "agy exited = manual". **Minimal
+tanpa keputusan:** deteksi "probe impossible" (agy + exited) → event + notif `PROBE_IMPOSSIBLE` + stop retry senyap.
+**Sumber:** audit A-4.
+
+### I-23 — Deteksi limit CC PRIMER (hook `StopFailure`) belum diimplementasi [P2]
+ADR-001/CLAUDE.md §7 tetapkan hook `StopFailure` matcher `rate_limit` sbg jalur deteksi **primer**; yang ada hanya
+fallback pola output (`limit-watcher`). `feedSignal` ada tapi **nol pemanggil produksi**. M3d ditutup tanpa hook + tak
+ada issue yang melacaknya. **Remedi:** tulis settings hooks (`CLAUDE_CONFIG_DIR`/`--settings`) + kanal callback (reuse
+socket kontrol per-sesi) → `feedSignal({type:'stopfailure',error})`. **Sekaligus sumber `cli_session_id` (I-20) via
+payload `SessionStart`.** **Sumber:** audit A-5.
+
+### I-24 — `acca status` tak tampilkan reset_at terjadwal & liveness daemon → AC-4 belum benar-benar lulus [P2]
+Tabel `status` tanpa `reset_at`/`reset_source` (padahal AC-4 = "usage + sesi + reset terjadwal", wireframe §5 tampilkan
+`LIMIT_HIT → resume 03:15 WIB`); `meta.getHeartbeat()` ada tapi tak pernah dibaca (NFR Observability minta liveness).
+MILESTONES/CONTEXT menandai AC-4 ✅ = **overclaim** (dikoreksi sesi ini). **Remedi:** kolom `reset` (HH:MM + sumber) +
+baris header liveness daemon. **Sumber:** audit A-6.
+
+### I-25 — Gate resume `every(usedFraction<1)` terlalu ketat untuk CC [P2]
+`supervisor.ts` blokir resume bila **satu** limit exhausted. Untuk CC, model scoped yang tak dipakai sesi (mis. weekly
+Opus habis, sesi jalan Sonnet) → blokir resume selamanya. Untuk agy `every` justru benar (dual-limit per grup, G-31).
+**Remedi:** pindah keputusan "usage available" ke adapter (`isUsageAvailable(snapshot)`) — CC pakai `five_hour`/`seven_day`
+global + `is_active`; agy semua bucket. **Sumber:** audit A-7.
+
+### I-26 — ACL named pipe Windows belum diverifikasi (ADR-015 "owner-only") [P2, verifikasi di M5]
+Named pipe Node/libuv default **bisa di-connect user lain** di mesin sama (DACL bukan owner-only spt chmod 0600).
+`status` bocorkan daftar cwd; `inject` bisa dipicu pihak lokal (dibatasi: token literal tanpa payload). Single-user
+desktop = risiko rendah; node headless multi-akun (ADR-007) = relevan. **Remedi:** verifikasi DACL nyata di M5 security
+pass → bila terbuka, catat residual risk THREAT-MODEL atau cek PID same-session-user. **Sumber:** audit A-8.
+
+### I-27 — `genSessionId` 4-char tanpa retry-on-collision + retensi never-purge [P3]
+`ids.ts` random tanpa cek unik → PK collision → `createSession` throw → `acca run` gagal misterius. Retensi tak terbatas
+(5 Jul) → birthday ~50% di ~1.200 baris. **Remedi:** retry loop (≤3×) saat `SQLITE_CONSTRAINT_PRIMARYKEY` atau naikkan
+panjang id. **Sumber:** audit A-9.
+
+### I-28 — Housekeeping audit (drift docs + guard kecil) [P3, bisa dicicil]
+Bundel A-10..A-15: (A-10) DEPENDENCY-POLICY basi (pending TUI sudah diputus plain-ANSI; `commander` belum di tabel pin);
+(A-11) MAP.md cantumkan `daemon/continue.ts` yang tak pernah ada + file nyata tak tercermin; (A-12) CRLF noise lintas-OS
+NYATA (G-6) → `.gitattributes` (`* text=auto` + `*.md eol=lf`) + `git add --renormalize .`; (A-13) `markResumed` tanpa
+guard status → bisa clobber EXITED/FAILED pada race (tak konsisten disiplin `markLimitHit`); (A-14) status `WAITING`/
+`BLOCKED` = enum DB tak pernah ditulis ke baris sesi → `acca status` tak pernah tampilkan (putuskan pakai/buang via ADR
+kecil); (A-15) `stripAnsi` belum strip OSC/charset (G-20, watch). **Sumber:** audit A-10..A-15.
+
 ### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
 Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
 `resumeCmd`), bukan CLI agent nyata di limit nyata: (a) apakah `claude`/`agy` hidup di prompt benar-benar
@@ -57,6 +124,24 @@ nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar i
 ---
 
 ## Tertutup
+
+### A-2 — Spawn-gagal resume-by-id = unhandled rejection → daemon CRASH [P1] ✅ (11 Jul, R1 `9027dc4`)
+**RESOLVED (M3e/R1, Opus inline Tier-1).** Default `spawnResumeFn` membuang `waitForExit` dari `runSession`; pada spawn
+gagal-sinkron (binary CLI hilang — skenario nyata daemon service PATH minimal) `runSession` return `waitForExit` yang
+REJECT → unhandledRejection → Node ≥15 mematikan **daemon**. Selain itu dispatch `markResumed` sesi lama tanpa syarat
+(menandai RESUMED walau resume gagal). **Fix:** default `spawnResumeFn` konsumsi `waitForExit` (`.catch`) + lapor
+`spawnFailed` via status sesi baru (runSession `markFailed` SEBELUM return pada jalur gagal-sinkron); dispatch:
+`spawnFailed` → event `job_dispatch_error 'resume_spawn_failed'` + `'retry'`, sesi lama TAK di-RESUMED (tetap LIMIT_HIT).
+`ResumeSpawnResult` +`spawnFailed?`. **Test baru menjalankan DEFAULT `spawnResumeFn` (bukan stub)** via binary hilang →
+`which()` null → gagal sinkron tanpa spawn nyata (menutup blind-spot audit §6). **310 test hijau.** **Sumber:** audit A-2.
+
+### A-1 (paruh korektness) — Resume-by-id pakai id supervisor, bukan `cli_session_id` [P1] ✅-paruh (11 Jul, R2a `df3904b`)
+**RESOLVED paruh korektness (M3e/R2a, Opus inline Tier-1).** Dispatch cabang `exited` dulu panggil `resumeCmd(session.id)`
+= id supervisor 4-char → `claude --resume <acca-id>` PASTI ditolak CLI → resume-by-id gagal 100% (test malah meng-encode
+bug sbg ekspektasi). **Fix:** dispatch pakai `session.cli_session_id`; absen → `job_dispatch_error 'blocked'`
+`reason=cli_session_id_missing status=BLOCKED` (surface via notifier), tak spawn id salah + tak keliru markResumed. Guard
+`cli_session_id` SETELAH `cwd_missing` (dua-duanya BLOCKED). `sessions.setCliSessionId` repo siap. Test bug-encoding
+dikoreksi (assert cli id) + test baru "NULL → BLOCKED". **Sisa (penangkap id) → I-20.** **Sumber:** audit A-1.
 
 ### I-19 — File `test/` tak ter-typecheck di gate mana pun (tsconfig.eslint.json rootDir TS6059) [P3] ✅ (11 Jul, delta-check session)
 **RESOLVED (sesi Ubuntu 11 Jul, docs-only branch `m4-version-delta`).** `npm run build` (tsconfig.json) meng-exclude `test/`;
