@@ -144,6 +144,26 @@ export function createSessionsRepo(db: DatabaseInstance) {
       return info.changes > 0;
     },
 
+    /** R3 (I-21): sesi HIDUP yang di-inject-continue kembali ke RUNNING (bukan RESUMED-terminal),
+     *  supaya siklus limit BERIKUTNYA di sesi yang sama terdeteksi (`markLimitHit` guard RUNNING) &
+     *  ikut dipantau usage-monitor lagi — auto-continue tak lagi one-shot per sesi hidup. Field limit
+     *  (`detected_at`/`detect_source`/`reset_at`/`reset_source`) dibersihkan karena episode limit sudah
+     *  berakhir. `proc_state` DIBIARKAN 'alive' (proses yang sama berlanjut). Guard status IN
+     *  ('LIMIT_HIT','RESUMED') → tak meng-clobber EXITED/FAILED (race exit). Beda dari resume-by-id
+     *  (`markResumed`) yang menandai sesi lama RESUMED-terminal karena digantikan sesi baru. */
+    markRunningAfterInject(id: string): boolean {
+      const info = db
+        .prepare(
+          `UPDATE sessions
+           SET status = 'RUNNING',
+               detected_at = NULL, detect_source = NULL, reset_at = NULL, reset_source = NULL,
+               updated_at = @updated_at
+           WHERE id = @id AND status IN ('LIMIT_HIT', 'RESUMED')`,
+        )
+        .run({ id, updated_at: nowMs() });
+      return info.changes > 0;
+    },
+
     listActive(): Session[] {
       return db
         .prepare<[], Session>(

@@ -35,6 +35,11 @@ export interface InjectHandlerDeps {
   foregroundIsAgent?: () => boolean | undefined;
   /** Sesi idle di prompt (bukan mid-turn); `undefined` = belum dihitung → tak memblokir. */
   idle?: () => boolean | undefined;
+  /** R3 (I-21): dipanggil TEPAT setelah token berhasil ditulis. Wrapper memakainya untuk mengembalikan
+   *  sesinya ke RUNNING + un-latch limit-watcher (ADR-017: wrapper = penulis lifecycle sesinya) supaya
+   *  siklus limit berikutnya terdeteksi. TANPA argumen (tak menyentuh injection firewall — token tetap
+   *  literal). Hanya dipanggil pada jalur inject SUKSES (gating lulus). */
+  onInjected?: () => void;
 }
 
 /** Bangun handler IPC `inject` sisi-wrapper (bentuk `IpcHandler`). Parameter args IPC sengaja
@@ -49,6 +54,9 @@ export function createInjectHandler(deps: InjectHandlerDeps): (args?: unknown) =
     });
     if (reason !== null) return { injected: false, reason };
     deps.write(CONTINUE_TOKEN);
+    // R3 (I-21): sinkron & setelah write — kembalikan status RUNNING + un-latch watcher SEBELUM
+    // balasan `injected:true` sampai ke daemon, jadi state konsisten begitu output turn baru mengalir.
+    deps.onInjected?.();
     return { injected: true, reason: null };
   };
 }

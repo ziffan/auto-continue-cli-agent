@@ -92,6 +92,19 @@ export function notificationForEvent(input: AppendEventInput): Notification | nu
     return null;
   }
 
+  // R3 (I-21): inject-continue sukses pada sesi HIDUP (ADR-014 §1). Transisi status kini `RUNNING`
+  // (ditulis wrapper, bukan lagi `status_change RESUMED`) supaya siklus limit berikutnya terdeteksi →
+  // notifikasi "resumed" ke user pindah ke event dispatch ini. `action` = label terkontrol kita (G-9).
+  if (input.type === 'job_dispatch_done' && str(p.action) === 'inject_continue') {
+    return {
+      event: 'RESUMED',
+      level: 'info',
+      title: 'Session resumed',
+      body: `Session ${shortId(sid)} resumed (inject-continue).`,
+      sessionId: sid,
+    };
+  }
+
   // Resume-by-id (proc `exited`, ADR-014 §3): dispatch men-spawn sesi wrapper BARU dan menandai sesi
   // lama RESUMED lewat `job_dispatch_done` (bukan `status_change`) — surface juga sebagai "resumed".
   if (input.type === 'job_dispatch_done' && str(p.action) === 'resume_spawned') {

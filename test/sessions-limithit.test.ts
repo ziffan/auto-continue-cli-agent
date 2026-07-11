@@ -51,3 +51,50 @@ describe('sessions.markLimitHit', () => {
     expect(row?.detect_source).toBeNull();
   });
 });
+
+describe('sessions.markRunningAfterInject (R3/I-21)', () => {
+  it('LIMIT_HIT → RUNNING, proc_state tetap alive, membersihkan detected_at/detect_source/reset_at/reset_source', () => {
+    const sessions = createSessionsRepo(db);
+    const id = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id, tool: 'claude', cwd: process.cwd(), status: 'RUNNING', proc_state: 'alive' });
+    sessions.markLimitHit(id, { source: 'output', detectedAt: 1_720_000_000_000 });
+    sessions.setReset(id, { resetAt: 1_720_000_900_000, resetSource: 'exact' });
+
+    expect(sessions.markRunningAfterInject(id)).toBe(true);
+
+    const row = sessions.getById(id);
+    expect(row?.status).toBe('RUNNING');
+    expect(row?.proc_state).toBe('alive'); // inject-continue melanjutkan proses yang SAMA
+    expect(row?.detected_at).toBeNull();
+    expect(row?.detect_source).toBeNull();
+    expect(row?.reset_at).toBeNull();
+    expect(row?.reset_source).toBeNull();
+  });
+
+  it('no-op (false) saat sesi EXITED — tak meng-clobber terminal state (race exit)', () => {
+    const sessions = createSessionsRepo(db);
+    const id = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id, tool: 'claude', cwd: process.cwd(), status: 'RUNNING', proc_state: 'alive' });
+    sessions.markExited(id);
+
+    expect(sessions.markRunningAfterInject(id)).toBe(false);
+    expect(sessions.getById(id)?.status).toBe('EXITED');
+  });
+
+  it('siklus 2×: LIMIT_HIT → RUNNING → LIMIT_HIT lagi (auto-continue bukan one-shot per sesi hidup)', () => {
+    const sessions = createSessionsRepo(db);
+    const id = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id, tool: 'claude', cwd: process.cwd(), status: 'RUNNING', proc_state: 'alive' });
+
+    // siklus 1: limit → inject-continue → kembali RUNNING
+    expect(sessions.markLimitHit(id, { source: 'output', detectedAt: 1 })).toBe(true);
+    expect(sessions.markRunningAfterInject(id)).toBe(true);
+    expect(sessions.getById(id)?.status).toBe('RUNNING');
+
+    // siklus 2: markLimitHit (guard RUNNING) berhasil LAGI justru karena sesi kembali RUNNING —
+    // inilah inti R3: tanpa transisi balik ke RUNNING, guard menolak & sesi tak pernah ter-rescue lagi.
+    expect(sessions.markLimitHit(id, { source: 'output', detectedAt: 2 })).toBe(true);
+    expect(sessions.getById(id)?.status).toBe('LIMIT_HIT');
+    expect(sessions.getById(id)?.detected_at).toBe(2);
+  });
+});
