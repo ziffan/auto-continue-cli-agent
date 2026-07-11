@@ -6,7 +6,7 @@ import { createIpcServer } from './ipc-server.js';
 import { createLimitWatcher } from './limit-watcher.js';
 import { scheduleProbeForLimit } from './schedule-reset.js';
 import { foregroundIsAgent } from '../shared/foreground.js';
-import { genSessionId } from '../shared/ids.js';
+import { genUniqueSessionId } from '../shared/ids.js';
 import { createIdleTracker } from '../shared/idle-tracker.js';
 import { runtimeSocketPath, sessionControlSocketPath } from '../shared/paths.js';
 import { nowMs } from '../shared/time.js';
@@ -60,7 +60,9 @@ export async function notifyDaemonRearm(socketPath: string = runtimeSocketPath()
  * integration test tanpa TTY nyata (raw-mode dilewati otomatis bila `process.stdin.isTTY` falsy).
  */
 export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessionResult {
-  const id = genSessionId();
+  // I-27 (A-9): id unik dgn retry — cegah tabrakan PK (id 4-char + retensi never-purge) yang
+  // membuat createSession throw & `acca run` gagal misterius.
+  const id = genUniqueSessionId((cand) => deps.sessions.getById(cand) !== undefined);
 
   deps.sessions.createSession({
     id,
