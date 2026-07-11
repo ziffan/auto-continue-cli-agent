@@ -72,7 +72,7 @@ ada aksi diturunkan dari isi output (ADR-013). Ingress/egress remote = trust bou
 | Usage source (Antigravity) | **hybrid (ADR-010):** LS `GetUserStatus` (sesi interaktif hidup, tanpa csrf) + OAuth `retrieveUserQuota` (pre-resume) | `/usage` stale & print-spawn quota nil (terbukti §5b); csrf tak diperlukan di localhost |
 | Resume (Claude Code / Antigravity) | `claude --resume <id>` / `agy --conversation <id>` | Terverifikasi v2.1.199 / v1.0.16 |
 | Store | **SQLite** via `better-sqlite3` **12.11.1** (opsional `drizzle-orm` 0.45.2) *(ADR-004, locked)* | Single-user, offline-first, tidak butuh server |
-| CLI framework | commander/clipanion + Ink (TUI status) | `acca status` butuh render tabel/TUI |
+| CLI framework | **commander** (Accepted) + **plain ANSI render** utk `acca status` (11 Jul, TANPA TUI lib) | Monitor = snapshot sekali-cetak (tabel + bar `▓▓░` + ANSI); nol dep TUI (Ink/blessed ditolak); `watch` utk refresh |
 | Scheduler | in-process timer + tabel `scheduled_jobs` persisten | Tahan restart daemon |
 | Notifikasi | node-notifier (desktop) / stdout | MVP lokal; eksternal = Nice |
 | Remote channel (Telegram) | **`grammy` 1.44.0** *(ADR-011, locked)* — long-polling `getUpdates` outbound-only | Notif+kontrol+relay dari HP; TS-first, 4 dep, tanpa server webhook |
