@@ -12,24 +12,27 @@
   semua Tier-1. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
   `runSession` direlokasi ke `daemon/process-wrapper.ts` (layer inversion ditutup) + resume-chain link;
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
-  blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik); residual
-  I-10 = konsolidasi sole-writer `scheduled_jobs` (refactor arsitektur lebih besar, di luar scope).
-- **Terakhir diupdate:** 2026-07-11 (sesi Ubuntu, session-start) — **DELTA-CHECK VERSI CC 2.1.207 + agy 1.1.1 (docs-only).**
-  Sesi buka: sinkron lokal ke `origin/main` (lokal `main` ketinggalan 12 commit; branch `m4-notifier` sudah di-merge →
-  docs yang kubaca awalnya basi). Lalu delta-check versi (argumen /session-start user): terpasang kini **CC 2.1.207**
-  (dari 2.1.200/201) & **agy 1.1.1** (naik **minor** dari 1.0.16), Node 24.14.1. Diverifikasi dari CHANGELOG resmi:
-  **(1) CC 2.1.202–207 = NOL dampak spek-kritis** (StopFailure/`rate_limits`/`api/oauth/usage`/resume/limit≠exit tetap;
-  auto-continue native belum ada → **risiko #4 belum terpicu**, walau demand naik: #13354 + gelombang duplikat baru
-  #35744/#26775/#38263/#36320/#47276 — pantau). Bonus: **2.1.206 perbaiki bug keyboard `--resume`/`--continue`** →
-  sehatkan resume-by-id (I-15). **(2) agy 1.0.16→1.1.1 = NOL perubahan schema/endpoint** (quota/LS `GetUserStatus`/
-  `RetrieveUserQuotaSummary`/port/OAuth/`--conversation` tak tersentuh) → parser/probe (G-24/G-31/G-23/G-17) + fixture
-  `Individual quota reached` (G-19) tetap valid. **3 delta PERILAKU dicatat:** (a)&(b) 1.1.1 ubah print-mode (tak baca
-  stdin w/ flag-prompt; server-fail→stderr+exit≠0) → **G-18 dianotasi** (jebakan lama spesifik ≤1.0.16); (c) **1.1.0
-  jadikan `request-review` mode DEFAULT** (jeda pre-write, `f`) → **G-33 baru** (relevan gating/actuation inject-continue;
-  pertimbangkan `--mode default`) + catatan I-15. **Live re-verify LS schema 1.1.1 = opportunistik (I-15)**, tak wajib.
-  **Docs:** RESEARCH §4c (tabel versi + blockquote 11 Jul), GOTCHAS (G-33 baru + G-18 anotasi + Change Log), ISSUES I-15
-  (+catatan agy 1.1.x/CC 2.1.207), CONTEXT. **Tak ada kode disentuh** (docs-only, branch `m4-version-delta`). **Next
-  (butuh user pilih arah):** M-remote tier A / M5 deploy / Notifier desktop (dep gate) / I-19 gate-fix; opportunistik I-15.
+  blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
+  (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
+  sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+- **Terakhir diupdate:** 2026-07-11 (sesi Ubuntu, session-end) — **DELTA-CHECK VERSI + I-19 gate + ADR-017 + gate-docs; di-merge & di-push ke `main` (`82bd336`).**
+  Sesi buka: sinkron lokal ke `origin/main` (lokal ketinggalan 12 commit; `m4-notifier` sudah ter-merge → docs awalnya basi).
+  Empat pekerjaan, 4 commit di branch `m4-version-delta` → **ff-merge ke `main` + push** (branch dihapus lokal):
+  **(1) Delta-check versi (`976fc10`, docs-only):** CC 2.1.200/201→**2.1.207**, agy 1.0.16→**1.1.1** (naik minor), Node 24.14.1.
+  CC 2.1.202–207 = **nol dampak spek-kritis** (StopFailure/`rate_limits`/`api/oauth/usage`/resume/limit≠exit tetap; auto-continue
+  native belum ada → **risiko #4 belum terpicu**, demand naik #13354+duplikat; 2.1.206 perbaiki keyboard `--resume`→sehatkan I-15).
+  agy 1.0.16→1.1.1 = **nol perubahan schema/endpoint** (parser/probe G-24/G-31/G-23/G-17 + fixture G-19 tetap valid); **3 delta
+  PERILAKU:** 1.1.1 print-mode (**G-18 dianotasi**), **1.1.0 `request-review` jadi DEFAULT** (**G-33 baru**, relevan gating/actuation).
+  **(2) I-19 CLOSED (`9326626`):** gate `test/` typecheck. **`tsconfig.typecheck.json`** (rootDir `.`, noEmit, cakup src+test) +
+  script **`typecheck`**+**`check`**. Gate membuktikan diri: tangkap **14 type-error test tersembunyi** → fix (test-only, ikut
+  konvensi `?.`). build+typecheck+lint+**308 test** hijau. **(3) B/ADR-017 (`b2edc72`):** residual I-10 → **RESOLVED by-design**
+  (skill adr). Investigasi jalur-penulis: konsolidasi sole-writer penuh ditolak (auto-continue toh daemon-dependent; rearm+recovery
+  sudah resilient/AC-7; net-value nihil). Wrapper=penulis-sah lifecycle sesinya+enqueue probe; daemon=sole coordinator/dispatcher,
+  bukan sole writer. Propagasi: DECISIONS+MAP+ISSUES. **(4) D/CONVENTIONS (`82bd336`):** gate 4-langkah + `npm run check` resmi.
+  **+ CLAUDE.md/README drift (sesi ini):** test 306→308, README #13354 "per 11 Jul" + demand-naik.
+  **Verifikasi:** build ✅ typecheck ✅ lint ✅ 308 test ✅ (2 skip POSIX di Win). **Next (butuh user pilih arah):** M-remote tier A
+  (Notifier→Telegram, mulai `remote/bot.ts` grammy long-polling + `remote/authz.ts`) / M5 deploy-as-service / Notifier desktop
+  (butuh keputusan dep node-notifier); opportunistik I-15 (agy 1.1.1 + G-33). Pending tersisa: **lisensi repo** (owner Ziffan, sebelum publik).
 - **Terakhir diupdate:** 2026-07-11 (autonomous-run, Windows) — **M4 INTI SELESAI (AC-4 ✅ + AC-5 ✅): Notifier + proximity + I-17 usage-monitor + `acca status` usage-view + `acca log`; +I-4 fix + keputusan TUI.**
   Sesi otonom terjadwal (cron one-shot, /autonomous-run) — Opus orkestrator, verifikasi gate sendiri, 3 subagent Sonnet. Ringkas:
   **(1) Tier-1 review + merge branch `m4-notifier`** (`13ec9ea` merge, `31f734a` catatan): review baris-per-baris

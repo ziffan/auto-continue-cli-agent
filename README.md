@@ -5,7 +5,7 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 
 > **Status:** Implementasi berjalan — **loop auto-continue (M1–M3d) + monitoring & UX (M4 inti) selesai & bertes**
 > (deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup / resume-by-id sesi mati; `acca status`
-> usage-view, `acca log`, notifikasi transisi). 306 test hijau, cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
+> usage-view, `acca log`, notifikasi transisi). 308 test hijau (2 skip POSIX-only di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
 > M-remote (kontrol Telegram) & M5 (deploy sebagai service) menyusul. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
 ---
@@ -67,8 +67,8 @@ Belum ada: kontrol Telegram (M-remote) & `resume-now`/`cancel` via remote, deplo
 Diferensiasi kita: **monitor + auto-continue sesi hidup (PTY sendiri, tanpa tmux) + resume sesi yang
 sudah mati** (claude-auto-retry hanya menangani pane hidup), **cross-OS native** (Linux + Windows tanpa
 WSL/tmux), dual-CLI (Claude Code + Antigravity), state persisten + audit trail. Catatan risiko:
-auto-continue native sedang diminta ke upstream Claude Code (tracking #13354, masih open per 3 Jul 2026) —
-lihat [`docs/RESEARCH.md`](docs/RESEARCH.md) §5b–§5c.
+auto-continue native sedang diminta ke upstream Claude Code (tracking #13354, **masih open per 11 Jul 2026**,
+demand naik — banyak isu duplikat, belum ada implementasi native di changelog) — lihat [`docs/RESEARCH.md`](docs/RESEARCH.md) §4c/§5b–§5c.
 
 ## Dokumentasi
 

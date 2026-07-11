@@ -24,7 +24,7 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 
 ## 2. Status
 
-Fase: **Implementasi.** Spec LOCKED. **M1–M3d + M4 inti selesai & bertes** (306 test): loop auto-continue penuh
+Fase: **Implementasi.** Spec LOCKED. **M1–M3d + M4 inti selesai & bertes** (308 test, 2 skip POSIX-only di Windows): loop auto-continue penuh
 (deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup / resume-by-id sesi mati) + Notifier +
 proximity + usage-monitor + `acca status` usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
 **Berikutnya:** M-remote (kontrol Telegram, security-gate) / M5 (deploy sebagai service). Belum dirilis/dipaketkan.
