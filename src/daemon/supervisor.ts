@@ -230,6 +230,8 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       // session.proc_state === 'exited' → resume-by-id (M3d.6).
       if (!existsSync(session.cwd)) {
         // AC-8: cwd asli sesi hilang — tak ada tempat aman untuk melanjutkan. Terminal, jangan retry.
+        // I-28 (A-14): tulis status BLOCKED supaya `acca status` menampilkan sesi butuh-manual ini.
+        sessions.markBlocked(job.session_id);
         events.append({
           session_id: job.session_id,
           type: 'job_dispatch_error',
@@ -244,6 +246,8 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       // JANGAN keliru menandai sesi lama RESUMED. Penangkapan `cli_session_id` (transcript CC /
       // printed cmd agy) = slice terpisah yang butuh live-verify (setCliSessionId sudah siap).
       if (!session.cli_session_id) {
+        // I-28 (A-14): tulis status BLOCKED (butuh manual: id CLI belum tertangkap → resume pasti gagal).
+        sessions.markBlocked(job.session_id);
         events.append({
           session_id: job.session_id,
           type: 'job_dispatch_error',

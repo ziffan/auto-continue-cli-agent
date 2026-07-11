@@ -309,7 +309,9 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(spawnResume).not.toHaveBeenCalled(); // JANGAN spawn id yang dijamin salah.
 
     const session = createSessionsRepo(database).getById('s-resume-no-cliid');
-    expect(session?.status).toBe('LIMIT_HIT'); // TAK di-RESUMED.
+    // I-28/A-14: kini ditulis BLOCKED (butuh manual: id CLI belum tertangkap) — bukan tetap LIMIT_HIT
+    // maupun keliru RESUMED. `acca status` menampilkannya sebagai sesi butuh-aksi.
+    expect(session?.status).toBe('BLOCKED');
 
     const remaining = pendingJobs(database, 's-resume-no-cliid');
     expect(remaining).toHaveLength(0); // 'done' terminal (surface manual), bukan retry-spin.
@@ -432,5 +434,9 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(payload.action).toBe('blocked');
     expect(payload.reason).toBe('cwd_missing');
     expect(payload.status).toBe('BLOCKED');
+
+    // I-28/A-14: status sesi kini benar-benar ditulis BLOCKED (bukan hanya event) → `acca status` tampil.
+    const session = createSessionsRepo(database).getById('s-resume-exited-blocked');
+    expect(session?.status).toBe('BLOCKED');
   });
 });
