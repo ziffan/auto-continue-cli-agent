@@ -74,6 +74,19 @@ describe('notificationForEvent — transisi yang layak-surface', () => {
     expect(n?.body).toContain('cwd_missing');
     expect(n?.body).toContain('manual');
   });
+
+  it('inject_skipped (job_dispatch_pending) → INJECT_SKIPPED warn, reason-label + "manual" (I-18)', () => {
+    const n = notificationForEvent({
+      session_id: 'kcb3',
+      type: 'job_dispatch_pending',
+      payload: { jobId: 9, action: 'inject_skipped', reason: 'gating_foreground', reachable: true },
+    });
+    expect(n?.event).toBe('INJECT_SKIPPED');
+    expect(n?.level).toBe('warn');
+    expect(n?.body).toContain('#kcb3');
+    expect(n?.body).toContain('gating_foreground');
+    expect(n?.body).toContain('manual');
+  });
 });
 
 describe('notificationForEvent — event yang TIDAK di-surface', () => {

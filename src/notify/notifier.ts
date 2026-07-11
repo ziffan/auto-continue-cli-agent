@@ -13,7 +13,7 @@
 import type { UsageSnapshot } from '../shared/types.js';
 import type { AppendEventInput, EventsRepo } from '../store/repositories/events.js';
 
-export type NotificationEvent = 'LIMIT_HIT' | 'RESUMED' | 'FAILED' | 'BLOCKED' | 'PROXIMITY';
+export type NotificationEvent = 'LIMIT_HIT' | 'RESUMED' | 'FAILED' | 'BLOCKED' | 'PROXIMITY' | 'INJECT_SKIPPED';
 export type NotificationLevel = 'info' | 'warn' | 'error';
 
 export interface Notification {
@@ -101,6 +101,20 @@ export function notificationForEvent(input: AppendEventInput): Notification | nu
       level: 'info',
       title: 'Session resumed',
       body: `Session ${shortId(sid)} resumed as ${shortId(newId)}.`,
+      sessionId: sid,
+    };
+  }
+
+  // I-18: inject-continue pada sesi HIDUP di-skip (gating wrapper menolak / wrapper tak terjangkau) →
+  // sesi tertinggal LIMIT_HIT, auto-continue tak bisa lanjut sendiri → user perlu bertindak manual
+  // (ADR-014: surface manual, JANGAN auto-kill). `reason` = label terkontrol kita (bukan isi output).
+  if (input.type === 'job_dispatch_pending' && str(p.action) === 'inject_skipped') {
+    const reason = str(p.reason);
+    return {
+      event: 'INJECT_SKIPPED',
+      level: 'warn',
+      title: 'Auto-continue skipped',
+      body: `Session ${shortId(sid)} could not auto-continue${reason ? ` (${reason})` : ''} — manual action needed.`,
       sessionId: sid,
     };
   }

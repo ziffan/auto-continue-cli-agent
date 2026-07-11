@@ -6,17 +6,6 @@
 
 ## Terbuka
 
-### I-18 — `inject_skipped` (gating-gagal sesi hidup) tak ter-surface ke Notifier → sesi macet senyap [P3, target M4]
-**Ditemukan saat tier-review M4 Notifier (11 Jul, Windows).** Saat dispatch mencoba inject-continue ke sesi
-`alive` tapi gating wrapper menolak / wrapper tak terjangkau, supervisor meng-emit `job_dispatch_pending`
-`action:'inject_skipped'` lalu `'done'` (bukan retry-spin — benar, ADR-014 "surface manual, jangan auto-kill").
-**Tapi** `notificationForEvent` tak memetakan `inject_skipped` → user **tak dapat notifikasi** bahwa sesi
-tertinggal LIMIT_HIT butuh aksi manual (hanya ada di audit `events`). Sedikit menggerus tujuan "jangan
-kehilangan progres tanpa ditunggui". **Perbaikan:** tambah cabang surface untuk `job_dispatch_pending`
-`inject_skipped` (level `warn`/`error`, body dari label `reason`/`reachable` terkontrol — bukan output) →
-`deliver`. Non-blocking; kandidat digabung ke slice I-17 (periodic-probe) atau Notifier-desktop. **Sumber:**
-`src/daemon/supervisor.ts:204`, `src/notify/notifier.ts` (review 11 Jul).
-
 ### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
 Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
 `resumeCmd`), bukan CLI agent nyata di limit nyata: (a) apakah `claude`/`agy` hidup di prompt benar-benar
@@ -62,6 +51,14 @@ nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar i
 ---
 
 ## Tertutup
+
+### I-18 — `inject_skipped` (gating-gagal sesi hidup) tak ter-surface ke Notifier → sesi macet senyap [P3] ✅ (11 Jul)
+**RESOLVED (autonomous-run 11 Jul).** `notificationForEvent` kini memetakan `job_dispatch_pending`
+`action:'inject_skipped'` → notifikasi **`INJECT_SKIPPED`** (level `warn`, body "Session #x could not auto-continue
+(reason) — manual action needed"; `reason` = label terkontrol, firewall G-9 utuh). Surfacing OTOMATIS lewat dekorator
+`withNotifications` (event sudah di-emit `supervisor.ts:204` → di-append → di-surface; **tanpa ubah supervisor**).
+`still_limited`/aksi pending lain tetap `null`. **+1 test** (`notifier.test.ts`), 306/306 hijau, build+lint bersih.
+**Sumber:** `src/notify/notifier.ts`.
 
 ### I-17 — Loop probe usage PERIODIK saat RUNNING (wiring proximity I-8 + cache usage `acca status`) [P2] ✅ (11 Jul, engine+wiring; live-verify sesi asli → I-15)
 **RESOLVED engine+wiring (autonomous-run 11 Jul, Windows; interval ~2 mnt owner Ziffan).**
