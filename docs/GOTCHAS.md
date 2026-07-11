@@ -386,10 +386,28 @@ field di interface `Session` tak wajib sama tapi jaga tetap sinkron DATA-MODEL. 
 
 ---
 
+## Notifier / Usage-monitor (M4)
+
+### G-32 — Timer engine baru yang di-wire ke supervisor WAJIB opt-in, else mengacaukan assertion timer test scheduler
+**Jebakan/Fakta (I-17 wiring, 11 Jul):** `usage-monitor` (I-17) memakai `setTimer`/`clearTimer` yang **sama**
+(di-inject) seperti scheduler. Test supervisor pakai `createManualTimer` yang `fire()`-nya menyalakan **timer
+terakhir yang di-arm** + assert `armedCount()`/`armedDelay()`. Kalau monitor ikut arm timer via `setTimer` yang
+sama saat `supervisor.start()`, test lama **pecah**: `fire()` menembak tick monitor (bukan dispatch scheduler),
+`armedCount` bertambah, test "tak ada job pending → scheduler disarmed (nol timer)" gagal. **Cara benar:** monitor
+**opt-in via flag `startUsageMonitor`** (default **false**); hanya `acca daemon` (produksi) menyalakannya. Test
+lama tak menyetelnya → monitor tak dibangun/di-start → nol timer ekstra. Slice baru apa pun yang menambah timer
+ber-`setTimer`-bersama ke supervisor harus mengikuti pola gate ini (atau injeksi timer terpisah). Juga: probe pertama
+baru jalan setelah `intervalMs` (bukan saat start) — `acca status` kosong ~interval awal (diterima; fast-first-probe
+= kandidat follow-up). **Sumber:** wiring I-17, `src/daemon/supervisor.ts`, `test/usage-monitor-wiring.test.ts`.
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-11 (autonomous-run, Windows) | G-32 (timer engine baru yang di-wire ke supervisor via `setTimer`-bersama wajib opt-in `startUsageMonitor`, else `fire()`/`armedCount` test scheduler pecah; probe pertama setelah intervalMs). Dari wiring I-17 usage-monitor. |
+| 2026-07-11 (autonomous-run, Windows) | G-13 ditandai **TERATASI** (I-4): `resolveClockTime` cabang zona IANA hitung ulang wall-clock di tanggal besok (DST-correct), bukan `+MS_PER_DAY` mentah. |
 | 2026-07-07 (Windows, I-16 live) | G-31 (agy `GetUserStatus` = window 5-jam saja; kuota MINGGUAN hanya di `RetrieveUserQuotaSummary` → probe GetUserStatus-only buta weekly → risiko keliru-resume). Dari verifikasi live cross-check CodexBar (I-16 CONFIRMED). |
 | 2026-07-07 (Windows, I-14/I-10) | G-30 (SQLite `ALTER ADD COLUMN` FK butuh default NULL saat `foreign_keys=ON`; FK ditegakkan → test parent-link wajib seed parent; pola migrasi bump schema_version + ADD COLUMN append terakhir). Dari relokasi runSession + resume-chain (I-14). I-10 (daemon re-arm lintas-proses via IPC `rearm`) tak melahirkan gotcha baru — pakai primitif yang ada (`arm()` baca store segar, perintah IPC tanpa payload = G-26). |
 | 2026-07-07 (Ubuntu, gating M3d/I-13) | G-28 (foreground = `/proc` tpgid vs pgrp, bukan name-match; piped→tpgid=-1=unknown bukan false; parse comm dari `)` terakhir; live-verify Ubuntu), G-29 (idle = jendela-sunyi penanda busy `esc to interrupt`; regex penanda WAJIB non-global — `/g` bikin `.test()` stateful; carry antar-chunk; risk band Enter-keystroke). Dari I-13. |
