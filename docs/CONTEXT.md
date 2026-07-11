@@ -39,7 +39,13 @@
   `getHeartbeat`+`isProcessAlive`) → **AC-4 kini benar-benar ✅** (overclaim 11 Jul ditutup). Pure/injectable, firewall G-9
   utuh, **323 test** (+7). Di-commit terpisah. **Next (butuh user hadir / keputusan):** I-15 live-verify actuation
   inject/resume asli + I-20 capture `cli_session_id` CC (butuh sesi CLI nyata) + I-22 R4 agy-exited (ADR-018 locked, impl).
-  Sisa autonomous-safe: I-25 (isUsageAvailable per-adapter, sentuh gate resume → hati-hati) · I-27 (genSessionId retry) · I-28 (housekeeping).
+  **Slice ke-3&4 (I-27 + I-28, otonom atas permintaan user saat kembali):** **I-27** `genUniqueSessionId` retry-on-collision
+  (id 4-char, cegah `acca run` gagal misterius). **I-28 SEMUA A-10..A-15 ditutup:** A-10 DEPENDENCY-POLICY (commander di pin,
+  TUI plain-ANSI, native gate Ubuntu ✅) · A-11 MAP.md (hapus hantu `daemon/continue.ts`) · A-12 `.gitattributes` LF lintas-OS
+  (G-6, stop warning CRLF) · A-13 `markResumed` guard NOT IN(EXITED,FAILED) · **A-14 `markBlocked` di-wire → status BLOCKED
+  kini benar-benar ditulis** (`acca status` tampil; WAITING dibiarkan tak-terpakai; keputusan minor reversible) · A-15 stripAnsi
+  +OSC/charset (G-20 ditutup). **338 test** hijau, Tier-1 self-review. 6 commit di branch `m3e-i27-i28-housekeeping` → ff-merge main.
+  **Sisa autonomous-safe: HANYA I-25** (isUsageAvailable per-adapter — sengaja ditunda, mengubah perilaku gate resume, butuh mata user).
 - **Terakhir diupdate:** 2026-07-11 (sesi Windows, live-verify) — **I-15 LIVE-VERIFY agy 1.1.1 (opportunistik, user tawarkan window + otorisasi bakar `3p-5h` ~11%).**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → rencana kode (Sub-task A guard + B resume-cycle). User
   tawarkan agy Opus 4.6 sisa 11% utk test → **pivot ke live-verify** (I-15 = gate keluar M3e, opportunistik). Baseline
