@@ -234,7 +234,9 @@ gagal di A-1).
   cmd). **Butuh live-verify** (audit §6). Gabung ke slice hook (R6/I-23). Sampai ada → resume-by-id exited = BLOCKED.
 - **R3 — resume-cycle (I-21/A-3, belum):** transisi RESUMED→RUNNING + un-latch watcher + monitor mencakup sesi hidup +
   test siklus 2×.
-- **R4 — agy-exited-policy (I-22/A-4, belum, butuh keputusan user).** R5 status-completeness (I-24). R6 stopfailure-hook
+- **R4 — agy-exited-policy (I-22/A-4): keputusan LOCK (ADR-018, Ziffan) = Opsi 1** (probe standalone opsi #3 + egress
+  `oauth2.googleapis.com`). Dua slice: (1) guard minimal probe-impossible→surface+stop-retry (dulu, kecil); (2) probe
+  standalone OAuth (Tier-1 creds+egress, live-verify). R5 status-completeness (I-24). R6 stopfailure-hook
   (I-23, sekaligus sumber R2b). R7 resume-gate-per-tool (I-25). R8 housekeeping (I-27/I-28).
 **Gate keluar (sebelum M-remote):** R1–R3 selesai + I-15 live-verify **lulus dgn CLI nyata** (limit asli, resume nyata
 melanjutkan percakapan). R4 minimal varian "surface manual". M5 aman setelah R1 (crash) tertutup — sudah ✅.

@@ -38,11 +38,13 @@
 - Events append-only sebagai audit trail (siapa/apa/kapan tiap resume).
 - Egress terbatas & eksplisit (whitelist): MVP hanya boleh memanggil (a) endpoint usage provider yang
   jadi sumber probe — `api.anthropic.com/api/oauth/usage`; `cloudcode-pa.googleapis.com …retrieveUserQuota`
-  (probe agy pre-resume, **ADR-010 hybrid**) — (b) localhost (LS `GetUserStatus` agy, **ADR-010**) — dan
-  (c) `api.telegram.org` (kanal remote-control Telegram, long-polling outbound-only, **ADR-011**). **Tidak ada**
-  telemetry/analytics keluar. Channel notifikasi eksternal lain (ntfy/email, Nice) = opt-in dengan izin eksplisit.
+  (probe agy pre-resume, **ADR-010 hybrid**); `oauth2.googleapis.com` (refresh token OAuth Gemini untuk probe
+  agy standalone pre-resume — token on-disk stale G-1, **ADR-018**) — (b) localhost (LS `GetUserStatus` agy,
+  **ADR-010**) — dan (c) `api.telegram.org` (kanal remote-control Telegram, long-polling outbound-only, **ADR-011**).
+  **Tidak ada** telemetry/analytics keluar. Channel notifikasi eksternal lain (ntfy/email, Nice) = opt-in dengan izin eksplisit.
   *(Revisi 3 Jul 2026: "MVP tanpa jaringan keluar" lama kontradiktif dengan probe usage; egress di-scope
-  eksplisit oleh ADR-001 + ADR-010. Revisi 3 Jul sore: tambah `api.telegram.org` — ADR-011.)*
+  eksplisit oleh ADR-001 + ADR-010. Revisi 3 Jul sore: tambah `api.telegram.org` — ADR-011. Revisi 11 Jul:
+  tambah `oauth2.googleapis.com` — ADR-018, keputusan Ziffan resume agy-exited otonom.)*
 - **Remote-control (tier B/C) — kontrol keamanan wajib** (detail: THREAT-MODEL.md + ADR-012/013):
   ingress hanya dari `chat_id` allowlist (default-deny, sender tak sah di-drop+audit); relay-instruksi
   **wajib konfirmasi eksplisit** (human-in-the-loop, tak ada inject tanpa konfirmasi); egress output =
