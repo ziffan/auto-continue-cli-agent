@@ -6,16 +6,6 @@
 
 ## Terbuka
 
-### I-19 — File `test/` tak ter-typecheck di gate mana pun (tsconfig.eslint.json rootDir TS6059) [P3]
-**Ditemukan 11 Jul (saat memulihkan type-soundness `notifier.test.ts`).** `npm run build` (tsconfig.json) **meng-exclude**
-`test/`; `npm run lint` (eslint type-aware) hanya menjalankan rule-spesifik, **bukan** full structural-diagnostics; vitest
-(esbuild) **membuang** tipe. Jadi error tipe di file test (mis. object literal yang tak lagi memenuhi interface yang melebar)
-**lolos ketiga gate**. `tsconfig.eslint.json` yang seharusnya bisa `tsc --noEmit`-kan test punya **`rootDir: src`** → semua
-file `test/**` → **TS6059** ("not under rootDir") → tak bisa dipakai sbg gate langsung. **Dampak:** regresi type di test tak
-tertangkap CI (harus manual). **Perbaikan (kandidat):** tsconfig khusus test (`rootDir`/`include` mencakup `test/`+`src/`,
-`noEmit`) + tambah script `typecheck:test` ke gate. Non-blocking (test tetap jalan; hanya type-safety-nya yang tak dijaga
-otomatis). **Sumber:** `tsconfig.eslint.json`, observasi wiring `acca log` (I-8/US-8).
-
 ### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
 Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
 `resumeCmd`), bukan CLI agent nyata di limit nyata: (a) apakah `claude`/`agy` hidup di prompt benar-benar
@@ -23,6 +13,12 @@ Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node
 benar melanjutkan percakapan di sesi wrapper baru. Ini sekelas verifikasi yang genuinely butuh limit/sesi
 asli (tak bisa dipaksa) — tangkap **opportunistik** saat limit 5-jam habis. Keystroke pasti agy = TBD
 (ADR-014 catatan agy: kandidat "continue"/Enter). **Sumber:** smoke Sub-task 1&2 (6 Jul).
+**+ Ditambahkan (delta-check versi 11 Jul):** live-verify kini di **agy 1.1.1** (naik minor dari 1.0.16) & **CC 2.1.207**.
+Saat menangkapnya, sekalian: (a) **re-verify schema LS** `GetUserStatus`/`RetrieveUserQuotaSummary` di 1.1.1 (changelog nol
+LS-change → diduga utuh, belum dibuktikan live); (b) tentukan penanda **idle/foreground agy** terhadap **mode `request-review`
+default baru** (G-33) — agy yang "berhenti" bisa = menunggu review `f`, bukan idle-at-prompt; pertimbangkan `--mode default`
+bila mengganggu auto-continue. Catatan positif: CC **2.1.206** memperbaiki bug keyboard-input `--resume`/`--continue` saat
+startup → jalur resume-by-id lebih mulus di 2.1.207.
 
 ### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13] — ENGINE READY (10 Jul), wiring→I-17
 Claude Code menampilkan warning ~90% (window 5-jam) & ~75% (mingguan) di terminal, tapi itu **UI-only,
@@ -61,6 +57,20 @@ nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar i
 ---
 
 ## Tertutup
+
+### I-19 — File `test/` tak ter-typecheck di gate mana pun (tsconfig.eslint.json rootDir TS6059) [P3] ✅ (11 Jul, delta-check session)
+**RESOLVED (sesi Ubuntu 11 Jul, docs-only branch `m4-version-delta`).** `npm run build` (tsconfig.json) meng-exclude `test/`;
+`lint` (eslint type-aware) tak surface full structural-diagnostics; vitest (esbuild) buang tipe → error tipe di test **lolos
+ketiga gate**. `tsconfig.eslint.json` tak bisa dipakai `tsc --noEmit` langsung krn warisi `rootDir: src` → `test/**` = **TS6059**.
+- **Fix:** **`tsconfig.typecheck.json`** baru (extends `tsconfig.json`, override **`rootDir: "."`** + `noEmit: true`, include
+  `src`+`test`) → `tsc -p` mencakup dua-duanya tanpa TS6059. Script **`typecheck`** + agregat **`check`** (`typecheck && lint &&
+  test`) ditambah ke `package.json`. `tsconfig.eslint.json` **tak disentuh** (tetap dipakai eslint parser; lint lolos apa adanya).
+- **Gate membuktikan diri:** run pertama menangkap **14 type-error test yang selama ini tersembunyi** di 3 file → semua diperbaiki
+  (test-only, nol kode produksi): `credentials.test.ts` (2× cast `()=>string`→`readFileSync` via `unknown`, sesuai saran TS2352);
+  `notifier.test.ts` (8× akses index array tanpa guard → optional-chaining `?.`, **konsisten konvensi codebase** mis. `limited[0]?.type`);
+  `usage-monitor.test.ts` (4× `vi.fn()` tanpa param → tuple call-arg kosong TS2493 → deklarasi signature asli `(tool, pid)`).
+- **Verifikasi:** build ✅ · **typecheck ✅ (0 error, kini cakup `test/`)** · lint ✅ · **308/308 test** hijau. **Sumber:**
+  `tsconfig.typecheck.json`, `package.json`, delta-check session 11 Jul.
 
 ### I-18 — `inject_skipped` (gating-gagal sesi hidup) tak ter-surface ke Notifier → sesi macet senyap [P3] ✅ (11 Jul)
 **RESOLVED (autonomous-run 11 Jul).** `notificationForEvent` kini memetakan `job_dispatch_pending`

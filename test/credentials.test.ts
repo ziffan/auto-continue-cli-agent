@@ -27,7 +27,8 @@ describe('extractClaudeToken', () => {
 
 describe('loadClaudeCredentials', () => {
   it('parses valid JSON via the injected readFileImpl', () => {
-    const readFileImpl = (() => JSON.stringify({ claudeAiOauth: { accessToken: 'tok' } })) as typeof import('node:fs').readFileSync;
+    const readFileImpl = (() =>
+      JSON.stringify({ claudeAiOauth: { accessToken: 'tok' } })) as unknown as typeof import('node:fs').readFileSync;
     const cred = loadClaudeCredentials(readFileImpl);
     expect(cred).toEqual({ claudeAiOauth: { accessToken: 'tok' } });
   });
@@ -40,7 +41,7 @@ describe('loadClaudeCredentials', () => {
   });
 
   it('throws ClaudeCredentialsError when the file content is invalid JSON', () => {
-    const readFileImpl = (() => 'not json {{{') as typeof import('node:fs').readFileSync;
+    const readFileImpl = (() => 'not json {{{') as unknown as typeof import('node:fs').readFileSync;
     expect(() => loadClaudeCredentials(readFileImpl)).toThrow(ClaudeCredentialsError);
   });
 

@@ -90,7 +90,9 @@ describe('usage-monitor', () => {
       makeSession({ id: 'c2', tool: 'claude', pid: 222 }),
       makeSession({ id: 'a1', tool: 'antigravity', pid: 333 }),
     ];
-    const probeFor = vi.fn((): Promise<UsageSnapshot | null> => Promise.resolve(null));
+    const probeFor = vi.fn(
+      (_tool: Tool, _pid: number | undefined): Promise<UsageSnapshot | null> => Promise.resolve(null),
+    );
     const monitor = createUsageMonitor(baseDeps({ listRunning: () => sessions, probeFor }));
 
     await monitor.runOnce();
