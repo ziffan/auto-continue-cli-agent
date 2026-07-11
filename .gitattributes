@@ -1,0 +1,6 @@
+# I-28/A-12 (GOTCHAS G-6): normalisasi line-ending lintas-OS.
+# Repo & working tree selalu LF (Ubuntu daily + Windows weekend) → cegah diff CRLF-only
+# dan warning "LF will be replaced by CRLF" saat git menyentuh file di Windows.
+* text=auto eol=lf
+
+# Symlink AGENTS.md (mode 120000 → CLAUDE.md) tak terpengaruh (git perlakukan khusus).
