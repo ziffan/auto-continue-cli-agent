@@ -17,9 +17,10 @@ auto-continue-cli-agent/
 │   │   ├── process-wrapper.ts #  spawn CLI via node-pty, tangkap stdout/exit (M1)
 │   │   ├── detector.ts      #   LIMIT_HIT (hook StopFailure / pola output / exit / transcript) (M2)
 │   │   ├── reset-estimator.ts #  reset_at: exact→heuristic→backoff (M2)
-│   │   ├── scheduler.ts     #   timer persisten dari scheduled_jobs (M3)
-│   │   ├── continue.ts      #   inject-PTY (gating) vs resume-by-id (ADR-014) (M3)
-│   │   └── ipc-server.ts    #   Node `net` socket/pipe, NDJSON (ADR-015)
+│   │   ├── scheduler.ts     #   timer persisten dari scheduled_jobs (M3b); usage-monitor.ts = probe periodik saat RUNNING (I-17)
+│   │   ├── limit-watcher.ts #   seam detector→PTY sesi live; latch + unlatch multi-siklus (R3/I-21) (M3d)
+│   │   ├── inject-continue.ts # inject 'continue' ke PTY sesi HIDUP (ADR-014 §1); resume-by-id = dispatch supervisor (M3d)
+│   │   └── ipc-server.ts    #   Node `net` socket/pipe, NDJSON (ADR-015; +ipc-client/ipc-protocol/reconcile/schedule-reset)
 │   ├── adapters/            # per-tool: kontrak detectLimit/parseReset/resumeCmd/probeUsage
 │   │   ├── types.ts         #   interface Adapter
 │   │   ├── claude.ts        #   nama file = nilai enum `tool` ('claude'), bukan 'claude-code'
