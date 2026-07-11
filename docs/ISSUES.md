@@ -76,8 +76,13 @@ nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar i
   daemon` produksi=true) supaya timer monitor tak mengacaukan assertion timer test scheduler lama (**G-32**).
 - **Verifikasi (Opus sendiri):** build+lint bersih, **290/290 test** (+9 usage-monitor +2 wiring: probe→meta cache +
   proximity→notify, dan monitor-off-default = nol timer/probe). Tier-1 self-review.
-- **Sisa (opportunistik, sekelas I-15):** live-verify daemon NYATA mem-probe sesi CC/agy asli + proximity real
-  ter-emit — butuh sesi hidup, ditangkap saat ada. Konsumen `acca status` baca cache = **slice status-UX** berikut.
+- **Live smoke jalur data (11 Jul, Windows):** `adapters.claude.probeUsage()` NYATA (OAuth usage) → snapshot asli
+  `session 0.37 / weekly_all 0.36 / weekly_scoped 0` → `proximityNotifications` = **0 notif** (semua < ambang 0.90/0.75,
+  benar), **nol PII** (firewall G-9 tahan di data live). Membuktikan pipeline probe→normalisasi→proximity end-to-end
+  di data asli (sekaligus live-verify M3d.3 CC-probe yg dulu belum diuji limit asli).
+- **Sisa (opportunistik, sekelas I-15):** (a) loop daemon NYATA end-to-end (start `acca daemon` + sesi RUNNING → tick
+  memicu probe+cache+notify) vs pemanggilan `probeUsage` langsung; (b) **agy** probe live (butuh sesi LS hidup ber-PTY).
+  Konsumen `acca status` baca cache = **slice status-UX** berikut.
 
 ### I-4 — `reset-estimator` clock-time wrap tak DST-aware saat lewat tengah malam [P3] ✅ (11 Jul, `resolveClockTime` DST-correct)
 **RESOLVED (autonomous-run 11 Jul, Windows).** `resolveClockTime` dulu menambah `MS_PER_DAY` mentah ke instant UTC
