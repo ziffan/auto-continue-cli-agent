@@ -6,16 +6,16 @@
 
 ## Status saat ini
 
-- **Fase:** **M4 DIMULAI — Notifier core ✅ (transisi→notif) + proximity-engine ✅ (wiring ditunda).**
-  M3d tertutup penuh (di bawah). Loop
+- **Fase:** **M4 INTI SELESAI (11 Jul) — Notifier + proximity + I-17 usage-monitor + `acca status` usage-view + `acca log`; AC-4 ✅ AC-5 ✅.**
+  Sisa M4 = opsional (Notifier desktop, gate dep). Berikutnya = M-remote (Telegram, security-gate) / M5. M3d tertutup penuh (di bawah). Loop
   auto-continue tersambung end-to-end (deteksi→jadwal→probe→**inject-continue / resume-by-id NYATA**),
   semua Tier-1. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
   `runSession` direlokasi ke `daemon/process-wrapper.ts` (layer inversion ditutup) + resume-chain link;
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik); residual
   I-10 = konsolidasi sole-writer `scheduled_jobs` (refactor arsitektur lebih besar, di luar scope).
-- **Terakhir diupdate:** 2026-07-11 (autonomous-run, Windows) — **M4 BERGERAK: Notifier merge + I-4 + `acca log` + keputusan TUI + I-17 (usage-monitor).**
-  Sesi otonom terjadwal (cron one-shot, /autonomous-run) — Opus orkestrator, verifikasi gate sendiri, 2 subagent Sonnet. Ringkas:
+- **Terakhir diupdate:** 2026-07-11 (autonomous-run, Windows) — **M4 INTI SELESAI (AC-4 ✅ + AC-5 ✅): Notifier + proximity + I-17 usage-monitor + `acca status` usage-view + `acca log`; +I-4 fix + keputusan TUI.**
+  Sesi otonom terjadwal (cron one-shot, /autonomous-run) — Opus orkestrator, verifikasi gate sendiri, 3 subagent Sonnet. Ringkas:
   **(1) Tier-1 review + merge branch `m4-notifier`** (`13ec9ea` merge, `31f734a` catatan): review baris-per-baris
   `src/notify/notifier.ts` + wiring supervisor/run → **APPROVE**. Firewall PII/injection (G-9, ADR-008/013)
   diverifikasi struktural (body notif hanya field terkontrol; `evidence`/`spec.args`/respons-probe tak di-echo;
@@ -40,9 +40,16 @@
   lib** (Ziffan; DECISIONS/ARCHITECTURE §3 diperbarui). (b) **I-17 usage-monitor DONE** (engine Sonnet + wiring supervisor
   Opus): probe usage periodik ~2 mnt saat RUNNING → `meta` cache snapshot (tanpa migrasi) + proximity→notify; opt-in
   `startUsageMonitor` (produksi; **G-32**). **290/290 test** (+11), Tier-1 self-review. Live-verify sesi asli = opportunistik (I-15).
-  **Next (autonomous-safe, siap):** slice **`acca status` usage-view** — baca cache `meta.usage_snapshot_<tool>` → render bar
-  ANSI + indikator "perkiraan" + empty/error state (AC-4; TUI decided + sumber data I-17 siap). **Butuh user:** Notifier
-  desktop (gate dep). `main` di-push berjenjang (`5829ba7` 3-slice, `d50c319` TUI, + commit I-17 sesi ini).
+  **(5) `acca status` usage-view (AC-4) ✅** (Sonnet render + Opus review): plain ANSI baca cache `meta.usage_snapshot_<tool>`
+  → `renderUsageBar`/`formatUsageLines` pure (bar `▓▓░` + umur snapshot + empty/"tak terbaca" state). Firewall G-9 (hanya
+  tool/kind/bar/pct; `scope` tak dirender) — diuji + **smoke render live 'SECRET' 0×**. **305/305 test** (+15). Smoke: bar
+  37/36/92% CC + 74/10% agy render benar. **Also live smoke I-17:** `probeUsage()` CC NYATA → snapshot asli → proximity 0
+  (benar) → data path terbukti.
+  **Status M4:** **inti SELESAI — AC-4 ✅ + AC-5 ✅.** Loop auto-continue (M3d) + Notifier + proximity + usage-monitor +
+  status usage-view + `acca log` semua jalan & bertes. **Sisa M4 = opsional:** Notifier **desktop** (node-notifier) — butuh
+  **gate DEPENDENCY-POLICY (dep baru = keputusan user)**. **Berikutnya (butuh user):** M-remote (Telegram, security-gate) /
+  M5 (service+hardening) — keduanya milestone besar butuh kehadiran+keputusan. `main` di-push berjenjang sepanjang sesi
+  (`5829ba7`→`d50c319`→`4ff1eac`→`96da41a`→ commit status-view ini).
 - **Terakhir diupdate:** 2026-07-10 (sesi Ubuntu, session-end ini) — **M4 SUB-TASK 1&2: Notifier core +
   proximity-engine (I-8 sebagian).** Modul `src/notify/notifier.ts` baru. Pola Opus-inline (Tier-1: jalur
   output user-facing + firewall PII G-9) + self-tier-review. Dua slice, satu commit:

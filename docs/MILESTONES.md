@@ -179,10 +179,10 @@ respons LS exhausted (field absent); set jalur continue agy = **alive/inject** (
 > M3d.6→M3d.7 (continue, serial, setelah probe siap). M3d.8 memanfaatkan eksperimen sesi ini → bisa duluan.
 > Semua Tier-1 → tier-review Opus wajib. Fixture/observasi live = sumber kebenaran, bukan asumsi.
 
-## M4 — Notifikasi + Monitor UX ← **fase sekarang**
-**Slice:** notifikasi desktop/CLI pada transisi LIMIT_HIT/RESUMED/FAILED; `acca status` TUI lengkap
+## M4 — Notifikasi + Monitor UX ← **fase sekarang (inti ✅ 11 Jul; sisa: desktop-notifier di belakang gate dep)**
+**Slice:** notifikasi desktop/CLI pada transisi LIMIT_HIT/RESUMED/FAILED; `acca status` lengkap
 (usage best-effort + indikator "perkiraan" + loading/empty/error state); `acca log`.
-**Selesai bila:** AC-4, AC-5 lulus; UX states eksplisit teruji.
+**Selesai bila:** AC-4 ✅, AC-5 ✅ lulus; UX states eksplisit teruji ✅. (Sisa opsional: Notifier desktop = gate dep.)
 
 **Progres (10 Jul, Ubuntu):**
 - **✅ Notifier core (`src/notify/notifier.ts`):** pemetaan MURNI `notificationForEvent(event)→Notification|null`
@@ -207,9 +207,13 @@ respons LS exhausted (field absent); set jalur continue agy = **alive/inject** (
   parse payload defensif. Dekorator `withNotifications` di-`{...events}` (teruskan method baca; menutup fragilitas
   "method hilang"). Subagent Sonnet + tier-review Opus (firewall + type-soundness). **279/279 test** (+9), build+lint
   bersih. Merender ke stdout lokal (bukan egress).
-- **Sisa M4:** (1) **`acca status` usage-view (plain ANSI, TUI decision 11 Jul)** — baca cache `meta.usage_snapshot_<tool>`
-  → render bar `▓▓░` + indikator "perkiraan" + loading/empty/error state (AC-4; sumber data I-17 ✅ siap) · (2) Notifier
-  desktop (node-notifier, gate dep). AC-5 notif transisi ✅ (engine); AC-4 tinggal render.
+- **✅ `acca status` usage-view (AC-4) — 11 Jul (autonomous-run, Sonnet+Opus):** plain ANSI (TUI decision), baca cache
+  `meta.usage_snapshot_<tool>` → helper pure `renderUsageBar` (`▓▓░` clamp) + `formatUsageLines` (header umur snapshot +
+  baris per limit kind/bar/pct; empty-state "usage belum ada—jalankan acca daemon" + "tak terbaca" defensif). **Firewall
+  G-9:** hanya tool/kind/bar/pct — `scope` (display-name model) tak dirender (diuji + **smoke render live: 'SECRET' 0×**).
+  Blok sesi lama utuh. **305/305 test** (+15). **Smoke render nyata:** bar 37%/36%/92% (CC) + 74%/10% (agy) tampil benar.
+- **Sisa M4:** Notifier desktop (node-notifier) — **butuh gate DEPENDENCY-POLICY (dep baru = keputusan user)**.
+  **AC-4 ✅ · AC-5 ✅** (notif transisi engine + surface). M4 inti selesai; desktop-notifier = opsional di belakang gate dep.
 
 ## M-remote — Remote-control Telegram (tier A+B+C)
 **Slice (bertahap per tier, satu kanal Telegram — ADR-011):**
