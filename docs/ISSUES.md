@@ -63,19 +63,6 @@ Named pipe Node/libuv default **bisa di-connect user lain** di mesin sama (DACL 
 desktop = risiko rendah; node headless multi-akun (ADR-007) = relevan. **Remedi:** verifikasi DACL nyata di M5 security
 pass → bila terbuka, catat residual risk THREAT-MODEL atau cek PID same-session-user. **Sumber:** audit A-8.
 
-### I-27 — `genSessionId` 4-char tanpa retry-on-collision + retensi never-purge [P3]
-`ids.ts` random tanpa cek unik → PK collision → `createSession` throw → `acca run` gagal misterius. Retensi tak terbatas
-(5 Jul) → birthday ~50% di ~1.200 baris. **Remedi:** retry loop (≤3×) saat `SQLITE_CONSTRAINT_PRIMARYKEY` atau naikkan
-panjang id. **Sumber:** audit A-9.
-
-### I-28 — Housekeeping audit (drift docs + guard kecil) [P3, bisa dicicil]
-Bundel A-10..A-15: (A-10) DEPENDENCY-POLICY basi (pending TUI sudah diputus plain-ANSI; `commander` belum di tabel pin);
-(A-11) MAP.md cantumkan `daemon/continue.ts` yang tak pernah ada + file nyata tak tercermin; (A-12) CRLF noise lintas-OS
-NYATA (G-6) → `.gitattributes` (`* text=auto` + `*.md eol=lf`) + `git add --renormalize .`; (A-13) `markResumed` tanpa
-guard status → bisa clobber EXITED/FAILED pada race (tak konsisten disiplin `markLimitHit`); (A-14) status `WAITING`/
-`BLOCKED` = enum DB tak pernah ditulis ke baris sesi → `acca status` tak pernah tampilkan (putuskan pakai/buang via ADR
-kecil); (A-15) `stripAnsi` belum strip OSC/charset (G-20, watch). **Sumber:** audit A-10..A-15.
-
 ### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
 Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
 `resumeCmd`), bukan CLI agent nyata di limit nyata: (a) apakah `claude`/`agy` hidup di prompt benar-benar
@@ -139,6 +126,29 @@ nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar i
 ---
 
 ## Tertutup
+
+### I-27 — `genSessionId` 4-char tanpa retry-on-collision [P3] ✅ (12 Jul, autonomous-run)
+**RESOLVED.** `genUniqueSessionId(exists, maxTries=8)` (`ids.ts`) coba ulang `genSessionId()` sampai `exists(id)`
+false → tabrakan PK (id ~1 jt kombinasi + retensi never-purge) tak lagi bikin `createSession` throw & `acca run`
+gagal misterius; `maxTries` habis → throw pesan JELAS (arsipkan/perpanjang id), bukan `SQLITE_CONSTRAINT` mentah.
+`exists` di-inject (repo `getById`) → race-tolerant (INSERT tetap dijaga PK bila race lintas-proses) + testable
+tanpa DB. Wired di `runSession`. **+5 test** (`ids.test.ts`). **Sumber:** audit A-9.
+
+### I-28 — Housekeeping audit (drift docs + guard kecil) [P3] ✅ (12 Jul, autonomous-run) — SEMUA A-10..A-15 ditutup
+- **A-10 ✅** DEPENDENCY-POLICY: `commander` 14.0.2 masuk tabel pin (0 dep transitif); drizzle/grammy ditandai
+  "belum dipasang"; TUI = plain ANSI (Ink/blessed ditolak, bukan lagi "pending"); native gate Ubuntu 24.04 ✅.
+- **A-11 ✅** MAP.md: hapus file HANTU `daemon/continue.ts` → ganti file nyata (limit-watcher/inject-continue +
+  catatan usage-monitor/ipc-client/reconcile/schedule-reset).
+- **A-12 ✅** `.gitattributes` `* text=auto eol=lf` (G-6) → repo & working tree LF lintas-OS, stop warning CRLF;
+  `git add --renormalize .` = nol perubahan file lain (repo sudah LF).
+- **A-13 ✅** `markResumed` guard `status NOT IN (EXITED,FAILED)` → tak clobber terminal pada race. **+2 test.**
+- **A-14 ✅** `markBlocked()` baru + di-wire 2 cabang dispatch blocked (cwd_missing/cli_session_id_missing) →
+  status enum **BLOCKED** kini benar-benar ditulis (sebelumnya cuma event+notif) → `acca status` menampilkannya.
+  **Keputusan minor reversible** (bukan ADR): pakai nilai enum yang sudah ada. **WAITING dibiarkan tak-terpakai**
+  (LIMIT_HIT sudah mewakili tunggu-reset; kandidat drop di migrasi kelak). **+2 test + 2 assert supervisor-dispatch.**
+- **A-15 ✅** `stripAnsi` diperluas CSI→+OSC(judul window BEL/ST)+charset → teks di sekitar sekuens tak salah lolos
+  ke detektor limit/idle-tracker (G-20 watch ditutup). **+6 test** (`ansi.test.ts`).
+- **Verifikasi (Opus sendiri):** typecheck+lint+**338 test** hijau, Tier-1 self-review (A-13/A-14 state-machine). **Sumber:** audit A-10..A-15.
 
 ### I-24 — `acca status` tak tampilkan reset_at terjadwal & liveness daemon → AC-4 [P2] ✅ (12 Jul, autonomous-run, Sonnet+Opus)
 **RESOLVED (Sonnet impl + Opus tier-review).** `acca status` kini: (1) **kolom `reset`** di tabel sesi —
