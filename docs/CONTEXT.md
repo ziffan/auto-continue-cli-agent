@@ -10,8 +10,9 @@
   `acca status` usage-view + `acca log`; **AC-4 ✅** — reset_at terjadwal + liveness daemon di `acca status` (I-24 ditutup 12 Jul); AC-5 ✅). **M-remote DITUNDA.**
   **KOREKSI JUJUR (audit `docs/audit/AUDIT-2026-07-11.md`):** klaim lama "loop auto-continue penuh selesai & bertes" **OVERSTATED** —
   4 P1 di jalur resume/continue lolos 308 test (seam actuation di-stub). **Ditutup:** A-2 (daemon crash saat spawn gagal, R1) +
-  A-1 paruh korektness (resume pakai `cli_session_id`, absen→BLOCKED, R2a) + **R3 (I-21) siklus-limit-2 (12 Jul)**. **Belum:**
-  R2b capture id (I-20), R4 agy-exited (I-22, butuh keputusan user), R5–R8. **Gate keluar sebelum M-remote:** R1–R3 ✅ + I-15
+  A-1 paruh korektness (resume pakai `cli_session_id`, absen→BLOCKED, R2a) + **R3 (I-21) siklus-limit-2 (12 Jul)** +
+  **R4 slice 1 (I-22 guard probe-impossible agy-exited, 12 Jul)**. **Belum:** R2b capture id (I-20), R4 slice 2 (I-22
+  probe standalone OAuth), R5–R8. **Gate keluar sebelum M-remote:** R1–R3 ✅ + I-15
   live-verify actuation LULUS CLI nyata (masih HARD-STOP unattended — butuh user hadir).
   Sisanya di bawah masih akurat. M3d tertutup penuh. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
   `runSession` direlokasi ke `daemon/process-wrapper.ts` (layer inversion ditutup) + resume-chain link;
@@ -19,6 +20,23 @@
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+- **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user) — **M3e R4 SLICE 1 (I-22) DITUTUP: guard probe-impossible agy-exited → bug loop-senyap ditutup.**
+  Sesi buka `/session-start` (proof-of-understanding lengkap) → user setuju slice autonomous-safe. **Slice A (Opus inline
+  Tier-1, branch `m3e-i22-slice1`):** cabang `probe` di `supervisor.realDispatch` dulu memanggil `probeAgyUsage` untuk sesi
+  agy `exited` → PID mati → `discoverLocalPorts` kosong → throw → outer catch → `'retry'` → **backoff cap 60m SELAMANYA &
+  SENYAP** (audit A-4). **Fix:** guard sebelum ambil adapter — `session.tool==='antigravity' && proc_state==='exited'` →
+  `sessions.markBlocked` + event `job_dispatch_error {action:'probe_impossible', reason:'agy_exited_no_live_ls',
+  status:'BLOCKED'}` + `return 'done'` (terminal, tak retry). **Guard agy-only** (CC probe = HTTP OAuth standalone → tak
+  butuh PID/PTY hidup, CC-exited tetap dapat di-probe; hanya agy butuh LS sesi hidup, G-3). **Notifier:** event
+  **`PROBE_IMPOSSIBLE`** baru (level warn, pesan jelas "resume manually", ditaruh SEBELUM branch BLOCKED generik → menang;
+  reason-code internal tak dibocorkan). Firewall G-9 utuh (payload hanya field terkontrol). **Verifikasi (Opus sendiri):**
+  typecheck+lint+**340 test** (+2: dispatch agy-exited→BLOCKED/done/no-retry + notifier mapping; `setupAndFire` +opsi
+  `tool`). Tier-1 self-review (state machine + status write). **Saat slice 2 (probe standalone OAuth, ADR-018 opsi #3) ada,
+  guard dilonggarkan** — agy-exited bisa di-probe tanpa LS → auto-resume penuh. **Docs:** ISSUES (I-22 slice 1 ✅ + header
+  gate), MILESTONES (M3e R4 slice 1 ✅), CONTEXT, + cek konsistensi root (CLAUDE.md §2 310→340 test + gate; README 308→340).
+  **Next (butuh user / keputusan):** I-22 slice 2 (probe standalone OAuth — Tier-1 creds+egress, live-verify) · I-20 capture
+  `cli_session_id` CC (hook `SessionStart`/G-34, butuh sesi CLI nyata) · I-15 live-verify actuation inject/resume asli.
+  Branch `m3e-i22-slice1` → ff-merge `main` + push.
 - **Terakhir diupdate:** 2026-07-12 (autonomous-run terjadwal 02:16, Windows) — **R3 (I-21) DITUTUP: auto-continue multi-siklus per sesi hidup + agy live-verify = HARD-STOP unattended.**
   Cron one-shot `/autonomous-run` fire 02:16 (dijadwalkan sesi malam untuk window reset agy Opus 4.6). **Fokus utama (agy/CC
   live-verify inject pasca-reset) = HARD-STOP:** upaya menggerakkan sesi `agy` hidup via node-pty **diblokir auto-classifier**

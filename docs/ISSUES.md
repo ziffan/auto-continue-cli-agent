@@ -11,7 +11,8 @@
 > bukti baris-per-baris + rencana remedi R1–R8 ada di file audit — entri di bawah = ringkas + pointer. **Gate keluar
 > sebelum M-remote:** I-20..I-22 (R1–R3) selesai + I-15 live-verify LULUS dgn CLI nyata.
 > **Progres gate (12 Jul):** R1 (A-2/I—daemon-crash) ✅ · R2a (A-1 korektness) ✅ · **R3 (I-21 multi-siklus) ✅** ·
-> **sisa: I-20 capture `cli_session_id` (CC) + I-22 R4 agy-exited + I-15 live-verify actuation inject/resume asli.**
+> **R4 slice 1 (I-22 guard probe-impossible agy-exited) ✅** · **sisa: I-20 capture `cli_session_id` (CC) +
+> I-22 slice 2 (probe standalone OAuth) + I-15 live-verify actuation inject/resume asli.**
 
 ### I-20 — Capture `cli_session_id` (R2b, penangkap id CLI untuk resume-by-id) [P1, blocker M-remote]
 **Konteks:** A-1. Paruh korektness sudah ditutup R2a (`df3904b`): resume-by-id kini pakai `session.cli_session_id`;
@@ -28,16 +29,21 @@ siap. **Sisa (issue ini):** benar-benar MENANGKAP id CLI → sampai itu ada, set
   (I-23) / G-34; (b) menghubungkan capture ini ke `setCliSessionId` di wrapper agy (tangkap dari output exit atau saat
   spawn). Sampai wiring itu, resume-by-id agy exited masih BLOCKED (paruh korektness R2a), tapi **sumbernya kini pasti**.
 
-### I-22 — agy resume-by-id sesi MATI: implement opsi #3 (probe standalone OAuth) [P1] — **keputusan LOCK (ADR-018), impl pending**
+### I-22 — agy resume-by-id sesi MATI: implement opsi #3 (probe standalone OAuth) [P1] — **slice 1 ✅ (12 Jul), slice 2 pending**
 Job `probe` agy pada sesi `exited` → PID mati → `discoverLocalPorts` kosong → throw → `'retry'` backoff cap 60m
 **selamanya, senyap**. **KEPUTUSAN 11 Jul (Ziffan → ADR-018): Opsi 1** — implement probe standalone pre-resume
 (`retrieveUserQuota`) + refresh token via **`oauth2.googleapis.com`** (masuk egress whitelist NFR). Otonomi penuh agy-exited.
 **Dua slice (M3e/R4):**
-1. **Guard minimal — LEBIH DULU (kecil, independen):** deteksi agy+exited+probe-impossible → notif `PROBE_IMPOSSIBLE` +
-   **stop retry** (tutup bug loop-senyap). Aman dikerjakan tanpa nunggu #2.
-2. **Probe standalone (Tier-1: creds + egress, butuh live-verify):** refresh token `oauth2.googleapis.com` (client-id
-   Gemini CLI) → `retrieveUserQuota` → `UsageSnapshot`. Mitigasi ADR-018: allowlist host ketat (`guardEgress`), token
-   dibaca-saja (tak di-log), PII firewall (G-9), refresh pre-resume-only. Live-verify: token disk stale (G-1) → flow
+1. **✅ Guard minimal (12 Jul, `supervisor.ts` cabang `probe`, Tier-1 self-review):** `tool===antigravity &&
+   proc_state===exited` → `markBlocked` + event `job_dispatch_error {action:'probe_impossible',
+   reason:'agy_exited_no_live_ls', status:'BLOCKED'}` + `return 'done'` → **bug loop-senyap DITUTUP** (tak lagi retry
+   backoff selamanya). Notifier: event **`PROBE_IMPOSSIBLE`** baru (level warn, pesan jelas, menang atas branch BLOCKED
+   generik; reason-code internal tak dibocorkan). **Guard agy-only** (CC probe = HTTP OAuth standalone → CC-exited tetap
+   dapat di-probe). Firewall G-9 utuh. **+2 test** (dispatch agy-exited → BLOCKED/done/no-retry; notifier mapping).
+   **340 test** hijau. Saat slice 2 ada, guard dilonggarkan (agy-exited bisa di-probe tanpa LS).
+2. **Probe standalone (Tier-1: creds + egress, butuh live-verify) — PENDING:** refresh token `oauth2.googleapis.com`
+   (client-id Gemini CLI) → `retrieveUserQuota` → `UsageSnapshot`. Mitigasi ADR-018: allowlist host ketat (`guardEgress`),
+   token dibaca-saja (tak di-log), PII firewall (G-9), refresh pre-resume-only. Live-verify: token disk stale (G-1) → flow
    refresh harus terbukti balas 200 + body-sukses (yang ADR-010 tunda ke M3). **Sumber:** audit A-4, ADR-018.
 
 ### I-23 — Deteksi limit CC PRIMER (hook `StopFailure`) belum diimplementasi [P2]

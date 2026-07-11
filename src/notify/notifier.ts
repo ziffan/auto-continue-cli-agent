@@ -13,7 +13,14 @@
 import type { UsageSnapshot } from '../shared/types.js';
 import type { AppendEventInput, EventsRepo } from '../store/repositories/events.js';
 
-export type NotificationEvent = 'LIMIT_HIT' | 'RESUMED' | 'FAILED' | 'BLOCKED' | 'PROXIMITY' | 'INJECT_SKIPPED';
+export type NotificationEvent =
+  | 'LIMIT_HIT'
+  | 'RESUMED'
+  | 'FAILED'
+  | 'BLOCKED'
+  | 'PROXIMITY'
+  | 'INJECT_SKIPPED'
+  | 'PROBE_IMPOSSIBLE';
 export type NotificationLevel = 'info' | 'warn' | 'error';
 
 export interface Notification {
@@ -128,6 +135,21 @@ export function notificationForEvent(input: AppendEventInput): Notification | nu
       level: 'warn',
       title: 'Auto-continue skipped',
       body: `Session ${shortId(sid)} could not auto-continue${reason ? ` (${reason})` : ''} — manual action needed.`,
+      sessionId: sid,
+    };
+  }
+
+  // I-22 (R4 slice 1): probe usage agy pada sesi yang sudah `exited` = mustahil (LS butuh PID/PTY
+  // hidup, G-3) → dispatch berhenti mencoba (bukan retry-loop senyap) & menandai BLOCKED. Surface
+  // dgn pesan yang JELAS (bukan reason-code mentah) supaya user tahu ini keterbatasan yang diketahui,
+  // bukan crash — auto-resume agy-exited menyusul di slice 2 (probe standalone OAuth, ADR-018). Cocokkan
+  // `action` SEBELUM branch BLOCKED generik di bawah (payload ini juga membawa status:'BLOCKED').
+  if (input.type === 'job_dispatch_error' && str(p.action) === 'probe_impossible') {
+    return {
+      event: 'PROBE_IMPOSSIBLE',
+      level: 'warn',
+      title: 'Auto-resume needs manual step',
+      body: `Session ${shortId(sid)} can't be usage-probed (Antigravity session ended) — resume manually.`,
       sessionId: sid,
     };
   }

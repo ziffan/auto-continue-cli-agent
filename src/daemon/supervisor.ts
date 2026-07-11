@@ -144,6 +144,24 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
           return 'done';
         }
 
+        // I-22 (R4 slice 1, ADR-018): probe usage agy MEMBUTUHKAN sesi hidup ber-PTY — Language Server
+        // hanya bind saat ber-PTY (G-3) & port-nya terikat PID sesi itu; sesi agy yang `exited` = PID
+        // mati = tak ada port → probe-via-LS MUSTAHIL. Tanpa guard ini `probeUsage` throw (port kosong)
+        // → outer catch → 'retry' → backoff cap 60m SELAMANYA & SENYAP (audit A-4, bug loop). Hentikan
+        // loop di sini: BLOCKED (butuh aksi manual) + surface `probe_impossible`. Probe standalone OAuth
+        // pre-resume (ADR-018 opsi #3, `retrieveUserQuota`) = slice 2 — saat itu ada, agy-exited bisa
+        // di-probe tanpa LS & guard ini dilonggarkan. CC tak kena: probe CC = HTTP OAuth standalone
+        // (tak butuh PID/PTY hidup), jadi CC-exited tetap dapat di-probe → guard sengaja agy-only.
+        if (session.tool === 'antigravity' && session.proc_state === 'exited') {
+          sessions.markBlocked(job.session_id);
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_error',
+            payload: { jobId: job.id, action: 'probe_impossible', reason: 'agy_exited_no_live_ls', status: 'BLOCKED' },
+          });
+          return 'done';
+        }
+
         const adapter = adapters[session.tool];
         if (!adapter?.probeUsage) {
           events.append({
