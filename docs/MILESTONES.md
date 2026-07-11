@@ -179,10 +179,12 @@ respons LS exhausted (field absent); set jalur continue agy = **alive/inject** (
 > M3d.6→M3d.7 (continue, serial, setelah probe siap). M3d.8 memanfaatkan eksperimen sesi ini → bisa duluan.
 > Semua Tier-1 → tier-review Opus wajib. Fixture/observasi live = sumber kebenaran, bukan asumsi.
 
-## M4 — Notifikasi + Monitor UX ← **fase sekarang (inti ✅ 11 Jul; sisa: desktop-notifier di belakang gate dep)**
+## M4 — Notifikasi + Monitor UX (inti ✅ 11 Jul; **AC-4 dikoreksi ⚠ per audit — I-24**)
 **Slice:** notifikasi desktop/CLI pada transisi LIMIT_HIT/RESUMED/FAILED; `acca status` lengkap
 (usage best-effort + indikator "perkiraan" + loading/empty/error state); `acca log`.
-**Selesai bila:** AC-4 ✅, AC-5 ✅ lulus; UX states eksplisit teruji ✅. (Sisa opsional: Notifier desktop = gate dep.)
+**Selesai bila:** AC-4 ⚠ (usage-view + `acca log` ✅; **reset_at terjadwal + liveness daemon di `acca status` BELUM →
+I-24**, klaim AC-4 ✅ sebelumnya = overclaim, dikoreksi 11 Jul), AC-5 ✅ lulus; UX states eksplisit teruji ✅. (Sisa
+opsional: Notifier desktop = gate dep.)
 
 **Progres (10 Jul, Ubuntu):**
 - **✅ Notifier core (`src/notify/notifier.ts`):** pemetaan MURNI `notificationForEvent(event)→Notification|null`
@@ -214,6 +216,28 @@ respons LS exhausted (field absent); set jalur continue agy = **alive/inject** (
   Blok sesi lama utuh. **305/305 test** (+15). **Smoke render nyata:** bar 37%/36%/92% (CC) + 74%/10% (agy) tampil benar.
 - **Sisa M4:** Notifier desktop (node-notifier) — **butuh gate DEPENDENCY-POLICY (dep baru = keputusan user)**.
   **AC-4 ✅ · AC-5 ✅** (notif transisi engine + surface). M4 inti selesai; desktop-notifier = opsional di belakang gate dep.
+
+## M3e — Koreksi loop auto-continue (dari audit 11 Jul) ← **fase sekarang**
+**Kenapa ada:** audit menyeluruh 11 Jul (`docs/audit/AUDIT-2026-07-11.md`) menemukan **4 P1 di jalur resume/continue**
+yang lolos 308 test (test men-stub seam yang justru cacat). Klaim "loop auto-continue penuh selesai & bertes" =
+**overstated** — yang live cuma inject ke proses proxy + spawn wrapper baru, bukan resume percakapan CLI nyata.
+**M-remote DITUNDA** sampai gate keluar hijau (tier B `resume-now` akan expose jalur resume yang rusak; I-15 pasti
+gagal di A-1).
+**Slice (= rencana remedi audit R1–R8):**
+- **R1 — daemon-no-crash (I-20/A-2) ✅ (`9027dc4`):** default `spawnResumeFn` konsumsi `waitForExit` (tak ada
+  unhandledRejection yang mematikan daemon) + tak keliru markResumed saat spawn gagal. Test menjalankan DEFAULT path
+  (bukan stub). **310 test hijau, Tier-1 self-review.**
+- **R2a — cli_session_id di dispatch (I-20/A-1 paruh) ✅ (`df3904b`):** resume pakai `session.cli_session_id`; absen →
+  BLOCKED (surface), bukan spawn id supervisor yang dijamin ditolak CLI. `setCliSessionId` repo siap. Test bug-encoding
+  dikoreksi + test NULL→BLOCKED. **Tier-1 self-review.**
+- **R2b — capture cli_session_id (I-20, belum):** tangkap id CLI nyata (CC transcript/`SessionStart` hook; agy printed
+  cmd). **Butuh live-verify** (audit §6). Gabung ke slice hook (R6/I-23). Sampai ada → resume-by-id exited = BLOCKED.
+- **R3 — resume-cycle (I-21/A-3, belum):** transisi RESUMED→RUNNING + un-latch watcher + monitor mencakup sesi hidup +
+  test siklus 2×.
+- **R4 — agy-exited-policy (I-22/A-4, belum, butuh keputusan user).** R5 status-completeness (I-24). R6 stopfailure-hook
+  (I-23, sekaligus sumber R2b). R7 resume-gate-per-tool (I-25). R8 housekeeping (I-27/I-28).
+**Gate keluar (sebelum M-remote):** R1–R3 selesai + I-15 live-verify **lulus dgn CLI nyata** (limit asli, resume nyata
+melanjutkan percakapan). R4 minimal varian "surface manual". M5 aman setelah R1 (crash) tertutup — sudah ✅.
 
 ## M-remote — Remote-control Telegram (tier A+B+C)
 **Slice (bertahap per tier, satu kanal Telegram — ADR-011):**

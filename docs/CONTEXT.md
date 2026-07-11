@@ -6,15 +6,42 @@
 
 ## Status saat ini
 
-- **Fase:** **M4 INTI SELESAI (11 Jul) — Notifier + proximity + I-17 usage-monitor + `acca status` usage-view + `acca log`; AC-4 ✅ AC-5 ✅.**
-  Sisa M4 = opsional (Notifier desktop, gate dep). Berikutnya = M-remote (Telegram, security-gate) / M5. M3d tertutup penuh (di bawah). Loop
-  auto-continue tersambung end-to-end (deteksi→jadwal→probe→**inject-continue / resume-by-id NYATA**),
-  semua Tier-1. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
+- **Fase:** **M3e KOREKSI LOOP (dari audit 11 Jul) ← fase sekarang.** M4 inti ✅ (Notifier + proximity + usage-monitor +
+  `acca status` usage-view + `acca log`; **AC-4 dikoreksi ⚠** — reset_at + liveness daemon belum, I-24; AC-5 ✅). **M-remote DITUNDA.**
+  **KOREKSI JUJUR (audit `docs/audit/AUDIT-2026-07-11.md`):** klaim lama "loop auto-continue penuh selesai & bertes" **OVERSTATED** —
+  4 P1 di jalur resume/continue lolos 308 test (seam actuation di-stub). **Ditutup sesi ini:** A-2 (daemon crash saat spawn gagal, R1) +
+  A-1 paruh korektness (resume pakai `cli_session_id`, absen→BLOCKED, R2a). **Belum:** R2b capture id (I-20), R3 siklus-limit-2 (I-21),
+  R4 agy-exited (I-22, butuh keputusan user), R5–R8. **Gate keluar sebelum M-remote:** R1–R3 + I-15 live-verify LULUS CLI nyata.
+  Sisanya di bawah masih akurat. M3d tertutup penuh. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
   `runSession` direlokasi ke `daemon/process-wrapper.ts` (layer inversion ditutup) + resume-chain link;
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+- **Terakhir diupdate:** 2026-07-11 (sesi Windows, session-end ini) — **AUDIT PRA-M-REMOTE + M3e R1/R2a: 2 P1 loop ditutup.**
+  Sesi buka `/session-start` → temukan audit menyeluruh untracked (`docs/AUDIT-2026-07-11.md`, dari sesi Claude sebelumnya) yang
+  membalik prioritas: **4 P1 di jalur resume/continue** lolos 308 test (test men-stub seam yang justru cacat; satu test malah
+  meng-encode bug sbg ekspektasi). **Verifikasi mandiri klaim P1 ke kode** (bukan telan bulat): A-1 (`supervisor.ts:241` pakai
+  `session.id`; `cli_session_id` **0 penulis** di seluruh `src/`) & A-2 (`process-wrapper.ts:102` return `waitForExit` reject →
+  di-drop default `spawnResumeFn`) — **dua-duanya CONFIRMED**. User setuju arah **M3e koreksi loop dulu (M-remote ditunda)** + commit audit dulu.
+  Pola Opus-inline (Tier-1: state machine + spawn + korektness resume) + self-tier-review. Branch **`m3e-loop-correction`**:
+  **(0) Audit di-commit** (`c84dae4`; user pindahkan ke `docs/audit/`, +`0177a24` tipo).
+  **(1) R1 — A-2 CLOSED (`9027dc4`):** default `spawnResumeFn` konsumsi `waitForExit` (`.catch`) → tak ada lagi unhandledRejection
+  yang **mematikan daemon**; lapor `spawnFailed` (via status sesi baru; runSession `markFailed` sebelum return) → dispatch tak keliru
+  `markResumed` sesi lama. Test baru menjalankan **DEFAULT path (bukan stub)** via binary hilang → `which()` null → gagal sinkron
+  tanpa spawn nyata (menutup blind-spot audit §6). `ResumeSpawnResult` +`spawnFailed?`.
+  **(2) R2a — A-1 paruh korektness CLOSED (`df3904b`):** dispatch exited pakai `session.cli_session_id`; absen →
+  `job_dispatch_error 'blocked' reason=cli_session_id_missing status=BLOCKED` (surface via notifier), **bukan** spawn id supervisor
+  4-char yang dijamin ditolak CLI + bukan keliru markResumed. `sessions.setCliSessionId` repo siap. Test bug-encoding dikoreksi
+  (assert cli id) + test baru NULL→BLOCKED; R1 test diberi cli_session_id agar tetap capai jalur spawn. **Efek: resume-by-id sesi
+  exited kini JUJUR BLOCKED sampai R2b menangkap id CLI, bukan diam-diam salah.** Jalur alive/inject (primer ADR-014) tak terpengaruh.
+  **Verifikasi (Opus sendiri):** build+typecheck+lint ✅ · **310 test** (+2: default-spawn-fail + NULL→BLOCKED; 2 skip POSIX).
+  **Investigasi R2b (belum diimplement):** encoding transcript CC **terverifikasi empiris** = `cwd.replace(/[^a-zA-Z0-9]/g,'-')`,
+  filename=id `--resume` (**G-34**) — TAPI korelasi racy → **sengaja ditunda** (butuh live-verify, audit §6; jalur robust=hook `SessionStart`).
+  **Docs:** ISSUES (A-2/A-1-paruh CLOSED + I-20..I-28 dari A-1..A-15), MILESTONES (M3e baru + M4 AC-4 ⚠), GOTCHAS G-34, DECISIONS
+  Change Log, CONTEXT. **Next konkret:** (1) **R2b** capture `cli_session_id` (gabung hook `SessionStart` I-23, live-verify); (2) **R3**
+  siklus-limit-2 (I-21); (3) **R4** agy-exited (I-22 — **butuh keputusan user**: opsi #3+egress oauth2 vs surface-manual). Branch
+  `m3e-loop-correction` **belum di-push** (ff-merge ke `main` di bawah).
 - **Terakhir diupdate:** 2026-07-11 (sesi Ubuntu, session-end) — **DELTA-CHECK VERSI + I-19 gate + ADR-017 + gate-docs; di-merge & di-push ke `main` (`82bd336`).**
   Sesi buka: sinkron lokal ke `origin/main` (lokal ketinggalan 12 commit; `m4-notifier` sudah ter-merge → docs awalnya basi).
   Empat pekerjaan, 4 commit di branch `m4-version-delta` → **ff-merge ke `main` + push** (branch dihapus lokal):
