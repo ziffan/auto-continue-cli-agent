@@ -14,8 +14,8 @@
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik); residual
   I-10 = konsolidasi sole-writer `scheduled_jobs` (refactor arsitektur lebih besar, di luar scope).
-- **Terakhir diupdate:** 2026-07-11 (autonomous-run, Windows) — **M4: Notifier di-MERGE + I-4 DITUTUP + `acca log` ✅.**
-  Sesi otonom terjadwal (cron one-shot, /autonomous-run) — Opus orkestrator, verifikasi gate sendiri. Tiga slice:
+- **Terakhir diupdate:** 2026-07-11 (autonomous-run, Windows) — **M4 BERGERAK: Notifier merge + I-4 + `acca log` + keputusan TUI + I-17 (usage-monitor).**
+  Sesi otonom terjadwal (cron one-shot, /autonomous-run) — Opus orkestrator, verifikasi gate sendiri, 2 subagent Sonnet. Ringkas:
   **(1) Tier-1 review + merge branch `m4-notifier`** (`13ec9ea` merge, `31f734a` catatan): review baris-per-baris
   `src/notify/notifier.ts` + wiring supervisor/run → **APPROVE**. Firewall PII/injection (G-9, ADR-008/013)
   diverifikasi struktural (body notif hanya field terkontrol; `evidence`/`spec.args`/respons-probe tak di-echo;
@@ -36,9 +36,13 @@
   Type-soundness dipulihkan (`fakeEvents` stub method baca; diverifikasi nol error struktural via `tsc`). **279/279
   test** (+9), build+lint bersih. Render stdout lokal (bukan egress). *(Catatan pra-eksisten: `tsconfig.eslint.json`
   rootDir=src menolak file `test/` (TS6059) → test tak ter-typecheck di gate; orthogonal, kandidat follow-up.)*
-  **Next (butuh user / bukan autonomous-safe):** M4 status-UX **terblokir pending TUI (Ink vs blessed, owner Ziffan,
-  jatuh tempo)**; I-17 periodic-probe loop (Tier-1 egress/state — bisa autonomous tapi lebih besar); Notifier desktop
-  (gate DEPENDENCY-POLICY). `main` di-push (`31f734a` + commit I-4 sesi ini).
+  **(4) Keputusan TUI + I-17** (setelah user balas async): (a) **pending TUI `acca status` ditutup → plain ANSI, tanpa
+  lib** (Ziffan; DECISIONS/ARCHITECTURE §3 diperbarui). (b) **I-17 usage-monitor DONE** (engine Sonnet + wiring supervisor
+  Opus): probe usage periodik ~2 mnt saat RUNNING → `meta` cache snapshot (tanpa migrasi) + proximity→notify; opt-in
+  `startUsageMonitor` (produksi; **G-32**). **290/290 test** (+11), Tier-1 self-review. Live-verify sesi asli = opportunistik (I-15).
+  **Next (autonomous-safe, siap):** slice **`acca status` usage-view** — baca cache `meta.usage_snapshot_<tool>` → render bar
+  ANSI + indikator "perkiraan" + empty/error state (AC-4; TUI decided + sumber data I-17 siap). **Butuh user:** Notifier
+  desktop (gate dep). `main` di-push berjenjang (`5829ba7` 3-slice, `d50c319` TUI, + commit I-17 sesi ini).
 - **Terakhir diupdate:** 2026-07-10 (sesi Ubuntu, session-end ini) — **M4 SUB-TASK 1&2: Notifier core +
   proximity-engine (I-8 sebagian).** Modul `src/notify/notifier.ts` baru. Pola Opus-inline (Tier-1: jalur
   output user-facing + firewall PII G-9) + self-tier-review. Dua slice, satu commit:

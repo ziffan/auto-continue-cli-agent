@@ -17,6 +17,7 @@ export function registerDaemonCommand(program: Command): void {
         db,
         socketPath: runtimeSocketPath(),
         now: () => Date.now(),
+        startUsageMonitor: true, // I-17: probe usage periodik saat RUNNING (proximity + cache status).
       });
 
       try {

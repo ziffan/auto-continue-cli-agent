@@ -194,7 +194,12 @@ respons LS exhausted (field absent); set jalur continue agy = **alive/inject** (
   + `daemon/supervisor.ts` (+dep `notify`). Tier-1 self-review. **270/270 test** (+26), build+lint bersih,
   **live smoke PTY** (frasa limit CC asli → `[acca warn] …` stderr, evidence tak bocor).
 - **✅ Proximity ENGINE (I-8):** `proximityNotifications(snapshot, thresholds)` murni (0.90 5h / 0.75 weekly,
-  exhausted dilewati). **Wiring DITUNDA → I-17** (butuh loop probe periodik saat RUNNING; probe kini hanya saat reset).
+  exhausted dilewati). **Wiring → I-17 (DONE 11 Jul).**
+- **✅ I-17 usage-monitor + wiring (11 Jul, autonomous-run):** engine `daemon/usage-monitor.ts` (Sonnet, murni-
+  injectable: dedup per-tool, isolasi, re-entry guard, firewall) + wiring supervisor (Opus, Tier-1): probe periodik
+  **~2 mnt** (owner Ziffan) saat RUNNING → `meta` cache snapshot (`usage_snapshot_<tool>`, **tanpa migrasi**) +
+  proximity→notify. Opt-in `startUsageMonitor` (produksi `acca daemon`; G-32). **290/290 test** (+11). Live-verify
+  sesi asli = opportunistik (I-15). **→ Ini sumber data `acca status` usage-view (AC-4).**
 - **✅ `acca log` (US-8) — 11 Jul (autonomous-run, Windows):** perintah read-only `acca log [sessionId] [-n <limit>]`
   → `events.listRecent`/`listBySession` (repo +2 method baca) → `formatEventLine` (PURE, exported). **Firewall (G-9,
   ADR-013):** summary HANYA dari **allowlist** field terkontrol (`to/from/source/reason/action/status/kind/jobId/
@@ -202,9 +207,9 @@ respons LS exhausted (field absent); set jalur continue agy = **alive/inject** (
   parse payload defensif. Dekorator `withNotifications` di-`{...events}` (teruskan method baca; menutup fragilitas
   "method hilang"). Subagent Sonnet + tier-review Opus (firewall + type-soundness). **279/279 test** (+9), build+lint
   bersih. Merender ke stdout lokal (bukan egress).
-- **Sisa M4:** (1) Notifier desktop (node-notifier, gate dep) · (2) **I-17** periodic-probe loop → wiring proximity
-  nyata + refresh usage `acca status` · (3) `acca status` TUI lengkap — **butuh pending TUI (Ink vs blessed) diputus
-  dulu** (owner Ziffan). AC-4/AC-5 belum diklaim (AC-5 notif transisi ✅ engine; AC-4 status usage butuh I-17).
+- **Sisa M4:** (1) **`acca status` usage-view (plain ANSI, TUI decision 11 Jul)** — baca cache `meta.usage_snapshot_<tool>`
+  → render bar `▓▓░` + indikator "perkiraan" + loading/empty/error state (AC-4; sumber data I-17 ✅ siap) · (2) Notifier
+  desktop (node-notifier, gate dep). AC-5 notif transisi ✅ (engine); AC-4 tinggal render.
 
 ## M-remote — Remote-control Telegram (tier A+B+C)
 **Slice (bertahap per tier, satu kanal Telegram — ADR-011):**

@@ -35,15 +35,6 @@ body tanpa PII (G-9). 6 test cabang hijau. **WIRING DITUNDA → I-17:** proximit
 dipakai; probe yang ada hanya jalan saat reset (usedFraction rendah di sana) → butuh loop probe periodik saat
 RUNNING. Basis fitur US-13 (prediksi proaktif, backlog) + indikator proximity di `acca status` (M4 status-UX).
 
-### I-17 — Loop probe usage PERIODIK saat RUNNING (mewiring proximity I-8 + refresh usage `acca status`) [P2, target M4]
-Belum ada mekanisme yang mem-probe usage secara **berkala selama sesi RUNNING** — probe (`adapter.probeUsage`)
-hanya dipicu job `probe` yang di-enqueue **saat LIMIT_HIT** (jatuh tempo di reset_at). Akibatnya: (a) engine
-proximity (I-8) tak punya sumber snapshot proaktif untuk di-surface; (b) `acca status` tak bisa menampilkan
-usage terkini. **Butuh:** slice yang menjadwalkan probe periodik (mis. job `probe` recurring / timer scheduler)
-untuk sesi RUNNING, panggil `proximityNotifications` atas hasilnya → `deliver` via Notifier, dan cache snapshot
-terakhir untuk `acca status`. Serial dgn supervisor (Tier-1: state-machine + egress + PII). Interval default
-di-tune (hemat kuota: probe LS agy murah, CC OAuth = egress). **Sumber:** desain M4 Notifier (10 Jul).
-
 ### I-7 — Skema agy `GetUserStatus` direkonsiliasi ke respons LIVE Ubuntu (5 Jul) [P3] ✅ (live-verify)
 **RESOLVED (5 Jul, live Ubuntu 24.04 / agy 1.0.16):** GetUserStatus ditembak dari sesi agy NYATA ber-PTY → HTTP 200.
 **Koreksi material vs asumsi 4 Jul:** (a) respons **DIBUNGKUS `userStatus`** (bukan flat); (b) identitas model = **`label`**
@@ -71,6 +62,22 @@ nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar i
 ---
 
 ## Tertutup
+
+### I-17 — Loop probe usage PERIODIK saat RUNNING (wiring proximity I-8 + cache usage `acca status`) [P2] ✅ (11 Jul, engine+wiring; live-verify sesi asli → I-15)
+**RESOLVED engine+wiring (autonomous-run 11 Jul, Windows; interval ~2 mnt owner Ziffan).**
+- **Engine `src/daemon/usage-monitor.ts`** (subagent Sonnet, murni-injectable, pola scheduler): `createUsageMonitor`
+  tick periodik → `pickRepresentatives` (dedup per tool, prefer sesi ber-pid utk port-discovery agy) → `probeFor`
+  per tool → `saveSnapshot` + `proximityNotifications`→`deliver`; **isolasi per-tool** (satu tool reject tak
+  hentikan lain, `runOnce` selalu resolve); **re-entry guard** (skip tick bila runOnce in-flight); start idempotent/
+  stop cegah re-arm. FIREWALL G-9: tak menyurface field probe selain via proximity (PII-safe) + snapshot terstruktur.
+- **Wiring supervisor (Opus, Tier-1):** `probeFor`=`adapters[tool].probeUsage?.({sessionPid})` (skip tool tanpa
+  probe), `listRunning`=`listActive` filter RUNNING+alive, `saveSnapshot`=`meta.set('usage_snapshot_<tool>', JSON)`
+  (**tanpa migrasi** — meta key/value), `deliver`=notify sink. **Opt-in `startUsageMonitor`** (default false; `acca
+  daemon` produksi=true) supaya timer monitor tak mengacaukan assertion timer test scheduler lama (**G-32**).
+- **Verifikasi (Opus sendiri):** build+lint bersih, **290/290 test** (+9 usage-monitor +2 wiring: probe→meta cache +
+  proximity→notify, dan monitor-off-default = nol timer/probe). Tier-1 self-review.
+- **Sisa (opportunistik, sekelas I-15):** live-verify daemon NYATA mem-probe sesi CC/agy asli + proximity real
+  ter-emit — butuh sesi hidup, ditangkap saat ada. Konsumen `acca status` baca cache = **slice status-UX** berikut.
 
 ### I-4 — `reset-estimator` clock-time wrap tak DST-aware saat lewat tengah malam [P3] ✅ (11 Jul, `resolveClockTime` DST-correct)
 **RESOLVED (autonomous-run 11 Jul, Windows).** `resolveClockTime` dulu menambah `MS_PER_DAY` mentah ke instant UTC

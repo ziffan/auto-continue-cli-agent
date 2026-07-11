@@ -15,10 +15,15 @@ import { createMetaRepo } from '../store/repositories/meta.js';
 import { createScheduledJobsRepo } from '../store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../store/repositories/sessions.js';
 import { requestInject, type InjectRequestResult } from './inject-continue.js';
-import { withNotifications, type NotificationDeliver } from '../notify/notifier.js';
+import { stderrDeliver, withNotifications, type NotificationDeliver } from '../notify/notifier.js';
 import { createIpcServer } from './ipc-server.js';
 import { reconcileOrphans } from './reconcile.js';
 import { createScheduler, type JobDispatch, type JobResult, type TimerHandle } from './scheduler.js';
+import { createUsageMonitor } from './usage-monitor.js';
+
+/** Interval default probe usage periodik saat ada sesi RUNNING (I-17) — ~2 menit (owner Ziffan,
+ *  11 Jul). Endpoint usage = metadata (tak memakan kuota model); injectable → gampang di-tune. */
+const DEFAULT_USAGE_PROBE_INTERVAL_MS = 120_000;
 
 /** I-6: setTimer produksi yang MEMBUNGKUS rejection. `setTimeout` mengabaikan Promise yang
  *  dikembalikan fn (scheduler mem-pass `runDue` async), jadi tanpa .catch sebuah rejection (mis.
@@ -52,6 +57,12 @@ export interface SupervisorDeps {
   /** M4: sink notifikasi transisi daemon (RESUMED/BLOCKED/…). Default = stderr (journal service).
    *  Di-inject di test (no-op/capture) supaya assertion event tak tercemar noise stderr. */
   notify?: NotificationDeliver;
+  /** I-17: aktifkan loop probe usage periodik (proximity I-8 + cache snapshot utk `acca status`).
+   *  Default **false** — `acca daemon` (produksi) menyetel `true`; test lama tak menyalakannya supaya
+   *  tak menambah timer ke-arm yang mengacaukan assertion timer scheduler mereka. */
+  startUsageMonitor?: boolean;
+  /** I-17: interval probe usage saat RUNNING. Default `DEFAULT_USAGE_PROBE_INTERVAL_MS` (~2 mnt). */
+  usageProbeIntervalMs?: number;
 }
 
 /** Hasil spawn resume-by-id. `sessionId` = id sesi wrapper BARU yang melanjutkan percakapan lama. */
@@ -251,14 +262,42 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
 
   const dispatch: JobDispatch = deps.dispatch ?? realDispatch;
 
+  // Timer di-resolusi sekali → dipakai scheduler DAN usage-monitor (I-17). Di test, `deps.setTimer`
+  // (manual timer) menyetir keduanya; itulah kenapa monitor default OFF (lihat `startUsageMonitor`)
+  // supaya test scheduler lama tak melihat timer ke-arm ekstra.
+  const setTimer = deps.setTimer ?? createDaemonTimer((err) => daemonError(err, 'scheduler_timer'));
+  const clearTimer = deps.clearTimer ?? ((h) => clearTimeout(h));
+
   const scheduler = createScheduler({
     jobs,
     now: deps.now,
     dispatch,
-    setTimer: deps.setTimer ?? createDaemonTimer((err) => daemonError(err, 'scheduler_timer')),
-    clearTimer: deps.clearTimer ?? ((h) => clearTimeout(h)),
+    setTimer,
+    clearTimer,
     onError: (err, job) => daemonError(err, 'dispatch', { jobId: job.id }),
   });
+
+  // I-17 — loop probe usage periodik (opt-in via `startUsageMonitor`; produksi `acca daemon` menyalakan).
+  // Probe PER-TOOL (usage = account-level; pilih satu sesi RUNNING representatif per tool, pakai pid-nya
+  // utk port-discovery agy). Snapshot terbaru → `meta` (JSON per tool, tanpa migrasi) utk `acca status`;
+  // proximity (I-8) → notify sink. FIREWALL (G-9): engine tak menyurface field probe lain (lihat usage-monitor).
+  const usageMonitor = deps.startUsageMonitor
+    ? createUsageMonitor({
+        intervalMs: deps.usageProbeIntervalMs ?? DEFAULT_USAGE_PROBE_INTERVAL_MS,
+        setTimer,
+        clearTimer,
+        listRunning: () =>
+          sessions.listActive().filter((s) => s.status === 'RUNNING' && s.proc_state === 'alive'),
+        probeFor: async (tool, pid) => {
+          const adapter = adapters[tool];
+          if (adapter.probeUsage === undefined) return null;
+          return adapter.probeUsage(pid !== undefined ? { sessionPid: pid } : undefined);
+        },
+        saveSnapshot: (snap) => meta.set(`usage_snapshot_${snap.tool}`, JSON.stringify(snap)),
+        deliver: deps.notify ?? stderrDeliver,
+        onError: (err, ctx) => daemonError(err, 'usage_monitor', { tool: ctx.tool }),
+      })
+    : undefined;
 
   // IPC server dibuat SETELAH scheduler supaya handler `rearm` bisa menutup atas `scheduler`
   // (handler cuma dipanggil setelah start()/listen, jadi tak ada TDZ). `rearm` = celah lintas-proses
@@ -302,9 +341,11 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       // Scheduler diarm SETELAH listen sukses — kalau bind gagal (DaemonAlreadyRunningError)
       // tak boleh ada timer nyasar tertinggal armed dari instance yang gagal start.
       scheduler.start();
+      usageMonitor?.start();
     },
 
     async stop(): Promise<void> {
+      usageMonitor?.stop();
       scheduler.stop();
       await ipcServer.close();
     },
