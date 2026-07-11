@@ -21,11 +21,14 @@
 | TypeScript | 5.x | ADR-003 | no |
 | `node-pty` | 1.1.0 | ADR-003 | **ya** (ConPTY/pty) |
 | `better-sqlite3` | 12.11.1 | ADR-004 | **ya** (node-gyp/prebuild) |
-| `drizzle-orm` | 0.45.2 (opsional) | ADR-004 | no |
-| `grammy` | 1.44.0 | ADR-011 | no (4 dep runtime) |
+| `commander` | 14.0.2 | (M1) | no (0 dep transitif) |
+| `drizzle-orm` | 0.45.2 (opsional, belum dipasang) | ADR-004 | no |
+| `grammy` | 1.44.0 (belum dipasang — M-remote) | ADR-011 | no (4 dep runtime) |
 
-CLI framework (commander/clipanion + Ink) & notifier (node-notifier) = **pin saat dipakai** (M1/M4);
-TUI lib final (Ink vs blessed) = pending (owner Ziffan, sebelum M4).
+**CLI framework = `commander` 14.0.2** (dipilih & di-pin M1; 0 dep transitif). **TUI `acca status` = plain ANSI
+tanpa lib** (keputusan Ziffan 11 Jul — Ink/blessed **ditolak**; render manual `▓/░` + pad kolom, lihat
+ARCHITECTURE §3). **notifier desktop (node-notifier) = masih pending** gate DEPENDENCY-POLICY (dep baru = keputusan
+user; M4 Notifier saat ini sink stderr, tanpa dep).
 
 ## Verifikasi prebuild native (gate M1)
 Dep native **wajib** lolos ini di **Windows 11 & Ubuntu 24.04** sebelum dipakai di `src/`:
@@ -36,7 +39,9 @@ Dep native **wajib** lolos ini di **Windows 11 & Ubuntu 24.04** sebelum dipakai 
 
 **Status node-pty (3 Jul 2026 — Windows):** ✅ `node-pty` 1.1.0 **load & `pty.spawn` via ConPTY** di
 Node 24.18.0 Win **tanpa compiler** (prebuild bundled). Diverifikasi saat probe ADR-010 (GOTCHAS G-8).
-**Sisa:** verifikasi node-pty **+ better-sqlite3** di **Ubuntu 24.04** (weekday) + better-sqlite3 di Windows.
+**✅ Ubuntu 24.04 (5 Jul):** gate native LULUS — `node-pty` **compile-from-source** (prebuild hanya darwin/win32) +
+`better-sqlite3` require+operasi nyata OK (bukan cuma exit 0, G-11); build+lint+test hijau di Linux. Native gate
+lintas-OS **tuntas** untuk kedua dep.
 
 ## npm & lockfile
 - `npm ci` di CI/dua OS (bukan `npm install` yang bisa ubah lock). `engines.node` = 24.x; `.nvmrc` = 24.18.0.
