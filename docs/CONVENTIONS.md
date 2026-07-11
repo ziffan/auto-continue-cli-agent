@@ -49,6 +49,18 @@
   panggilan CLI nyata. Slice M1+ = **atomic vertical** (skill vertical-slice), bukti verifikasi di MILESTONES.
 - Perubahan security-sensitif (auth remote, redaksi, inject PTY, migrasi) → **tier-review** sebelum commit.
 
+## Gate verifikasi (wajib hijau sebelum commit)
+Empat langkah, tak boleh dilewati untuk perubahan kode:
+- `npm run build` — `tsc` emit `src/` + salin aset non-TS (migrasi SQL, G-10). Menangkap error kompilasi produksi.
+- `npm run typecheck` — `tsc -p tsconfig.typecheck.json` (noEmit, `rootDir:"."` mencakup **`src/` + `test/`**). **File
+  `test/` HANYA ter-typecheck di sini** — `build` meng-exclude test, `lint`/vitest tak surface diagnostics struktural
+  (I-19; jangan andalkan lint/vitest untuk regresi tipe di test). `tsconfig.eslint.json` (rootDir `src`) khusus parser
+  eslint, **bukan** untuk typecheck test — jangan pakai `tsc -p` di situ (TS6059).
+- `npm run lint` — eslint (type-aware; `no-floating-promises`, `no-explicit-any`).
+- `npm run test` — `vitest run` (esbuild membuang tipe → verifikasi perilaku, bukan tipe).
+- **`npm run check`** = agregat `typecheck && lint && test` (satu perintah). Jalankan `build` terpisah bila menyentuh
+  aset non-TS / jalur runtime binary. Gate ini **bukan** pengganti `verify`/tier-review untuk slice security-sensitif.
+
 ## Git
 - Branch per milestone. Pesan commit ringkas + prefiks milestone (mis. `M1: …`). Jangan commit `.env`/secret.
 - `.gitattributes` `*.md text eol=lf` bila diff CRLF mengganggu (GOTCHAS G-6) — opsional.
