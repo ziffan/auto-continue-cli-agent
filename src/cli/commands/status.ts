@@ -1,10 +1,84 @@
 import type { Command } from 'commander';
 import { closeDb, openDb } from '../../store/db.js';
 import { createSessionsRepo } from '../../store/repositories/sessions.js';
+import { createMetaRepo } from '../../store/repositories/meta.js';
 import { isProcessAlive } from '../../shared/proc.js';
-import type { Session } from '../../shared/types.js';
+import type { Session, Tool, UsageLimit } from '../../shared/types.js';
 
 const COLUMNS = ['#id', 'tool', 'status', 'proc', 'pid', 'cwd', 'updated'] as const;
+
+// ── Usage-view (M4/AC-4) — helper PURE, unit-testable tanpa DB/commander ──────────────────────
+
+/** `tool` → label tampilan. */
+function toolLabel(tool: Tool): string {
+  return tool === 'claude' ? 'CLAUDE CODE' : 'ANTIGRAVITY CLI';
+}
+
+/** Clamp fraction ke [0,1]; NaN/nilai tak-finite → 0. */
+function clampFraction(fraction: number): number {
+  if (!Number.isFinite(fraction)) return 0;
+  if (fraction < 0) return 0;
+  if (fraction > 1) return 1;
+  return fraction;
+}
+
+/** Umur snapshot relatif dari `nowMs - capturedAt`: <60s → `${s}s`, else → `${m}m`.
+ *  Negatif/tak-finite (clock skew, data rusak) → `?`. */
+function relativeAge(nowMsVal: number, capturedAt: number): string {
+  const diffMs = nowMsVal - capturedAt;
+  if (!Number.isFinite(diffMs) || diffMs < 0) return '?';
+  const diffS = Math.floor(diffMs / 1000);
+  if (diffS < 60) return `${diffS}s`;
+  return `${Math.floor(diffS / 60)}m`;
+}
+
+/** Render bar usage `▓`/`░` sepanjang `width` (default 10) dari `usedFraction` (0..1, di-clamp). */
+export function renderUsageBar(usedFraction: number, width = 10): string {
+  const clamped = clampFraction(usedFraction);
+  const filled = Math.round(clamped * width);
+  return '▓'.repeat(filled) + '░'.repeat(width - filled);
+}
+
+/** Pure: format snapshot usage mentah (raw JSON string dari `meta.usage_snapshot_<tool>`) jadi
+ *  baris-baris teks siap-cetak. Parse DEFENSIF — snapshot rusak/tak dikenal tak boleh crash `status`.
+ *
+ *  FIREWALL (G-9): HANYA `tool`, `limit.kind`, bar usage, dan persen yang dirender. `scope` (bisa
+ *  berisi display-name model) & field lain APA PUN tidak pernah disurface di sini. */
+export function formatUsageLines(tool: Tool, raw: string | undefined, nowMs: number): string[] {
+  const label = toolLabel(tool);
+
+  if (raw === undefined) {
+    return [`${label}  (usage belum ada — jalankan \`acca daemon\`)`];
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [`${label}  (usage tak terbaca)`];
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || !Array.isArray((parsed as { limits?: unknown }).limits)) {
+    return [`${label}  (usage tak terbaca)`];
+  }
+
+  const snapshot = parsed as { limits: UsageLimit[]; capturedAt: number };
+  const age = relativeAge(nowMs, snapshot.capturedAt);
+  const lines = [`${label}  (diperbarui ${age} lalu)`];
+
+  if (snapshot.limits.length === 0) {
+    lines.push('  (tak ada window aktif)');
+    return lines;
+  }
+
+  const kindWidth = Math.max(...snapshot.limits.map((l) => String(l.kind).length));
+  for (const limit of snapshot.limits) {
+    const kind = String(limit.kind).padEnd(kindWidth);
+    const pct = Math.round(clampFraction(limit.usedFraction) * 100);
+    lines.push(`  ${kind}  ${renderUsageBar(limit.usedFraction)}  ${pct}%`);
+  }
+  return lines;
+}
 
 function toRow(session: Session): string[] {
   // Sesi 'alive' yang PID-nya sudah mati = orphan (wrapper mati keras sebelum markExited,
@@ -43,6 +117,14 @@ export function registerStatusCommand(program: Command): void {
     .action(() => {
       const db = openDb();
       try {
+        const meta = createMetaRepo(db);
+        for (const tool of ['claude', 'antigravity'] as const) {
+          for (const line of formatUsageLines(tool, meta.get(`usage_snapshot_${tool}`), Date.now())) {
+            console.log(line);
+          }
+        }
+        console.log('');
+
         const sessions = createSessionsRepo(db);
         const active = sessions.listActive();
 
