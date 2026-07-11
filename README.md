@@ -3,7 +3,10 @@
 Supervisor lokal yang **memonitor usage** dan **melanjutkan otomatis sesi yang terputus karena limit**
 untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 
-> **Status:** Perencanaan (Doc-First — Bagian 2). Belum ada kode fitur. Lihat [`docs/CONTEXT.md`](docs/CONTEXT.md).
+> **Status:** Implementasi berjalan — **loop auto-continue (M1–M3d) + monitoring & UX (M4 inti) selesai & bertes**
+> (deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup / resume-by-id sesi mati; `acca status`
+> usage-view, `acca log`, notifikasi transisi). 306 test hijau, cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
+> M-remote (kontrol Telegram) & M5 (deploy sebagai service) menyusul. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
 ---
 
@@ -26,6 +29,19 @@ Detail (untuk siapa, biaya masalah terukur, batasan) → [`docs/PROJECT.md`](doc
 2. **Detect** — kenali saat sesi berhenti karena limit + baca kapan window reset.
 3. **Auto-continue** — jadwalkan resume (`claude --resume <id>` / padanan Antigravity) begitu limit pulih,
    di working directory yang benar.
+
+## Perintah (yang sudah ada)
+
+Jalankan dari source (`npm install && npm run build`; belum ada paket/installer rilis). Cross-OS (Linux + Windows).
+
+| Perintah | Fungsi |
+|---|---|
+| `acca run -- <claude\|agy> [args…]` | Jalankan CLI target di bawah supervisor (PTY wrapper); catat sesi + deteksi limit. |
+| `acca daemon` | Supervisor daemon: rekonsiliasi orphan, scheduler resume, monitor usage periodik, IPC. |
+| `acca status` | Sesi termonitor + usage best-effort (bar per window, indikator "perkiraan"). |
+| `acca log [sessionId]` | Riwayat event / audit trail (terbaru dulu). |
+
+Belum ada: kontrol Telegram (M-remote) & `resume-now`/`cancel` via remote, deploy sebagai service (M5).
 
 ## Kenapa ini bukan hal sepele
 
@@ -63,8 +79,11 @@ lihat [`docs/RESEARCH.md`](docs/RESEARCH.md) §5b–§5c.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | C4, container map, tech stack |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | ADR (locked / pending) |
 | [`docs/NFR.md`](docs/NFR.md) | Target non-fungsional terukur |
-| [`docs/MILESTONES.md`](docs/MILESTONES.md) | Rencana milestone |
+| [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Threat model remote (Telegram) — gate keamanan M-remote |
+| [`docs/MILESTONES.md`](docs/MILESTONES.md) | Rencana milestone + progres |
+| [`docs/GOTCHAS.md`](docs/GOTCHAS.md) | Jebakan teknis yang sudah dibayar (agy/CC/PTY/store) |
 | [`docs/CONTEXT.md`](docs/CONTEXT.md) | Status proyek (update tiap sesi) |
+| [`docs/ISSUES.md`](docs/ISSUES.md) | Issue terbuka/tertutup + prioritas |
 
 ## Konteks agent
 
