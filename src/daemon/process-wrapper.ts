@@ -1,6 +1,8 @@
+import { writeFileSync, unlinkSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import * as pty from 'node-pty';
 import { adapters } from '../adapters/index.js';
+import { createHookHandler } from './hook-relay.js';
 import { createInjectHandler } from './inject-continue.js';
 import { createSessionIdCapturer } from './session-id-capture.js';
 import { sendCommand } from './ipc-client.js';
@@ -10,7 +12,7 @@ import { scheduleProbeForLimit } from './schedule-reset.js';
 import { foregroundIsAgent } from '../shared/foreground.js';
 import { genUniqueSessionId } from '../shared/ids.js';
 import { createIdleTracker } from '../shared/idle-tracker.js';
-import { runtimeSocketPath, sessionControlSocketPath } from '../shared/paths.js';
+import { runtimeSocketPath, sessionControlSocketPath, sessionHookSettingsPath } from '../shared/paths.js';
 import { nowMs } from '../shared/time.js';
 import { which } from '../shared/which.js';
 import type { Tool } from '../shared/types.js';
@@ -76,6 +78,43 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
   });
   deps.events.append({ session_id: id, type: 'status_change', payload: { to: 'RUNNING' } });
 
+  const adapter = adapters[spec.tool];
+
+  // I-23 — pasang hook supervisor CC (StopFailure = deteksi limit PRIMER ADR-001/§7; SessionStart =
+  // sumber `cli_session_id` CC I-20/R2b) via `--settings <file>` terisolasi. Forwarder = perintah
+  // internal `acca __hook <id>` (exec-form: node + entry acca INI, tak bergantung PATH). agy →
+  // `supervisorHooks` undefined → dilewati. **Non-fatal:** gagal tulis settings → sesi tetap jalan
+  // tanpa hook (fallback deteksi = output-scrape `limit-watcher`).
+  let spawnArgs = spec.args;
+  let hookSettingsPath: string | undefined;
+  const candidateSettingsPath = sessionHookSettingsPath(id);
+  const hookPlan = adapter.supervisorHooks?.({
+    sessionId: id,
+    forwarder: { command: process.execPath, args: [process.argv[1] ?? '', '__hook', id] },
+    settingsPath: candidateSettingsPath,
+  });
+  if (hookPlan) {
+    try {
+      writeFileSync(candidateSettingsPath, hookPlan.settingsContent);
+      hookSettingsPath = candidateSettingsPath;
+      spawnArgs = [...hookPlan.extraArgs, ...spec.args];
+    } catch (err) {
+      deps.events.append({
+        session_id: id,
+        type: 'control_socket_error',
+        payload: { error: `hook_settings: ${err instanceof Error ? err.message : String(err)}` },
+      });
+    }
+  }
+  const cleanupHookSettings = (): void => {
+    if (hookSettingsPath === undefined) return;
+    try {
+      unlinkSync(hookSettingsPath);
+    } catch {
+      // File settings sementara sudah hilang / tak bisa dihapus → non-fatal (bukan state/transcript).
+    }
+  };
+
   const cols = process.stdout.columns ?? 80;
   const rows = process.stdout.rows ?? 24;
 
@@ -88,7 +127,7 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
     if (resolvedFile === null) {
       throw new Error(`Executable tak ditemukan di PATH: ${spec.file}`);
     }
-    ptyProcess = pty.spawn(resolvedFile, spec.args, {
+    ptyProcess = pty.spawn(resolvedFile, spawnArgs, {
       name: 'xterm-256color',
       cols,
       rows,
@@ -97,6 +136,7 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
     });
   } catch (err) {
     // Kegagalan sinkron (mis. binary tak ditemukan) → sesi tak boleh tersisa RUNNING selamanya.
+    cleanupHookSettings();
     deps.sessions.markFailed(id);
     deps.events.append({
       session_id: id,
@@ -124,7 +164,6 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
   // (paruh korektness R2a sudah pakai `cli_session_id`; ini yang MENGISINYA). Adapter yang tak
   // memakai jalur output (CC: sumber id = hook `SessionStart`, I-23) → `captureSessionId` undefined →
   // capturer tak dipasang. Engine murni; wrapper (penulis lifecycle sesinya, ADR-017) yang menulis DB.
-  const adapter = adapters[spec.tool];
   const idCapturer = adapter.captureSessionId
     ? createSessionIdCapturer({
         // Panggil via objek adapter (bukan ekstrak referensi) — captureSessionId murni, tapi memanggil
@@ -187,6 +226,15 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
         watcher.unlatch();
       },
     }),
+    // I-23 — kanal DATA hook CC (forwarder `acca __hook`). Deteksi limit PRIMER (StopFailure→feedSignal)
+    // + capture cli_session_id (SessionStart). Injection firewall ADR-013: lihat `daemon/hook-relay.ts`.
+    hook: createHookHandler({
+      feedStopFailure: (error) => watcher.feedSignal({ type: 'stopfailure', error }),
+      captureCcSessionId: (ccSessionId) => {
+        deps.sessions.setCliSessionId(id, ccSessionId);
+        deps.events.append({ session_id: id, type: 'cli_session_id_captured', payload: { source: 'hook_sessionstart' } });
+      },
+    }),
   });
   controlServer
     .listen(controlPath)
@@ -239,6 +287,7 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
       dataSub.dispose();
       restoreStdin?.();
       void controlServer.close();
+      cleanupHookSettings();
       deps.sessions.markExited(id);
       deps.events.append({
         session_id: id,

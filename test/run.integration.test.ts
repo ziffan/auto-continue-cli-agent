@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -8,6 +8,7 @@ import { createEventsRepo } from '../src/store/repositories/events.js';
 import { createScheduledJobsRepo } from '../src/store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../src/store/repositories/sessions.js';
 import { runSession } from '../src/daemon/process-wrapper.js';
+import { sessionHookSettingsPath } from '../src/shared/paths.js';
 
 const tempDir = join(tmpdir(), `acca-run-test-${randomBytes(4).toString('hex')}`);
 process.env.ACCA_DATA_DIR = tempDir;
@@ -33,12 +34,15 @@ describe('runSession integration', () => {
       const jobs = createScheduledJobsRepo(db);
 
       // Non-TTY under vitest → raw mode is skipped automatically inside runSession.
+      // tool 'antigravity' = tanpa supervisorHooks → args spawn tak disisipi `--settings` (yang
+      // membuat node stand-in menolak); test lifecycle ini tool-agnostik. Jalur hook CC diuji
+      // terpisah di 'writes an isolated hook settings file for claude…' di bawah.
       const { sessionId, waitForExit } = runSession(
         {
           file: process.execPath,
           args: ['-e', 'process.exit(0)'],
           cwd: process.cwd(),
-          tool: 'claude',
+          tool: 'antigravity',
         },
         { sessions, events, jobs },
       );
@@ -137,5 +141,30 @@ describe('runSession integration', () => {
       .listBySession(sessionId, 50)
       .some((e) => e.type === 'cli_session_id_captured');
     expect(captured).toBe(true);
+  }, 10_000);
+
+  it('I-23: writes an isolated hook settings file for claude and removes it on exit', async () => {
+    const sessions = createSessionsRepo(db);
+    const events = createEventsRepo(db);
+    const jobs = createScheduledJobsRepo(db);
+
+    // tool 'claude' → wrapper menulis settings hook + menyisipkan `--settings <path>`. node stand-in
+    // menolak flag itu (exit≠0) — TAK relevan; yang diuji = lifecycle FILE settings (ditulis→dihapus).
+    const { sessionId, waitForExit } = runSession(
+      { file: process.execPath, args: ['-e', 'process.exit(0)'], cwd: process.cwd(), tool: 'claude' },
+      { sessions, events, jobs },
+    );
+
+    // Ditulis SINKRON sebelum spawn: hook StopFailure + SessionStart menunjuk `acca __hook <id>`.
+    const settingsPath = sessionHookSettingsPath(sessionId);
+    expect(existsSync(settingsPath)).toBe(true);
+    const content = JSON.parse(readFileSync(settingsPath, 'utf8')) as {
+      hooks: { StopFailure: { hooks: { args: string[] }[] }[]; SessionStart: unknown[] };
+    };
+    expect(content.hooks.SessionStart).toBeDefined();
+    expect(content.hooks.StopFailure[0]?.hooks[0]?.args).toEqual([process.argv[1] ?? '', '__hook', sessionId]);
+
+    await waitForExit;
+    expect(existsSync(settingsPath)).toBe(false); // dibersihkan saat exit (best-effort unlink)
   }, 10_000);
 });
