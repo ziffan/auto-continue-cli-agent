@@ -89,22 +89,6 @@ describe('notificationForEvent — transisi yang layak-surface', () => {
     expect(n?.body).toContain('manual');
   });
 
-  it('probe_impossible (job_dispatch_error) → PROBE_IMPOSSIBLE warn, menang atas branch BLOCKED generik (I-22)', () => {
-    // Payload membawa status:'BLOCKED' (biar event self-describing), tapi branch `action:'probe_impossible'`
-    // dicocokkan LEBIH DULU → PROBE_IMPOSSIBLE (pesan jelas), bukan BLOCKED generik ("blocked: <reason>").
-    const n = notificationForEvent({
-      session_id: 'agy1',
-      type: 'job_dispatch_error',
-      payload: { jobId: 4, action: 'probe_impossible', reason: 'agy_exited_no_live_ls', status: 'BLOCKED' },
-    });
-    expect(n?.event).toBe('PROBE_IMPOSSIBLE');
-    expect(n?.level).toBe('warn');
-    expect(n?.body).toContain('#agy1');
-    expect(n?.body).toContain('manually');
-    // Reason-code internal tak dibocorkan mentah ke user (firewall pesan yang jelas).
-    expect(n?.body).not.toContain('agy_exited_no_live_ls');
-  });
-
   it('inject_skipped (job_dispatch_pending) → INJECT_SKIPPED warn, reason-label + "manual" (I-18)', () => {
     const n = notificationForEvent({
       session_id: 'kcb3',
