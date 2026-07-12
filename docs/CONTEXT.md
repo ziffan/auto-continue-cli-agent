@@ -12,7 +12,7 @@
   4 P1 di jalur resume/continue lolos 308 test (seam actuation di-stub). **Ditutup:** A-2 (daemon crash saat spawn gagal, R1) +
   A-1 paruh korektness (resume pakai `cli_session_id`, absen→BLOCKED, R2a) + **R3 (I-21) siklus-limit-2 (12 Jul)** +
   **R4 (I-22 agy-exited) ✅ PENUH via ADR-019 (12 Jul, pivot dari ADR-018 — optimistic resume + detect)** +
-  **R6 (I-23) ✅** + I-20 (agy+CC) ✅. **Belum:** I-25 (R7 per-adapter gate). **Gate keluar sebelum M-remote:**
+  **R6 (I-23) ✅** + I-20 (agy+CC) ✅ + **R7 (I-25 per-adapter gate) ✅ (12 Jul)**. **Gate keluar sebelum M-remote:**
   R1–R4 ✅ + R6 ✅ + **HANYA I-15 live-verify actuation tersisa** (LULUS CLI nyata; HARD-STOP unattended — butuh user hadir).
   Sisanya di bawah masih akurat. M3d tertutup penuh. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
   `runSession` direlokasi ke `daemon/process-wrapper.ts` (layer inversion ditutup) + resume-chain link;
@@ -20,6 +20,36 @@
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+- **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + 4 slice autonomous-safe) — **idle-tracker-agy + I-29 + notifier cleanup + I-25/R7 DITUTUP → gate keluar M3e tersisa HANYA I-15 live-verify actuation.**
+  Sesi buka `/session-start` (proof-of-understanding lengkap) → user pilih rangkaian slice autonomous-safe. **Semua Opus inline Tier-1, hijau (386 test, +17 sesi ini, 2 skip POSIX):**
+  **(1) idle-tracker-agy (`f921797`, I-15 partial):** `BUSY_MARKERS.antigravity = /esc to cancel/i` di `shared/idle-tracker.ts`
+  (marker footer agy 1.1.1, G-33 — HANYA `esc to cancel`; `Generating`/`Working` terselang spinner braille `W⣻ Wor` di stream
+  NYATA `agy-raw-stream.log` → tak andal sbg regex, sengaja tak dipakai). Wiring inject sudah tool-generik (I-13,
+  `process-wrapper.ts:160`+`257` pakai `spec.tool`) → agy kini ter-gate OTOMATIS (busy `esc to cancel` dalam quietMs →
+  `proc_not_idle` blokir; idle → lolos). Firewall utuh (marker = footer tetap, nol konten→keystroke; token tetap hardcoded
+  wrapper). **+7 test** (6 agy idle-tracker + 2 komposisi idle-tracker→inject persis `process-wrapper`; −1 stale "undefined").
+  **Sisa = HANYA live-verify gating PTY nyata (I-15, butuh user + limit).**
+  **(2) I-29 (`f7be4bd`):** `acca run claude -p …` dulu → `error: unknown option '-p'` (commander parse `-p` sbg opsi `run`).
+  Fix: `program.enablePositionalOptions()` + `run.passThroughOptions()` → flag setelah `<tool>` diteruskan apa adanya ke `args`,
+  tak butuh `--`. Back-compat: passThrough tak lagi menelan `--` pemisah (terbawa literal) → action buang **satu** `--` di depan
+  (workaround lama `acca run claude -- -p x` tetap setara & `--` tak diteruskan ke target). Eksekutor dipisah `runExecutor`
+  (injectable) → arg-parsing teruji tanpa PTY. **+5 test**. I-29 → Tertutup.
+  **(3) Notifier cleanup (`a82a372`):** mapping `PROBE_IMPOSSIBLE` = dead-code sejak ADR-019 (supervisor emit
+  `optimistic_resume_agy_exited`, nol pemanggil `probe_impossible` di produksi) → hapus branch + union member + test tak-terjangkau.
+  **−1 test.**
+  **(4) I-25/R7 (`314c7f0`):** gate resume `every(usedFraction<1)` terlalu ketat utk CC (limit model-scoped tak-dipakai — mis.
+  weekly Opus habis, sesi jalan Sonnet — memblokir resume selamanya). Keputusan "usage available" pindah ke adapter
+  (`Adapter.isUsageAvailable?(snapshot)`; supervisor fallback `?? every(<1)`). **CC override** `claudeUsageAvailable`
+  (`adapters/usage.ts`): gate HANYA window mengikat — global (tanpa `scope`: `session`/`weekly_all`/`five_hour`/`seven_day`) +
+  scoped `isActive===true`; scoped non-aktif diabaikan; tak-teridentifikasi → fallback strict `every()` (sisi aman). **agy TAK
+  override** → default `every(<1)` (dual-limit per grup, G-31 — perilaku agy TAK berubah). **+6 test** (5 helper + 1 dispatch
+  regresi CC scoped-unused→enqueue-resume). Tier-1 self-review PASS (arah lebih permisif CC → worst-case resume-lalu-re-detect
+  bounded, sekelas ADR-019). Live-verify exhaustion nyata = opportunistik (I-15-class); shape probe CC sudah nyata (smoke I-17).
+  **Docs:** ISSUES (I-29/I-25 → Tertutup, I-15 item-b impl ✅, I-22 catatan cleanup ✅), GOTCHAS G-33 (impl), DECISIONS Change
+  Log, CLAUDE.md §2/README test count 369→386, CONTEXT (ini). **`main` ahead origin 4 commit — BELUM di-push (nunggu perintah).**
+  **Next konkret:** (1) **I-15 live-verify actuation** inject/resume asli saat limit+reset align (HARD-STOP unattended — butuh
+  user hadir) = satu-satunya gate M3e tersisa; (2) push `main` ke origin; (3) gate keluar hijau (kecuali I-15 opportunistik) →
+  **M-remote tier A** (Notifier→Telegram) ATAU **M5** daemon-as-service.
 - **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + R4 slice 2 live-verify) — **ADR-018 di-SUPERSEDE ADR-019: premis probe OAuth standalone terbukti KELIRU (live) → R4/I-22 ditutup via optimistic resume + detect.**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → user pilih fokus **R4 slice 2 (probe OAuth agy) + I-15**.
   **Grounding live (otorisasi user, R4 slice 2):** creds `~/.gemini/oauth_creds.json` = login **gemini-cli** (token disk

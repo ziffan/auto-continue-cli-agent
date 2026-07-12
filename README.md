@@ -8,7 +8,8 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 > usage-view, `acca log`, notifikasi transisi). Sedang di **M3e — koreksi loop** (audit 11 Jul menemukan 4 P1 di jalur
 > resume/continue; R1–R4 + R6/I-23 [deteksi limit CC primer + capture id CC, live-verified 2.1.207] ✅ — **R4 ditutup
 > via ADR-019 optimistic resume, pivot dari ADR-018 setelah live-verify buktikan probe OAuth baca pool kuota salah**;
-> sisa gate = live-verify actuation inject/resume). 369 test hijau (2 skip POSIX-only
+> R7/I-25 [gate resume per-adapter] + idle-tracker-agy ✅; **sisa gate = HANYA live-verify actuation inject/resume**).
+> 386 test hijau (2 skip POSIX-only
 > di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan; M-remote (kontrol Telegram) & M5 (deploy sebagai
 > service) menyusul setelah gate M3e hijau. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
