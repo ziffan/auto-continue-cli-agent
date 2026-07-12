@@ -12,6 +12,7 @@ import {
   requestInject,
 } from '../src/daemon/inject-continue.js';
 import { createIpcServer, type IpcServerHandle } from '../src/daemon/ipc-server.js';
+import { createIdleTracker } from '../src/shared/idle-tracker.js';
 
 function uniqueSocketPath(): string {
   const rand = randomBytes(4).toString('hex');
@@ -72,7 +73,7 @@ describe('createInjectHandler (wrapper side)', () => {
       isAlive: () => true,
       write: (t) => writes.push(t),
       foregroundIsAgent: () => undefined, // mis. Windows / /proc tak terbaca
-      idle: () => undefined, // mis. agy (penanda belum diverifikasi)
+      idle: () => undefined, // mis. tool tanpa penanda busy diketahui
     });
 
     expect(handler()).toEqual({ injected: true, reason: null });
@@ -114,6 +115,48 @@ describe('createInjectHandler (wrapper side)', () => {
     expect(writes).toEqual([CONTINUE_TOKEN]);
     expect(writes.join('')).not.toContain('rm -rf');
     expect(writes.join('')).not.toContain('reboot');
+  });
+});
+
+// Komposisi persis yang dilakukan process-wrapper untuk agy (I-13 wiring + G-33 marker): stream output
+// PTY → idle-tracker(antigravity) → gating inject-handler. Membuktikan penambahan marker "esc to cancel"
+// benar-benar meng-gate inject agy (mid-turn diblokir, idle-di-prompt lolos). Live-verify PTY nyata = I-15.
+describe('agy inject gating end-to-end (idle-tracker "esc to cancel" → inject handler)', () => {
+  function fakeClock(start = 1_000_000) {
+    let t = start;
+    return { now: () => t, advance: (ms: number) => (t += ms) };
+  }
+
+  it('BLOCKS inject while agy footer shows "esc to cancel" (mid-generate)', () => {
+    const clk = fakeClock();
+    const idleTracker = createIdleTracker({ tool: 'antigravity', now: clk.now, quietMs: 1000 });
+    const write = vi.fn();
+    const handler = createInjectHandler({ isAlive: () => true, write, idle: () => idleTracker.isIdle() });
+
+    idleTracker.feed('⣾ Working...\r\n────────\r\nesc to cancel     ');
+
+    expect(handler()).toEqual({ injected: false, reason: 'proc_not_idle' });
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('ALLOWS inject once the footer returns idle ("? for shortcuts", quiet window elapsed)', () => {
+    const clk = fakeClock();
+    const idleTracker = createIdleTracker({ tool: 'antigravity', now: clk.now, quietMs: 1000 });
+    const writes: string[] = [];
+    const handler = createInjectHandler({
+      isAlive: () => true,
+      write: (t) => writes.push(t),
+      idle: () => idleTracker.isIdle(),
+    });
+
+    idleTracker.feed('esc to cancel'); // sempat busy
+    // Turn selesai: output jawaban mengalir (>64 char → flush marker lama dari carry) SEBELUM jam maju.
+    idleTracker.feed('Here is the finished answer spanning well over sixty-four characters to flush the carry.');
+    clk.advance(1000); // jendela sunyi berlalu → idle
+    idleTracker.feed('────────\r\n? for shortcuts\r\n'); // footer idle, carry bersih → tak re-trigger
+
+    expect(handler()).toEqual({ injected: true, reason: null });
+    expect(writes).toEqual([CONTINUE_TOKEN]);
   });
 });
 

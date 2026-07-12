@@ -409,9 +409,15 @@ braille (`⣾⣷⣯⣟⡿⢿⣻⣽`) + teks status **`Generating...`** / **`Work
 Scope...`) + ringkasan `▸ Thought for Ns, N tokens`. Saat **idle di prompt**: footer `? for shortcuts` + `>`, **tanpa**
 `esc to cancel`/spinner. **Guna:** `idle-tracker` agy (sekarang `undefined`) bisa dibuat dgn MENIRU logika Claude di
 `shared/idle-tracker.ts` — busy = jendela-sunyi penanda `esc to cancel` (atau `Generating`/`Working`) hadir; idle = absen +
-footer shortcuts. Marker `esc to cancel` = paling stabil (teks tetap, bukan spinner yang beranimasi). **Implementasi
-idle-tracker-agy = follow-up I-15** (butuh live-verify gating inject bareng actuation pasca-reset — jangan ✅ tanpa smoke).
+footer shortcuts. Marker `esc to cancel` = paling stabil (teks tetap, bukan spinner yang beranimasi).
 **Sumber:** I-15 Sub-task B live 12 Jul (scratchpad `agy-idle-marker-capture.mjs` + `agy-raw-stream.log`).
+**✅ idle-tracker-agy DIIMPLEMENTASI (12 Jul, sesi berikut):** `BUSY_MARKERS.antigravity = /esc to cancel/i` di
+`shared/idle-tracker.ts` (HANYA `esc to cancel` — `Generating`/`Working` terbukti terselang spinner braille di tengah
+kata `W⣻  Wor` di stream nyata → tak andal sbg regex, sengaja tak dipakai). Wiring inject sudah tool-generik (I-13,
+`process-wrapper.ts:160`+`257` pakai `spec.tool`) → agy kini ter-gate otomatis (mid-turn `esc to cancel` → `proc_not_idle`
+blokir; idle → lolos). **+7 test** (6 idle-tracker agy + 2 komposisi idle-tracker→inject; −1 stale "undefined"). **Sisa =
+HANYA live-verify gating PTY nyata (I-15, butuh user + limit).** Catatan carry: marker dalam 64-char carry ikut ter-match
+di feed berikutnya (harmless, errs-safe). **Sumber:** idle-tracker-agy slice 12 Jul.
 
 ---
 
