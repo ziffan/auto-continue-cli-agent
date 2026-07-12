@@ -43,9 +43,16 @@
   **Docs:** DECISIONS (ADR-018→Superseded, **ADR-019 baru**, header/Pending/Change Log), NFR §Security egress (−2 host),
   GOTCHAS **G-38** + anotasi G-35, ISSUES (I-22 RESOLVED + gate header), MILESTONES M3e R4 + gate-exit, CONTEXT (ini).
   **Sisa gate M3e = HANYA I-15 live-verify actuation** (inject `continue` pasca-reset + resume nyata — butuh limit asli + user).
-  **Next (Sub-task B, sesi ini):** I-15 — user tawarkan burn gemini (kini gemini-5h 7.9%) untuk verifikasi actuation; catatan:
-  inject **pasca-reset** butuh tunggu reset ~4j (gemini-5h reset 14:22Z) → yang bisa ditangkap sesi ini = deteksi limit fresh +
-  penanda idle/busy agy. **`main` belum di-commit** (perubahan sesi ini). **Catatan minor:** notifier `PROBE_IMPOSSIBLE` kini tak ter-emit (kandidat cleanup).
+  **Sub-task B ✅ (I-15 partial, live 12 Jul, otorisasi user):** capture node-pty terkontrol agy 1.1.1 → **penanda BUSY agy
+  mid-turn DITANGKAP** = **`esc to cancel`** (analog `esc to interrupt` Claude) + spinner braille + `Generating...`/`Working...`
+  (idle = `? for shortcuts` tanpa itu; G-33 diupdate) → **idle-tracker-agy siap diimplement** (tiru `shared/idle-tracker.ts`).
+  Burn minimal (1 generate Gemini 3.5 Flash, tak tembus limit — tak perlu utk temuan marker). **`main` di-commit `d64e853`
+  (ADR-019) + commit docs Sub-task B; BELUM di-push ke origin.** **Sisa I-15 (butuh reset + user):** (a) impl idle-tracker-agy +
+  live-verify gating inject; (b) inject `continue` pasca-reset benar melanjutkan turn (agy+CC); (c) CC limit asli. **Catatan
+  minor:** notifier `PROBE_IMPOSSIBLE` kini tak ter-emit (kandidat cleanup).
+  **Next konkret sesi berikutnya:** (1) idle-tracker-agy (`shared/idle-tracker.ts` + agy busy marker `esc to cancel`, unit-test)
+  → wire ke gating inject agy (I-13 sudah wire Claude); (2) I-15 live-verify actuation saat limit+reset align (butuh user);
+  (3) I-25 (R7 per-adapter `isUsageAvailable`); (4) push `main` ke origin.
 - **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + I-23) — **R6/I-23 DITUTUP + LIVE-VERIFIED CC 2.1.207: hook StopFailure (deteksi limit CC PRIMER) + SessionStart (capture `cli_session_id` CC) → paruh CC I-20/R2b TUTUP → I-20 TUNTAS (agy+CC).**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → user pilih fokus **I-23** + otorisasi live-verify CC. **Slice
   (Opus inline Tier-1, IPC trust-boundary + injection firewall):** ADR-001/§7 menetapkan hook `StopFailure` sbg deteksi limit

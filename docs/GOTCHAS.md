@@ -403,6 +403,15 @@ terkonfirmasi**. `agy --help` 1.1.1: `--mode` = `accept-edits`/`plan` (bukan `re
 pasca-limit: agy balik ke **input box normal** (`>` + footer `? for shortcuts`), **bukan** review-pause. Idle marker agy
 = footer `? for shortcuts` (mid-turn busy marker belum ditangkap presisi — kandidat idle-tracker agy, sisa I-15).
 `--mode default` yang entri ini usulkan **tak ada** di 1.1.1. **Sumber:** I-15 live-verify 11 Jul.
+**✅ BUSY MARKER agy DITANGKAP (live-verify 12 Jul, agy 1.1.1, otorisasi user — capture node-pty terkontrol):** saat agy
+**generate**, footer menampilkan **`esc to cancel`** — **analog persis `esc to interrupt` milik Claude** — bersama spinner
+braille (`⣾⣷⣯⣟⡿⢿⣻⣽`) + teks status **`Generating...`** / **`Working...`** / task-spesifik (mis. `Considering Essay
+Scope...`) + ringkasan `▸ Thought for Ns, N tokens`. Saat **idle di prompt**: footer `? for shortcuts` + `>`, **tanpa**
+`esc to cancel`/spinner. **Guna:** `idle-tracker` agy (sekarang `undefined`) bisa dibuat dgn MENIRU logika Claude di
+`shared/idle-tracker.ts` — busy = jendela-sunyi penanda `esc to cancel` (atau `Generating`/`Working`) hadir; idle = absen +
+footer shortcuts. Marker `esc to cancel` = paling stabil (teks tetap, bukan spinner yang beranimasi). **Implementasi
+idle-tracker-agy = follow-up I-15** (butuh live-verify gating inject bareng actuation pasca-reset — jangan ✅ tanpa smoke).
+**Sumber:** I-15 Sub-task B live 12 Jul (scratchpad `agy-idle-marker-capture.mjs` + `agy-raw-stream.log`).
 
 ---
 
