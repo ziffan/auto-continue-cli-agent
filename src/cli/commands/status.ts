@@ -80,15 +80,24 @@ export function formatUsageLines(tool: Tool, raw: string | undefined, nowMs: num
   return lines;
 }
 
+/** Nama hari ringkas (lokal) untuk sel reset jangka-jauh — konsisten wireframe §5 ("resume ~Sen"). */
+const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'] as const;
+const MS_PER_DAY = 86_400_000;
+
 /** I-24 (audit A-6): format sel `reset` tabel sesi — `HH:MM` waktu LOKAL + sumber dalam kurung.
  *  `resetAt === null` → sesi belum punya jadwal reset diketahui. Pakai getHours/getMinutes LOKAL
- *  (bukan toISOString UTC) karena wireframe §5 menampilkan waktu lokal ("resume 03:15 WIB"). */
-export function formatResetCell(resetAt: number | null, resetSource: string | null): string {
+ *  (bukan toISOString UTC) karena wireframe §5 menampilkan waktu lokal ("resume 03:15 WIB").
+ *
+ *  B-2 (audit followup 12 Jul): reset window MINGGUAN (agy weekly / CC seven_day) bisa 6 hari lagi —
+ *  `HH:MM` saja terbaca "malam ini" & MENYESATKAN. Bila reset > 24 jam dari sekarang → sertakan nama
+ *  hari lokal (`Sen 03:15`) supaya jelas ini bukan hari ini; ≤ 24 jam tetap `HH:MM` (ringkas). */
+export function formatResetCell(resetAt: number | null, resetSource: string | null, nowMs: number): string {
   if (resetAt === null) return '-';
   const d = new Date(resetAt);
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
-  const time = `${hh}:${mm}`;
+  const hhmm = `${hh}:${mm}`;
+  const time = resetAt - nowMs > MS_PER_DAY ? `${DAY_NAMES[d.getDay()]} ${hhmm}` : hhmm;
   return resetSource === null ? time : `${time} (${resetSource})`;
 }
 
@@ -106,7 +115,7 @@ export function formatDaemonLiveness(
   return `daemon: MATI (heartbeat ${age} lalu, pid ${hb.pid} tak hidup)`;
 }
 
-function toRow(session: Session): string[] {
+function toRow(session: Session, nowMs: number): string[] {
   // Sesi 'alive' yang PID-nya sudah mati = orphan (wrapper mati keras sebelum markExited,
   // ISSUES I-1/I-3). Tandai di tampilan; jangan menulis DB (status = read-only).
   const stale =
@@ -117,7 +126,7 @@ function toRow(session: Session): string[] {
     idCell,
     session.tool,
     stale ? `${session.status} (basi)` : session.status,
-    formatResetCell(session.reset_at, session.reset_source),
+    formatResetCell(session.reset_at, session.reset_source, nowMs),
     session.proc_state,
     session.pid === null ? '-' : String(session.pid),
     session.cwd,
@@ -163,7 +172,8 @@ export function registerStatusCommand(program: Command): void {
           return;
         }
 
-        console.log(renderTable(active.map(toRow)));
+        const now = Date.now();
+        console.log(renderTable(active.map((s) => toRow(s, now))));
       } finally {
         closeDb(db);
       }

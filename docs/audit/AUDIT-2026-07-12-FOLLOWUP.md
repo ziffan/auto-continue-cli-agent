@@ -132,3 +132,4 @@ M-remote tetap DITUNDA sampai tabel di atas hijau (kecuali I-26 yang memang jata
 | Tanggal | Perubahan | Oleh |
 |---|---|---|
 | 2026-07-12 | Re-audit pasca-remedi: 9 temuan tertutup penuh, 2 sebagian, 4 terjadwal; 3 temuan baru (B-1 P2, B-2/B-3 P3) + usulan urutan lanjutan. Catatan artefak verifikasi mount. | Claude (audit session) × Ziffan |
+| 2026-07-12 | **B-1 (dispatch-terminal-cap) + B-2 (reset weekly) DIREMEDIASI** (`supervisor.ts`/`status.ts`/`sessions.archive`, +6 test → 346). B-3 tetap terbuka (gabung I-15/R2b, butuh live-verify). Detail: ISSUES B-1/B-2 Tertutup + CONTEXT. | Opus (impl session) × Ziffan |

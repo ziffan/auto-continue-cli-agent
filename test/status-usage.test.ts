@@ -119,24 +119,41 @@ describe('formatUsageLines', () => {
 // ── I-24 (audit A-6): kolom reset + liveness daemon ──────────────────────────────────────────
 
 describe('formatResetCell', () => {
+  // Reset ≤ 24 jam dari `now` (kasus window 5-jam) → HH:MM saja. `now` dipatok tepat sebelum reset.
+  const near = (epoch: number): number => epoch - 60_000;
+
   it('null → "-"', () => {
-    expect(formatResetCell(null, null)).toBe('-');
-    expect(formatResetCell(null, 'exact')).toBe('-');
+    expect(formatResetCell(null, null, 0)).toBe('-');
+    expect(formatResetCell(null, 'exact', 0)).toBe('-');
   });
 
-  it('resetAt + source → "HH:MM (source)"', () => {
+  it('resetAt + source (≤24 jam) → "HH:MM (source)"', () => {
     const epoch = new Date(2026, 6, 12, 3, 15).getTime();
-    expect(formatResetCell(epoch, 'exact')).toBe('03:15 (exact)');
+    expect(formatResetCell(epoch, 'exact', near(epoch))).toBe('03:15 (exact)');
   });
 
-  it('resetAt tanpa source → "HH:MM" saja', () => {
+  it('resetAt tanpa source (≤24 jam) → "HH:MM" saja', () => {
     const epoch = new Date(2026, 6, 12, 3, 15).getTime();
-    expect(formatResetCell(epoch, null)).toBe('03:15');
+    expect(formatResetCell(epoch, null, near(epoch))).toBe('03:15');
   });
 
   it('pad 2 digit utk jam/menit satu digit', () => {
     const epoch = new Date(2026, 6, 12, 9, 5).getTime();
-    expect(formatResetCell(epoch, 'heuristic')).toBe('09:05 (heuristic)');
+    expect(formatResetCell(epoch, 'heuristic', near(epoch))).toBe('09:05 (heuristic)');
+  });
+
+  // B-2 (audit followup): reset mingguan (>24 jam) harus sertakan nama hari — bukan "HH:MM" telanjang
+  // yang terbaca "malam ini". 12 Jul 2026 = Minggu → +6 hari = 18 Jul = Sabtu ('Sab').
+  it('resetAt > 24 jam → sertakan nama hari lokal', () => {
+    const now = new Date(2026, 6, 12, 10, 0).getTime();
+    const sixDaysLater = new Date(2026, 6, 18, 3, 15).getTime();
+    expect(formatResetCell(sixDaysLater, 'exact', now)).toBe('Sab 03:15 (exact)');
+  });
+
+  it('tepat di bawah 24 jam → tetap HH:MM (batas)', () => {
+    const now = new Date(2026, 6, 12, 10, 0).getTime();
+    const almostDay = now + 86_400_000; // tepat 24 jam → BUKAN > 24 jam → HH:MM
+    expect(formatResetCell(almostDay, null, now)).toBe('10:00');
   });
 });
 
