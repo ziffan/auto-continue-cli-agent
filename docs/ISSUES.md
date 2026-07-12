@@ -117,8 +117,10 @@ startup → jalur resume-by-id lebih mulus di 2.1.207.
 - **Resume-by-id (paruh load):** `agy --conversation=<id>` **memuat percakapan lama utuh** di sesi baru, hidup di prompt
   (G-36). Sumber id andal = cmd yang agy CETAK saat exit.
 - **SISA (genuinely butuh tunggu reset / sesi asli):** (a) **inject `continue` pasca-reset benar melanjutkan turn** —
-  butuh 3p-5h reset (~5 jam) lalu inject; belum. (b) **penanda idle/foreground agy mid-turn** (busy marker saat generate)
-  belum ditangkap presisi (idle-tracker agy masih `undefined`). (c) **CC** (`claude`) limit asli + inject/resume tetap
+  butuh 3p-5h reset (~5 jam) lalu inject; belum. (b) **penanda busy agy mid-turn ✅ DITANGKAP (12 Jul, Sub-task B):** agy
+  saat generate tampilkan **`esc to cancel`** (analog `esc to interrupt` Claude) + spinner + `Generating...`/`Working...`
+  (G-33) → **idle-tracker-agy siap diimplement** (tiru `shared/idle-tracker.ts`); impl + live-verify gating = sisa I-15.
+  (c) **CC** (`claude`) limit asli + inject/resume tetap
   opportunistik (belum). **Efek:** gate keluar I-15 untuk **deteksi+resume-load agy** = LULUS; sisa = actuation inject
   pasca-reset (agy+CC). **Sumber:** I-15 live-verify 11 Jul (scratchpad `agy-*.mjs`).
 
