@@ -90,6 +90,11 @@ export interface Adapter {
   /** Probe usage LIVE (M3d.3/M3d.4) — jaringan/kredensial nyata, di luar `detect` yang murni.
    * `context.sessionPid` dipakai agy (port-discovery lintas-PID); CC probe standalone (abaikan). */
   probeUsage?(context?: { sessionPid?: number }): Promise<UsageSnapshot>;
+  /** I-25: keputusan "kuota tersedia untuk resume" dari snapshot, per-tool. Tak didefinisikan =
+   *  default supervisor `limits.every(usedFraction<1)` (benar utk agy — dual-limit per grup, SEMUA
+   *  bucket mengikat, G-31). CC override (`claudeUsageAvailable`): hanya window mengikat (global +
+   *  scoped-aktif) supaya limit model-scoped yang tak dipakai tak memblokir resume selamanya. */
+  isUsageAvailable?(snapshot: UsageSnapshot): boolean;
   /** Bangun spec spawn untuk melanjutkan sesi yang sudah exited (resume-by-id, M3d.6). `cwd` wajib
    * diisi di spec hasil — proses dilanjutkan harus di direktori kerja sesi asli (AC-8). */
   resumeCmd?(sessionId: string, cwd: string): SpawnSpec;

@@ -3,12 +3,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  claudeUsageAvailable,
   parseAgyQuotaSummary,
   parseAgyUserStatus,
   parseClaudeOAuthUsage,
   parseClaudeStatusLine,
   UsageParseError,
 } from '../src/adapters/usage.js';
+import type { UsageLimit, UsageSnapshot } from '../src/shared/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, 'fixtures', 'usage');
@@ -325,5 +327,60 @@ describe('parseAgyQuotaSummary (RetrieveUserQuotaSummary — I-16/G-31)', () => 
   it('an object with no groups returns empty limits (no throw)', () => {
     expect(parseAgyQuotaSummary({ response: {} }, NOW)).toEqual({ tool: 'antigravity', limits: [], capturedAt: NOW });
     expect(parseAgyQuotaSummary({ unrelated: true }, NOW)).toEqual({ tool: 'antigravity', limits: [], capturedAt: NOW });
+  });
+});
+
+describe('claudeUsageAvailable (I-25 — gate resume CC hanya window mengikat)', () => {
+  function snap(limits: UsageLimit[]): UsageSnapshot {
+    return { tool: 'claude', limits, capturedAt: NOW };
+  }
+  const lim = (kind: string, usedFraction: number, extra: Partial<UsageLimit> = {}): UsageLimit => ({
+    kind,
+    usedFraction,
+    resetAt: null,
+    ...extra,
+  });
+
+  it('AVAILABLE when globals are free even if an UNUSED model-scoped weekly is exhausted (the I-25 bug)', () => {
+    // Sesi jalan Sonnet; weekly Opus (scoped, TAK aktif) habis → JANGAN blokir resume.
+    const s = snap([
+      lim('session', 0.37),
+      lim('weekly_all', 0.36),
+      lim('weekly_scoped', 1, { scope: 'Claude Opus 4.6', isActive: false }),
+    ]);
+    expect(claudeUsageAvailable(s)).toBe(true);
+  });
+
+  it('NOT available when a GLOBAL window (session/weekly_all) is exhausted', () => {
+    expect(claudeUsageAvailable(snap([lim('session', 1), lim('weekly_all', 0.2)]))).toBe(false);
+    expect(claudeUsageAvailable(snap([lim('session', 0.2), lim('weekly_all', 1)]))).toBe(false);
+  });
+
+  it('NOT available when the ACTIVE scoped model is exhausted (model actually in use is limited)', () => {
+    const s = snap([
+      lim('session', 0.2),
+      lim('weekly_all', 0.2),
+      lim('weekly_scoped', 1, { scope: 'Claude Sonnet 4.6', isActive: true }),
+    ]);
+    expect(claudeUsageAvailable(s)).toBe(false);
+  });
+
+  it('AVAILABLE when the active scoped model still has quota (globals + active scoped both free)', () => {
+    const s = snap([
+      lim('session', 0.5),
+      lim('weekly_all', 0.5),
+      lim('weekly_scoped', 0.8, { scope: 'Claude Sonnet 4.6', isActive: true }),
+      lim('weekly_scoped', 1, { scope: 'Claude Opus 4.6', isActive: false }),
+    ]);
+    expect(claudeUsageAvailable(s)).toBe(true);
+  });
+
+  it('falls back to strict every() when NO gating window can be identified (all scoped, none active)', () => {
+    // Skema tak dikenal (tak ada global, tak ada scoped-aktif) → sisi aman: blokir bila ada yang habis.
+    const s = snap([
+      lim('weekly_scoped', 1, { scope: 'Model A', isActive: false }),
+      lim('weekly_scoped', 0.3, { scope: 'Model B', isActive: false }),
+    ]);
+    expect(claudeUsageAvailable(s)).toBe(false);
   });
 });
