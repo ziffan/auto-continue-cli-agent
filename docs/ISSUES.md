@@ -69,8 +69,8 @@ memilih probe standalone OAuth `retrieveUserQuota` (+refresh `oauth2.googleapis.
   allowlist (least-privilege). **CC tak kena** (probe CC = HTTP `api.anthropic.com` baca limit CC nyata standalone). Firewall
   G-9 utuh. **369 test** hijau (supervisor-dispatch agy-exited→optimistic-resume di-rewrite; http-egress oauth2/cloudcode
   kini diblokir). **Trade-off diterima:** ≤1 resume "sia-sia" per siklus masih-limit (bounded reset_at). **Sumber:** audit
-  A-4, ADR-018→ADR-019, G-38. **Catatan minor (cleanup non-blocking):** notifier mapping `PROBE_IMPOSSIBLE` kini tak
-  ter-emit produksi (pemetaan pure tetap valid/tertes) — kandidat drop bila memang tak dipakai path lain.
+  A-4, ADR-018→ADR-019, G-38. **✅ Cleanup dilakukan (12 Jul, `a82a372`):** mapping `PROBE_IMPOSSIBLE` + union member +
+  test tak-terjangkau **DIHAPUS** (dead-code — supervisor emit `optimistic_resume_agy_exited`, nol pemanggil `probe_impossible`).
 
 ### I-26 — ACL named pipe Windows belum diverifikasi (ADR-015 "owner-only") [P2, verifikasi di M5]
 Named pipe Node/libuv default **bisa di-connect user lain** di mesin sama (DACL bukan owner-only spt chmod 0600).
