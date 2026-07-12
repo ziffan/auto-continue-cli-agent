@@ -13,6 +13,10 @@
 > **Progres gate (12 Jul):** R1 (A-2/I—daemon-crash) ✅ · R2a (A-1 korektness) ✅ · **R3 (I-21 multi-siklus) ✅** ·
 > **R4 slice 1 (I-22 guard probe-impossible agy-exited) ✅** · **sisa: I-20 capture `cli_session_id` (CC) +
 > I-22 slice 2 (probe standalone OAuth) + I-15 live-verify actuation inject/resume asli.**
+>
+> **Re-audit 12 Jul (`docs/audit/AUDIT-2026-07-12-FOLLOWUP.md`) → B-1..B-3.** Verifikasi remedi R1–R8 +
+> temuan baru di jalur retry/terminal-state. **B-1 (P2, dispatch-terminal-cap) ✅ + B-2 (P3, reset weekly) ✅
+> ditutup 12 Jul** (sesi ini). **B-3 (P3) tetap terbuka** — digabung ke I-15/R2b (butuh live-verify).
 
 ### I-20 — Capture `cli_session_id` (R2b, penangkap id CLI untuk resume-by-id) [P1, blocker M-remote]
 **Konteks:** A-1. Paruh korektness sudah ditutup R2a (`df3904b`): resume-by-id kini pakai `session.cli_session_id`;
@@ -129,9 +133,37 @@ sekarang** (daemon belum dijalankan di alur normal; `acca run` = wrapper, bukan 
 yang dipicu daemon hidup). **Hilang otomatis saat M3d.5** mengganti dispatch dgn probe sungguhan (done/retry
 nyata). Jangan jalankan `acca daemon` jangka panjang sebelum M3d.5 tanpa sadar ini.
 
+### B-3 — Sukses resume-by-id disimpulkan dari "spawn tak gagal SINKRON" [P3, watch → I-15/R2b]
+`spawnFailed` (R1) hanya menangkap kegagalan **sinkron** (binary hilang). CLI yang spawn sukses lalu **exit
+seketika** (arg ditolak, creds rusak, `--resume` id kadaluarsa) tetap membuat dispatch `markResumed` sesi lama +
+notif "resumed" PALSU; kegagalan hanya terlihat sebagai sesi baru EXITED non-nol. Risiko mengecil pasca-R2a
+(id benar-atau-BLOCKED) tapi kelas kegagalan lain tetap ada. **Remedi (gabung I-15/R2b):** observasi jendela
+pendek pasca-spawn (exit <3s + code≠0 → perlakukan `resume_spawn_failed`) ATAU tunda `markResumed` sampai output
+pertama sesi baru mengalir. **Putuskan bentuknya saat live-verify** — jangan spekulasi penanda sebelum ada data
+nyata (pola G-33/idle-agy). **Sumber:** audit followup B-3.
+
 ---
 
 ## Tertutup
+
+### B-1 — Dispatch retry tanpa terminal (retry backoff cap 60m selamanya) [P2] ✅ (12 Jul)
+**RESOLVED (`supervisor.ts` `realDispatch`, Opus inline Tier-1).** PROJECT §4 ("Resume gagal N kali → FAILED,
+stop, minta intervensi manual") sebelumnya tak diimplementasi — semua cabang `'retry'` mengandalkan backoff
+scheduler tanpa membaca `job.attempts` → retry cap 60m **selamanya** (pola sama A-4 yang audit awal nilai P1).
+Empat cabang ditutup: (1) **`resume_spawn_failed`** — konstanta `MAX_DISPATCH_ATTEMPTS=3`; di batas → `markBlocked`
++ event `resume_gave_up {status:BLOCKED}` + `'done'`; **baris FAILED lempar** (runSession selalu create→markFailed
+tiap percobaan) kini **diarsipkan** (`sessions.archive`, soft) → tak menumpuk di `acca status`/never-purge.
+(2) **`limits_empty`** (probe balas kosong persisten, mis. schema usage berubah) → attempts-cap → `probe_unreadable`
+BLOCKED. (3) **`adapter_no_probe`** & (4) **`adapter_no_resumecmd`** — kondisi STATIS (kemampuan adapter) →
+terminal LANGSUNG (`probe_unsupported`/`resume_unsupported` BLOCKED, tanpa attempts). `still_limited` SENGAJA tak
+dibatasi (limit memang akan reset). Semua terminal ter-surface via mapping BLOCKED generik notifier (level error).
+Firewall G-9 utuh (payload hanya field terkontrol). **+4 test** (dispatch) + `jobAttempts` seed di harness. **Sumber:** audit followup B-1.
+
+### B-2 — `formatResetCell` `HH:MM` tanpa hari — menyesatkan utk reset weekly [P3] ✅ (12 Jul)
+**RESOLVED (`status.ts`).** Reset window mingguan (agy weekly / CC seven_day, 6 hari lagi) dulu tampil `03:15`
+yang terbaca "malam ini". Kini `resetAt - now > 24 jam` → sertakan nama hari lokal (`Sab 03:15`, wireframe §5
+"resume ~Sen"); ≤24 jam tetap `HH:MM`. Pure; `now` di-thread lewat `toRow`. **+2 test** (weekly + batas 24 jam).
+**Sumber:** audit followup B-2.
 
 ### I-27 — `genSessionId` 4-char tanpa retry-on-collision [P3] ✅ (12 Jul, autonomous-run)
 **RESOLVED.** `genUniqueSessionId(exists, maxTries=8)` (`ids.ts`) coba ulang `genSessionId()` sampai `exists(id)`

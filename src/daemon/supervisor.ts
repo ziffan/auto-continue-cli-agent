@@ -25,6 +25,14 @@ import { createUsageMonitor } from './usage-monitor.js';
  *  11 Jul). Endpoint usage = metadata (tak memakan kuota model); injectable → gampang di-tune. */
 const DEFAULT_USAGE_PROBE_INTERVAL_MS = 120_000;
 
+/** B-1 (audit followup 12 Jul): batas percobaan untuk cabang retry yang bisa "gagal berulang" tapi
+ *  MUNGKIN transien (spawn resume gagal → PATH transien; probe balas kosong → glitch upstream).
+ *  Setelah sekian percobaan gagal → terminal (BLOCKED + surface manual), BUKAN retry backoff cap 60m
+ *  SELAMANYA (PROJECT §4: "Resume gagal N kali → FAILED, stop auto-retry, minta intervensi manual";
+ *  pola sama dengan A-4 loop-senyap yang audit awal nilai P1). Cabang berkondisi STATIS (kemampuan
+ *  adapter) langsung terminal tanpa attempts. `still_limited` TIDAK dibatasi — limit memang akan reset. */
+const MAX_DISPATCH_ATTEMPTS = 3;
+
 /** I-6: setTimer produksi yang MEMBUNGKUS rejection. `setTimeout` mengabaikan Promise yang
  *  dikembalikan fn (scheduler mem-pass `runDue` async), jadi tanpa .catch sebuah rejection (mis.
  *  arm()/listPending() gagal karena DB closed) menjadi unhandledRejection yang bisa mematikan
@@ -164,19 +172,34 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
 
         const adapter = adapters[session.tool];
         if (!adapter?.probeUsage) {
+          // B-1: kemampuan adapter STATIS (tak berubah runtime) → retry tak akan pernah sembuh. Terminal:
+          // BLOCKED + surface (butuh manual), bukan retry backoff selamanya. Defensif (kedua adapter
+          // produksi punya probeUsage) — guard ini menutup jalur mustahil-sembuh, bukan kasus sehari-hari.
+          sessions.markBlocked(job.session_id);
           events.append({
             session_id: job.session_id,
-            type: 'job_dispatch_pending',
-            payload: { jobId: job.id, action: 'skipped:adapter_no_probe' },
+            type: 'job_dispatch_error',
+            payload: { jobId: job.id, action: 'probe_unsupported', reason: 'adapter_no_probe', status: 'BLOCKED' },
           });
-          return 'retry';
+          return 'done';
         }
 
         const usage = await adapter.probeUsage({ sessionPid: session.pid ?? undefined });
 
         if (usage.limits.length === 0) {
-          // Tak bisa menentukan status usage dari respons ini — retry (backoff) sampai probe
-          // berikutnya memberi data yang bisa dibaca.
+          // Tak bisa menentukan status usage dari respons ini. Bisa transien (glitch) → retry beberapa
+          // kali; tapi bila PERSISTEN kosong (mis. schema usage berubah upstream) probe tak akan pernah
+          // terbaca → B-1: setelah MAX_DISPATCH_ATTEMPTS gagal, berhenti (BLOCKED + surface) daripada
+          // retry 60m selamanya tanpa user pernah tahu probe rusak.
+          if (job.attempts + 1 >= MAX_DISPATCH_ATTEMPTS) {
+            sessions.markBlocked(job.session_id);
+            events.append({
+              session_id: job.session_id,
+              type: 'job_dispatch_error',
+              payload: { jobId: job.id, action: 'probe_unreadable', reason: 'limits_empty_persistent', attempts: job.attempts + 1, status: 'BLOCKED' },
+            });
+            return 'done';
+          }
           events.append({
             session_id: job.session_id,
             type: 'job_dispatch_pending',
@@ -276,12 +299,15 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
 
       const adapter = adapters[session.tool];
       if (!adapter?.resumeCmd) {
+        // B-1: kemampuan adapter STATIS → resume tak akan pernah bisa. Terminal (BLOCKED + surface),
+        // bukan retry selamanya. Defensif (kedua adapter produksi punya resumeCmd).
+        sessions.markBlocked(job.session_id);
         events.append({
           session_id: job.session_id,
           type: 'job_dispatch_error',
-          payload: { jobId: job.id, action: 'adapter_no_resumecmd' },
+          payload: { jobId: job.id, action: 'resume_unsupported', reason: 'adapter_no_resumecmd', status: 'BLOCKED' },
         });
-        return 'retry';
+        return 'done';
       }
 
       const spec = adapter.resumeCmd(session.cli_session_id, session.cwd);
@@ -291,12 +317,29 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       // unhandledRejection yang mematikan daemon + keliru menandai sesi lama RESUMED).
       const spawned = spawnResumeFn(spec, session);
       if (spawned.spawnFailed) {
-        // Sesi baru gagal spawn (mis. binary hilang) → JANGAN tandai sesi lama RESUMED. Surface +
-        // 'retry' (backoff berjenjang — mis. PATH transien; sesi lama tetap LIMIT_HIT, tak hilang).
+        // Sesi baru gagal spawn (mis. binary hilang) → JANGAN tandai sesi lama RESUMED.
+        // B-1: `runSession` SELALU membuat baris sesi (create→markFailed) meski spawn gagal sinkron →
+        // pada retry berulang baris FAILED lempar MENUMPUK (retensi never-purge). Arsipkan baris lempar
+        // itu (soft) supaya `acca status` tak dibanjiri percobaan gagal.
+        if (spawned.sessionId) sessions.archive(spawned.sessionId);
+        if (job.attempts + 1 >= MAX_DISPATCH_ATTEMPTS) {
+          // B-1 (PROJECT §4): gagal spawn berulang (mis. PATH permanen rusak / binary hilang) → berhenti
+          // auto-retry, tandai sesi lama BLOCKED + surface (level error) minta intervensi manual —
+          // daripada tiap jam menciptakan baris FAILED baru + notif selamanya (pola A-4).
+          sessions.markBlocked(job.session_id);
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_error',
+            payload: { jobId: job.id, action: 'resume_gave_up', reason: 'resume_spawn_failed_repeatedly', attempts: job.attempts + 1, status: 'BLOCKED' },
+          });
+          return 'done';
+        }
+        // Belum melewati batas → surface + 'retry' (backoff berjenjang; PATH mungkin transien; sesi
+        // lama tetap LIMIT_HIT, tak hilang).
         events.append({
           session_id: job.session_id,
           type: 'job_dispatch_error',
-          payload: { jobId: job.id, action: 'resume_spawn_failed', newSessionId: spawned.sessionId },
+          payload: { jobId: job.id, action: 'resume_spawn_failed', newSessionId: spawned.sessionId, attempts: job.attempts + 1 },
         });
         return 'retry';
       }

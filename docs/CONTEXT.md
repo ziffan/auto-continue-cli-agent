@@ -20,6 +20,21 @@
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+- **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + file audit followup baru) — **B-1 + B-2 DITUTUP (re-audit 12 Jul `AUDIT-2026-07-12-FOLLOWUP.md`).**
+  Sesi buka `/session-start` (proof-of-understanding lengkap) → user setuju slice autonomous-safe B-1 (dispatch-terminal-cap)
+  + B-2 (reset weekly) nebeng. **B-1 (P2, Opus inline Tier-1, `supervisor.realDispatch`):** PROJECT §4 ("resume gagal
+  N kali → FAILED/stop") tak diimplementasi — 4 cabang `'retry'` retry backoff **cap 60m selamanya** tanpa baca
+  `job.attempts` (pola A-4). Fix: konst `MAX_DISPATCH_ATTEMPTS=3`; (1) `resume_spawn_failed` di batas → `markBlocked`
+  + `resume_gave_up` + baris FAILED lempar **diarsipkan** (`sessions.archive` soft, hard-rule no-delete) supaya tak
+  menumpuk never-purge; (2) `limits_empty` persisten → attempts-cap → `probe_unreadable` BLOCKED; (3) `adapter_no_probe`
+  + (4) `adapter_no_resumecmd` STATIS → terminal langsung (`probe_unsupported`/`resume_unsupported` BLOCKED). `still_limited`
+  tak dibatasi (limit akan reset). Semua ter-surface mapping BLOCKED generik notifier (error). Firewall G-9 utuh.
+  **B-2 (P3, `status.ts`):** `formatResetCell` reset >24 jam → sertakan nama hari lokal (`Sab 03:15`, wireframe §5), ≤24 jam
+  tetap `HH:MM`; `now` di-thread lewat `toRow`. **Verifikasi (Opus sendiri):** typecheck+lint+**346 test** (+6: 4 dispatch
+  terminal-cap + `jobAttempts` seed harness, 2 formatResetCell weekly/batas). Tier-1 self-review (state machine + status write).
+  **B-3 (P3) tetap terbuka** → gabung I-15/R2b (butuh live-verify: exit-cepat pasca-spawn belum terdeteksi). **Docs:** ISSUES
+  (B-1/B-2 Tertutup + B-3 Terbuka + gate note), CONTEXT, audit followup changelog, CLAUDE.md/README test count. **Next
+  (butuh user hadir):** I-20 wiring agy (G-36) · I-23 hook StopFailure+SessionStart · I-25 per-adapter · I-15/I-22 slice 2 live-verify.
 - **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user) — **M3e R4 SLICE 1 (I-22) DITUTUP: guard probe-impossible agy-exited → bug loop-senyap ditutup.**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → user setuju slice autonomous-safe. **Slice A (Opus inline
   Tier-1, branch `m3e-i22-slice1`):** cabang `probe` di `supervisor.realDispatch` dulu memanggil `probeAgyUsage` untuk sesi

@@ -86,6 +86,9 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     tool?: 'claude' | 'antigravity';
     requestInject?: SupervisorDeps['requestInject'];
     spawnResume?: SupervisorDeps['spawnResume'];
+    /** B-1: seed `scheduled_jobs.attempts` awal (simulasi job yang sudah di-retry N kali) supaya
+     *  cabang attempts-cap bisa diuji dengan SATU fire alih-alih men-drive banyak siklus backoff. */
+    jobAttempts?: number;
   }): Promise<{ db: DatabaseInstance }> {
     tempDir = join(tmpdir(), `acca-dispatch-test-${randomBytes(4).toString('hex')}`);
     process.env.ACCA_DATA_DIR = tempDir;
@@ -106,7 +109,10 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
       pid: process.pid,
     });
     const jobs = createScheduledJobsRepo(db);
-    jobs.enqueue({ session_id: opts.sessionId, run_at: 1_000, kind: opts.jobKind });
+    const job = jobs.enqueue({ session_id: opts.sessionId, run_at: 1_000, kind: opts.jobKind });
+    if (opts.jobAttempts !== undefined) {
+      db.prepare('UPDATE scheduled_jobs SET attempts = @a WHERE id = @id').run({ a: opts.jobAttempts, id: job.id });
+    }
 
     const manual = createManualTimer();
     const nowRef = { value: 0 };
@@ -470,5 +476,86 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     // I-28/A-14: status sesi kini benar-benar ditulis BLOCKED (bukan hanya event) → `acca status` tampil.
     const session = createSessionsRepo(database).getById('s-resume-exited-blocked');
     expect(session?.status).toBe('BLOCKED');
+  });
+
+  // ── B-1 (audit followup 12 Jul): cabang retry terminal-cap ──────────────────────────────────────
+
+  it('probe: adapter tanpa probeUsage (statis) → BLOCKED + probe_unsupported + done, no retry (B-1)', async () => {
+    // Kondisi STATIS (kemampuan adapter tak berubah runtime) → retry tak akan pernah sembuh → terminal
+    // langsung, bukan retry selamanya. `probeUsage` di-null-kan (afterEach me-restore).
+    adapters.claude.probeUsage = undefined;
+
+    const { db: database } = await setupAndFire({ sessionId: 's-probe-nocap', procState: 'alive', cwd: process.cwd(), jobKind: 'probe' });
+
+    expect(pendingJobs(database, 's-probe-nocap')).toHaveLength(0); // done → job dibuang, tak retry.
+    expect(createSessionsRepo(database).getById('s-probe-nocap')?.status).toBe('BLOCKED');
+
+    const err = eventsFor(database, 's-probe-nocap').find((e) => e.type === 'job_dispatch_error');
+    const payload = err?.payload as { action: string; reason: string; status: string };
+    expect(payload.action).toBe('probe_unsupported');
+    expect(payload.reason).toBe('adapter_no_probe');
+    expect(payload.status).toBe('BLOCKED');
+  });
+
+  it('probe: limits kosong PERSISTEN (attempts di batas) → BLOCKED + probe_unreadable + done (B-1)', async () => {
+    // Empty limits transien = retry (diuji terpisah, attempts 0). Di batas attempts → berhenti: probe
+    // dianggap tak terbaca permanen (mis. schema usage berubah upstream), surface daripada retry 60m selamanya.
+    adapters.claude.probeUsage = vi.fn((): Promise<UsageSnapshot> => Promise.resolve({ tool: 'claude', limits: [], capturedAt: 0 }));
+
+    const { db: database } = await setupAndFire({ sessionId: 's-probe-unreadable', procState: 'alive', cwd: process.cwd(), jobKind: 'probe', jobAttempts: 2 });
+
+    expect(pendingJobs(database, 's-probe-unreadable')).toHaveLength(0); // done terminal, bukan retry.
+    expect(createSessionsRepo(database).getById('s-probe-unreadable')?.status).toBe('BLOCKED');
+
+    const err = eventsFor(database, 's-probe-unreadable').find((e) => e.type === 'job_dispatch_error');
+    const payload = err?.payload as { action: string; reason: string; attempts: number; status: string };
+    expect(payload.action).toBe('probe_unreadable');
+    expect(payload.reason).toBe('limits_empty_persistent');
+    expect(payload.attempts).toBe(3);
+    expect(payload.status).toBe('BLOCKED');
+  });
+
+  it('resume: adapter tanpa resumeCmd (statis) → BLOCKED + resume_unsupported + done, no retry (B-1)', async () => {
+    adapters.claude.resumeCmd = undefined;
+
+    const { db: database } = await setupAndFire({ sessionId: 's-resume-nocmd', procState: 'exited', cwd: process.cwd(), jobKind: 'resume', cliSessionId: 'cc-uuid-x' });
+
+    expect(pendingJobs(database, 's-resume-nocmd')).toHaveLength(0);
+    expect(createSessionsRepo(database).getById('s-resume-nocmd')?.status).toBe('BLOCKED');
+
+    const err = eventsFor(database, 's-resume-nocmd').find((e) => e.type === 'job_dispatch_error');
+    const payload = err?.payload as { action: string; reason: string; status: string };
+    expect(payload.action).toBe('resume_unsupported');
+    expect(payload.reason).toBe('adapter_no_resumecmd');
+    expect(payload.status).toBe('BLOCKED');
+  });
+
+  it('resume: spawn gagal BERULANG di batas attempts → BLOCKED + resume_gave_up, baris lempar diarsipkan (B-1)', async () => {
+    // Jalankan DEFAULT spawnResume (runSession in-process) dgn binary hilang → spawn gagal sinkron.
+    // Di batas attempts: JANGAN retry selamanya (PROJECT §4) → sesi lama BLOCKED + surface manual;
+    // dan baris FAILED lempar yang dibuat runSession diARSIPKAN (tak menumpuk di `acca status`).
+    adapters.claude.resumeCmd = vi.fn(() => ({ file: 'acca-nonexistent-binary-zzz', args: ['--resume', 'x'] }));
+
+    const { db: database } = await setupAndFire({ sessionId: 's-resume-giveup', procState: 'exited', cwd: process.cwd(), jobKind: 'resume', cliSessionId: 'cc-uuid-fail', jobAttempts: 2 });
+
+    // Terminal: job dibuang (done), sesi lama BLOCKED.
+    expect(pendingJobs(database, 's-resume-giveup')).toHaveLength(0);
+    const sessionsRepo = createSessionsRepo(database);
+    expect(sessionsRepo.getById('s-resume-giveup')?.status).toBe('BLOCKED');
+
+    const err = eventsFor(database, 's-resume-giveup').find(
+      (e) => e.type === 'job_dispatch_error' && (e.payload as { action?: string }).action === 'resume_gave_up',
+    );
+    expect(err).toBeDefined();
+    const payload = err?.payload as { attempts: number; status: string };
+    expect(payload.attempts).toBe(3);
+    expect(payload.status).toBe('BLOCKED');
+
+    // Baris sesi LEMPAR (hasil runSession gagal, resumed_from = sesi lama) tak boleh muncul di listActive
+    // (archived_at ter-set) → `acca status` tak dibanjiri percobaan gagal.
+    const active = sessionsRepo.listActive();
+    expect(active.some((s) => s.resumed_from === 's-resume-giveup')).toBe(false);
+    // Sesi lama BLOCKED sendiri tetap aktif (butuh perhatian user).
+    expect(active.some((s) => s.id === 's-resume-giveup')).toBe(true);
   });
 });

@@ -184,6 +184,15 @@ export function createSessionsRepo(db: DatabaseInstance) {
       return info.changes > 0;
     },
 
+    /** B-1 (audit followup 12 Jul): arsipkan baris sesi (SOFT — set `archived_at`, TAK hard-delete,
+     *  hard rule "jangan hard delete"). Dipakai membuang baris sesi LEMPAR dari percobaan resume yang
+     *  gagal spawn (runSession selalu create→markFailed sebuah baris) supaya tak menumpuk di
+     *  `acca status`/retensi never-purge. Baris tetap ada di DB (audit), hanya tak lagi "aktif". */
+    archive(id: string): void {
+      const now = nowMs();
+      db.prepare('UPDATE sessions SET archived_at = @now, updated_at = @now WHERE id = @id').run({ id, now });
+    },
+
     listActive(): Session[] {
       return db
         .prepare<[], Session>(
