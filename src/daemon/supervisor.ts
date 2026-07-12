@@ -211,7 +211,12 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
           return 'retry';
         }
 
-        const hasAvailable = usage.limits.every((l) => l.usedFraction < 1);
+        // I-25: keputusan "kuota tersedia" pindah ke adapter (`isUsageAvailable`). CC = hanya window
+        // mengikat (global + scoped-aktif) supaya limit model-scoped tak-terpakai tak memblokir selamanya;
+        // adapter tanpa override (agy) = default `every(<1)` (dual-limit per grup, semua bucket mengikat).
+        const hasAvailable = adapter.isUsageAvailable
+          ? adapter.isUsageAvailable(usage)
+          : usage.limits.every((l) => l.usedFraction < 1);
         if (hasAvailable) {
           jobs.enqueue({ session_id: job.session_id, run_at: deps.now(), kind: 'resume', next_backoff_ms: null });
           events.append({

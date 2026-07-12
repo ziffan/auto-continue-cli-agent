@@ -3,7 +3,7 @@ import { safeFetch } from '../shared/http.js';
 import type { UsageSnapshot } from '../shared/types.js';
 import { buildClaudeHookSettings } from './claude-hooks.js';
 import { isTransientRetry, matchLimit, matchOverload } from './patterns.js';
-import { parseClaudeOAuthUsage } from './usage.js';
+import { claudeUsageAvailable, parseClaudeOAuthUsage } from './usage.js';
 import type {
   Adapter,
   DetectionResult,
@@ -36,6 +36,11 @@ export const claudeAdapter: Adapter = {
       throw new Error(`CC usage probe failed: ${resp.status} ${resp.statusText}`);
     }
     return parseClaudeOAuthUsage(await resp.json(), Date.now());
+  },
+  // I-25: gate resume CC hanya pada window mengikat (global + scoped-aktif) — limit model-scoped yang
+  // tak dipakai sesi tak boleh memblokir resume selamanya. Lihat `claudeUsageAvailable`.
+  isUsageAvailable(snapshot: UsageSnapshot): boolean {
+    return claudeUsageAvailable(snapshot);
   },
   resumeCmd(sessionId: string, cwd: string): SpawnSpec {
     return { file: 'claude', args: ['--resume', sessionId], cwd };

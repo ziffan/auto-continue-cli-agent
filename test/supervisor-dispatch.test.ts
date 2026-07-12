@@ -202,6 +202,34 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect((pending?.payload as { action: string }).action).toBe('still_limited');
   });
 
+  it('probe (I-25): CC globals free but an UNUSED scoped model exhausted → still enqueues resume', async () => {
+    // Bug lama: `every(usedFraction<1)` memblokir resume selamanya krn weekly Opus (scoped, tak dipakai)
+    // habis, walau session+weekly_all + model aktif masih punya kuota. Kini adapter.isUsageAvailable
+    // (CC) hanya gate window mengikat → resume di-enqueue.
+    adapters.claude.probeUsage = vi.fn(
+      (): Promise<UsageSnapshot> =>
+        Promise.resolve({
+          tool: 'claude',
+          limits: [
+            { kind: 'session', usedFraction: 0.3, resetAt: null },
+            { kind: 'weekly_all', usedFraction: 0.3, resetAt: null },
+            { kind: 'weekly_scoped', usedFraction: 1, resetAt: null, scope: 'Claude Opus 4.6', isActive: false },
+          ],
+          capturedAt: 0,
+        }),
+    );
+
+    const { db: database } = await setupAndFire({ sessionId: 's-probe-scoped', procState: 'alive', cwd: process.cwd(), jobKind: 'probe' });
+
+    const remaining = pendingJobs(database, 's-probe-scoped');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.kind).toBe('resume');
+
+    const events = eventsFor(database, 's-probe-scoped');
+    const done = events.find((e) => e.type === 'job_dispatch_done');
+    expect((done?.payload as { action: string }).action).toBe('usage_available_enqueue_resume');
+  });
+
   it('probe: empty limits → retry (cannot determine usage yet)', async () => {
     adapters.claude.probeUsage = vi.fn((): Promise<UsageSnapshot> => Promise.resolve({ tool: 'claude', limits: [], capturedAt: 0 }));
 

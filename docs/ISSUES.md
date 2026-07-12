@@ -72,16 +72,6 @@ memilih probe standalone OAuth `retrieveUserQuota` (+refresh `oauth2.googleapis.
   A-4, ADR-018→ADR-019, G-38. **Catatan minor (cleanup non-blocking):** notifier mapping `PROBE_IMPOSSIBLE` kini tak
   ter-emit produksi (pemetaan pure tetap valid/tertes) — kandidat drop bila memang tak dipakai path lain.
 
-### I-25 — Gate resume `every(usedFraction<1)` terlalu ketat untuk CC [P2]
-`supervisor.ts` blokir resume bila **satu** limit exhausted. Untuk CC, model scoped yang tak dipakai sesi (mis. weekly
-Opus habis, sesi jalan Sonnet) → blokir resume selamanya. Untuk agy `every` justru benar (dual-limit per grup, G-31).
-**Remedi:** pindah keputusan "usage available" ke adapter (`isUsageAvailable(snapshot)`) — CC pakai `five_hour`/`seven_day`
-global + `is_active`; agy semua bucket. **Sumber:** audit A-7.
-**✅ CONFIRMED live 11 Jul (agy 1.1.1):** `3p-5h` (dibagi Opus/Sonnet 4.6 + GPT-OSS) habis → `usedFraction=1`, sedangkan
-`gemini-5h` masih 100% (`usedFraction=0`, grup terpisah) → `every(usedFraction<1)` = **false** → resume terblokir walau
-Gemini penuh. Persis skenario yang issue ini antisipasi (per-grup untuk agy). Memperkuat perlu `isUsageAvailable(snapshot)`
-per-adapter. **Sumber:** I-15 live-verify 11 Jul.
-
 ### I-26 — ACL named pipe Windows belum diverifikasi (ADR-015 "owner-only") [P2, verifikasi di M5]
 Named pipe Node/libuv default **bisa di-connect user lain** di mesin sama (DACL bukan owner-only spt chmod 0600).
 `status` bocorkan daftar cwd; `inject` bisa dipicu pihak lokal (dibatasi: token literal tanpa payload). Single-user
@@ -164,6 +154,20 @@ nyata (pola G-33/idle-agy). **Sumber:** audit followup B-3.
 ---
 
 ## Tertutup
+
+### I-25 — Gate resume `every(usedFraction<1)` terlalu ketat untuk CC [P2] ✅ (12 Jul, R7)
+**RESOLVED (Opus inline Tier-1).** Keputusan "usage available untuk resume" dipindah ke adapter
+(`Adapter.isUsageAvailable?(snapshot)`), supervisor pakai `adapter.isUsageAvailable?.(usage) ?? every(<1)`.
+**CC override** (`claudeUsageAvailable`, `adapters/usage.ts`): gate HANYA window mengikat — **global** (tanpa
+`scope` per-model: `session`/`weekly_all` OAuth, `five_hour`/`seven_day` statusLine) + **scoped-aktif**
+(`isActive===true`, model yang benar-benar dipakai). Scoped NON-aktif (mis. weekly Opus habis sementara sesi jalan
+Sonnet) **diabaikan** → tak lagi memblokir resume selamanya. Tak ada window gating teridentifikasi (skema tak dikenal)
+→ fallback strict `every()` (sisi aman). **agy TIDAK override** → default `every(<1)` (dual-limit per grup, SEMUA
+bucket mengikat, G-31 — perilaku agy TAK berubah). **+6 test** (5 `claudeUsageAvailable` cabang: unused-scoped-exhausted→
+available, global-exhausted→block, active-scoped-exhausted→block, active-scoped-free→available, fallback; 1 dispatch
+regresi CC scoped-unused→enqueue-resume). Tier-1 self-review PASS (arah lebih permisif utk CC → worst-case resume-lalu-
+re-detect bounded, sekelas ADR-019 optimistic). **Live-verify skenario exhaustion nyata = opportunistik (I-15-class);
+shape probe CC sudah dikonfirmasi nyata di smoke I-17.** **Sumber:** audit A-7, I-15 live-verify 11 Jul (konfirmasi agy per-grup).
 
 ### I-29 — `acca run <tool> -<flag>` mis-parse commander (butuh `--` pemisah) [P3] ✅ (12 Jul)
 **RESOLVED.** `acca run claude -p "…"` dulu → `error: unknown option '-p'` (commander parse `-p` sbg opsi `run`).

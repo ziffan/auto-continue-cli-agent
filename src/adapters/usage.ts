@@ -80,6 +80,26 @@ export function parseClaudeOAuthUsage(raw: unknown, now: number): UsageSnapshot 
   return { tool: 'claude', limits, capturedAt: now };
 }
 
+/**
+ * I-25: apakah snapshot usage **CC** mengizinkan resume. Gate naif `every(usedFraction<1)` SALAH untuk
+ * CC — limit **model-scoped** (mis. weekly Opus habis) akan memblokir resume **selamanya** walau sesi
+ * memakai model lain yang kuotanya masih ada (`is_active` global, RESEARCH §2). Gate HANYA window yang
+ * benar-benar mengikat sesi:
+ *  - **global** = limit tanpa `scope` per-model (`session`/`weekly_all` dari OAuth; `five_hour`/`seven_day`
+ *    dari statusLine) → selalu diperhitungkan;
+ *  - **scoped-aktif** = limit ber-`scope` yang `isActive === true` (model yang benar-benar dipakai) →
+ *    diperhitungkan.
+ * Scoped NON-aktif (model lain) diabaikan. Bila tak ada window gating teridentifikasi (skema tak dikenal)
+ * → fallback strict `every()` atas SEMUA limit (sisi aman, jangan resume kalau ragu). **agy TIDAK** pakai
+ * ini: dual-limit per grup → SEMUA bucket mengikat (G-31) → default supervisor `every(<1)` sudah benar.
+ */
+export function claudeUsageAvailable(snapshot: UsageSnapshot): boolean {
+  const isGating = (l: UsageLimit): boolean => l.scope === undefined || l.isActive === true;
+  const gating = snapshot.limits.filter(isGating);
+  const effective = gating.length > 0 ? gating : snapshot.limits;
+  return effective.every((l) => l.usedFraction < 1);
+}
+
 /** Kedua bucket statusLine (RESEARCH §2 poin 1). `resets_at` = **Unix epoch SECONDS** (G-4) —
  * beda dari `api/oauth/usage`. Bucket bisa absen independen (mis. sebelum API-call pertama). */
 const STATUSLINE_BUCKETS = ['five_hour', 'seven_day'] as const;
