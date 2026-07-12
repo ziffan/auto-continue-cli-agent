@@ -6,8 +6,11 @@
 // stream output yang sama seperti limit-watcher (bukan menebak dari isi — hanya penanda footer tetap;
 // tak ada aksi diturunkan dari konten, ADR-008/013). Waktu di-inject supaya deterministik di test.
 //
-// agy: penanda busy belum diverifikasi live (ADR-014 catat keystroke agy TBD) → `isIdle()` = undefined
-// (unknown, tak memblokir) sampai live-verify (I-15). Jangan mengarang penanda yang belum teramati.
+// agy (1.1.1): penanda busy = footer "esc to cancel" (analog "esc to interrupt" Claude) — ditangkap live
+// 12 Jul (G-33, I-15 Sub-task B). Marker ini yang paling STABIL: teks tetap di footer, di-repaint terus
+// selama generate. `Generating...`/`Working...` juga muncul TAPI di-selingi spinner braille di tengah kata
+// (`W⣻  Wor`, ConPTY partial-repaint) → tak andal sbg regex → sengaja TIDAK dipakai. Idle = "esc to cancel"
+// absen selama jendela sunyi (footer balik ke "? for shortcuts"). Gating inject agy live-verify = sisa I-15.
 
 import { stripAnsi } from './ansi.js';
 import { nowMs } from './time.js';
@@ -18,7 +21,8 @@ const BUSY_MARKERS: Partial<Record<Tool, RegExp>> = {
   // "esc to interrupt" muncul di footer generate Claude Code (juga di baris retry overload) — keduanya
   // = mid-turn/busy, jadi tepat diperlakukan sebagai penanda busy. Terverifikasi di fixtures korpus.
   claude: /esc to interrupt/i,
-  // antigravity: TBD (I-15) — biarkan idle unknown, jangan tebak.
+  // "esc to cancel" muncul di footer generate agy 1.1.1 (G-33) — marker footer tetap & paling stabil.
+  antigravity: /esc to cancel/i,
 };
 
 /** Cukup panjang untuk menjembatani penanda busy yang terbelah antar-chunk (penanda ≤ ~20 char). */
