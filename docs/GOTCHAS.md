@@ -145,6 +145,12 @@ persis id yang dipakai `claude --resume <uuid>` (terkonfirmasi: id sesi berjalan
 **Dampak/guna:** basis penangkapan `cli_session_id` untuk resume-by-id (I-20/A-1) tanpa hook. **Jebakan:** ada juga entri
 **direktori** `<uuid>/` (tanpa `.jsonl`) di samping file — pilih **file** `.jsonl`. Dan korelasi "jsonl termuda pasca-spawn"
 **racy** bila dua sesi start di cwd sama → jalur robust = hook `SessionStart` (I-23). **Sumber:** investigasi R2 (11 Jul).
+**✅ JALUR ROBUST DITEMPUH + LIVE-VERIFIED (12 Jul, I-23, CC 2.1.207, otorisasi user):** capture id CC = payload hook
+**`SessionStart`** (bukan scan direktori racy). Payload nyata: `{session_id, transcript_path, cwd,
+hook_event_name:"SessionStart", source:"startup"}` — `session_id` = **PERSIS** nama `<uuid>.jsonl` transcript (dikonfirmasi
+live: id `fd55a7d2-…` = filename jsonl) → id `--resume` sah. Hook dipasang `claude --settings <file>` (**diterima 2.1.207**,
+merge additif, auth diwarisi — doc resmi tak mendokumentasikan `--settings` tapi empiris jalan, seperti klaim RESEARCH §2c).
+Hook **exec-form** (`command`+`args[]`) → tak ada shell-quoting lintas-OS. **Sumber:** I-23 live-verify 12 Jul.
 
 ### G-36 — agy cli_session_id (resume-by-id): sumber ANDAL = cmd yang agy CETAK saat exit; `.db` termuda = racy
 **Fakta (live-verify 11 Jul, agy 1.1.1 Windows, R2b/I-20):** analog G-34 untuk agy. Saat sesi agy interaktif ditutup

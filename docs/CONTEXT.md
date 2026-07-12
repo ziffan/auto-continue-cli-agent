@@ -20,6 +20,29 @@
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+- **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + I-23) — **R6/I-23 DITUTUP + LIVE-VERIFIED CC 2.1.207: hook StopFailure (deteksi limit CC PRIMER) + SessionStart (capture `cli_session_id` CC) → paruh CC I-20/R2b TUTUP → I-20 TUNTAS (agy+CC).**
+  Sesi buka `/session-start` (proof-of-understanding lengkap) → user pilih fokus **I-23** + otorisasi live-verify CC. **Slice
+  (Opus inline Tier-1, IPC trust-boundary + injection firewall):** ADR-001/§7 menetapkan hook `StopFailure` sbg deteksi limit
+  CC **primer** (event-driven resmi); selama ini hanya fallback output-scrape, `feedSignal` nol pemanggil produksi. Satu slice,
+  dua hook lewat kanal sama: wrapper generate settings.json terisolasi (`adapters/claude-hooks.ts`, murni) → `claude
+  --settings <file>` (MERGE additif, auth diwarisi kredensial mesin ADR-005 — **bukan** `CLAUDE_CONFIG_DIR` yang isolasi auth).
+  Hook **exec-form** (`command`+`args[]`, nol shell-quoting lintas-OS) = perintah internal tersembunyi `acca __hook <id>`
+  (`cli/commands/hook.ts`): baca payload stdin → teruskan field terkontrol ke **socket kontrol per-sesi** (reuse ADR-015,
+  bersama `inject`). Sisi-wrapper `daemon/hook-relay.ts` (`createHookHandler`, testable): **StopFailure**→`watcher.feedSignal`
+  (jalur LIMIT_HIT yg ada); **SessionStart**→`setCliSessionId` (latched sekali) → tutup paruh CC I-20. **Firewall ADR-013:**
+  `hook` = kanal DATA (beda `inject` = kanal AKSI tanpa payload) → data hanya ke taxonomy `classify` tetap + kolom identifier;
+  nol teks→keystroke. Forwarder best-effort (swallow, exit 0, nol stdout). Settings file di-unlink saat exit + spawn-gagal.
+  **Verifikasi (Opus sendiri):** typecheck+lint+**368 test** (+9: hook-relay 4 + claude-hooks 4 + 1 integrasi settings-lifecycle).
+  Tier-1 self-review PASS. **LIVE-VERIFY CC 2.1.207 (otorisasi user):** (1) `--settings` diterima (auth diwarisi, sesi jalan —
+  konfirmasi klaim empiris RESEARCH §2c di 2.1.207; doc resmi tak dokumentasikan flag); (2) SessionStart fire
+  (`session_id`+`source:startup`); (3) StopFailure fire dgn field **`error`** (via `--model` bogus → `model_not_found` +
+  `prompt_id`/`effort`, G-5); (4) **PRODUKSI penuh:** `acca run claude` → sesi `7vem` dapat `cli_session_id=fd55a7d2-…` (= nama
+  `.jsonl`, G-34 → id `--resume` sah) + event `cli_session_id_captured{source:hook_sessionstart}`; (5) settings dibersihkan.
+  **Sisa opportunistik (bukan gate):** `rate_limit` StopFailure end-to-end asli (tak bisa dipaksa; transport terbukti identik
+  via SessionStart). **Temuan sampingan (P3):** `acca run claude -p …` → commander mis-parse `-p` (butuh `acca run claude -- -p …`,
+  keluarga G-27). **Docs:** ISSUES (I-23→Tertutup, I-20 CC ✅, gate header), GOTCHAS G-34 anotasi, MILESTONES M3e R6, CONTEXT,
+  CLAUDE.md/README test count 359→368. **Next:** I-22 slice 2 (probe OAuth, Tier-1 creds+egress) · I-25 per-adapter gate · I-15
+  live-verify actuation inject/resume asli (butuh user + limit).
 - **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user) — **I-20 WIRING agy DITUTUP (kode): capture `cli_session_id` agy dari output → resume-by-id agy exited tak lagi BLOCKED.**
   Lanjut dari B-1/B-2. **I-20 (Opus inline Tier-1):** paruh korektness R2a sudah pakai `cli_session_id`; slice ini yang
   MENGISINYA untuk agy. Jalur: `matchAgyResumeId` (patterns, regex UUID-anchored konservatif — id non-UUID→null→BLOCKED,

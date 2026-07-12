@@ -1,9 +1,17 @@
 import { extractClaudeToken, loadClaudeCredentials } from '../shared/credentials.js';
 import { safeFetch } from '../shared/http.js';
 import type { UsageSnapshot } from '../shared/types.js';
+import { buildClaudeHookSettings } from './claude-hooks.js';
 import { isTransientRetry, matchLimit, matchOverload } from './patterns.js';
 import { parseClaudeOAuthUsage } from './usage.js';
-import type { Adapter, DetectionResult, DetectSignal, SpawnSpec } from './types.js';
+import type {
+  Adapter,
+  DetectionResult,
+  DetectSignal,
+  SpawnSpec,
+  SupervisorHooksInput,
+  SupervisorHooksPlan,
+} from './types.js';
 
 /** Nilai `error` StopFailure yang berarti overload transient (429/5xx/529) — RESEARCH §2c. */
 const OVERLOAD_STOPFAILURE_ERRORS = new Set(['overloaded', 'server_error']);
@@ -31,6 +39,13 @@ export const claudeAdapter: Adapter = {
   },
   resumeCmd(sessionId: string, cwd: string): SpawnSpec {
     return { file: 'claude', args: ['--resume', sessionId], cwd };
+  },
+  supervisorHooks(input: SupervisorHooksInput): SupervisorHooksPlan {
+    return {
+      settingsContent: JSON.stringify(buildClaudeHookSettings(input.forwarder)),
+      // Disisipkan ke DEPAN args user: `claude --settings <path> <args...>`.
+      extraArgs: ['--settings', input.settingsPath],
+    };
   },
   detect(signal: DetectSignal): DetectionResult {
     switch (signal.type) {

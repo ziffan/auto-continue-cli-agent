@@ -70,3 +70,12 @@ export function sessionControlSocketPath(sessionId: string): string {
   }
   return join(dataDir(), `session-${sessionId}.sock`);
 }
+
+/**
+ * Path file settings.json sementara PER-SESI yang wrapper tulis untuk memasang hook supervisor CC
+ * (I-23 — `claude --settings <path>`). File JSON biasa di `dataDir()` (bukan named pipe) lintas-OS;
+ * berisi hook command forwarder (bukan secret) → aman, tetap di-unlink saat sesi keluar (best-effort).
+ */
+export function sessionHookSettingsPath(sessionId: string): string {
+  return join(dataDir(), `session-${sessionId}-hooks.json`);
+}

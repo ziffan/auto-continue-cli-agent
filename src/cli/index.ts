@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { registerDaemonCommand } from './commands/daemon.js';
+import { registerHookCommand } from './commands/hook.js';
 import { registerLogCommand } from './commands/log.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerStatusCommand } from './commands/status.js';
@@ -16,6 +17,7 @@ registerRunCommand(program);
 registerStatusCommand(program);
 registerDaemonCommand(program);
 registerLogCommand(program);
+registerHookCommand(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));

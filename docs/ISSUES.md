@@ -11,14 +11,15 @@
 > bukti baris-per-baris + rencana remedi R1–R8 ada di file audit — entri di bawah = ringkas + pointer. **Gate keluar
 > sebelum M-remote:** I-20..I-22 (R1–R3) selesai + I-15 live-verify LULUS dgn CLI nyata.
 > **Progres gate (12 Jul):** R1 (A-2/I—daemon-crash) ✅ · R2a (A-1 korektness) ✅ · **R3 (I-21 multi-siklus) ✅** ·
-> **R4 slice 1 (I-22 guard probe-impossible agy-exited) ✅** · **sisa: I-20 capture `cli_session_id` (CC) +
-> I-22 slice 2 (probe standalone OAuth) + I-15 live-verify actuation inject/resume asli.**
+> **R4 slice 1 (I-22 guard probe-impossible agy-exited) ✅** · **R6 (I-23 hook StopFailure + SessionStart) ✅
+> — DELTA: menutup paruh CC I-20 (capture `cli_session_id` via SessionStart) + deteksi limit CC PRIMER, LIVE-VERIFIED
+> CC 2.1.207 (12 Jul).** · **sisa: I-22 slice 2 (probe standalone OAuth) + I-15 live-verify actuation inject/resume asli.**
 >
 > **Re-audit 12 Jul (`docs/audit/AUDIT-2026-07-12-FOLLOWUP.md`) → B-1..B-3.** Verifikasi remedi R1–R8 +
 > temuan baru di jalur retry/terminal-state. **B-1 (P2, dispatch-terminal-cap) ✅ + B-2 (P3, reset weekly) ✅
 > ditutup 12 Jul** (sesi ini). **B-3 (P3) tetap terbuka** — digabung ke I-15/R2b (butuh live-verify).
 
-### I-20 — Capture `cli_session_id` (R2b, penangkap id CLI untuk resume-by-id) [P1, blocker M-remote]
+### I-20 — Capture `cli_session_id` (R2b, penangkap id CLI untuk resume-by-id) [P1, blocker M-remote] — ✅ agy + CC TUNTAS (12 Jul)
 **Konteks:** A-1. Paruh korektness sudah ditutup R2a (`df3904b`): resume-by-id kini pakai `session.cli_session_id`;
 absen → BLOCKED (bukan spawn id supervisor 4-char yang dijamin ditolak CLI). `setCliSessionId(id, cliId)` repo sudah
 siap. **Sisa (issue ini):** benar-benar MENANGKAP id CLI → sampai itu ada, setiap resume-by-id sesi `exited` = BLOCKED.
@@ -40,7 +41,13 @@ siap. **Sisa (issue ini):** benar-benar MENANGKAP id CLI → sampai itu ada, set
 - **✅ LIVE-VERIFY agy DITUTUP (12 Jul, agy 1.1.1, otorisasi user):** spawn agy nyata → 1 turn → Ctrl-C 2× → agy cetak
   `agy --conversation=<uuid>` → **kode capture produksi menangkap uuid persis** yang dicetak (`0c384fd6…`), regex cocok
   format nyata (G-36 anotasi). Jalur produksi tercakup: capturer-vs-agy-nyata ✅ + glue `runSession`→DB-vs-fixture ✅
-  (integrasi). Resume-load = G-36 (11 Jul). **Sisa I-20: HANYA (a) CC** via hook `SessionStart` (I-23/G-34) — agy TUNTAS.
+  (integrasi). Resume-load = G-36 (11 Jul).
+- **✅ PARUH CC DITUTUP (12 Jul, I-23, LIVE-VERIFIED CC 2.1.207, otorisasi user):** sumber id CC = payload hook
+  **`SessionStart`** (bukan jalur output — `captureSessionId` CC tetap `undefined`). Wrapper generate settings hooks →
+  `claude --settings <file>` → SessionStart fire → forwarder `acca __hook <id>` → socket kontrol → `setCliSessionId`.
+  **Live production:** `acca run claude` → sesi acca `7vem` dapat `cli_session_id=fd55a7d2-…` (= nama transcript jsonl,
+  G-34 → id `--resume` sah) + event `cli_session_id_captured{source:hook_sessionstart}`. **I-20 TUNTAS (agy + CC).**
+  Detail hook = I-23 (Tertutup).
 
 ### I-22 — agy resume-by-id sesi MATI: implement opsi #3 (probe standalone OAuth) [P1] — **slice 1 ✅ (12 Jul), slice 2 pending**
 Job `probe` agy pada sesi `exited` → PID mati → `discoverLocalPorts` kosong → throw → `'retry'` backoff cap 60m
@@ -59,12 +66,13 @@ Job `probe` agy pada sesi `exited` → PID mati → `discoverLocalPorts` kosong 
    token dibaca-saja (tak di-log), PII firewall (G-9), refresh pre-resume-only. Live-verify: token disk stale (G-1) → flow
    refresh harus terbukti balas 200 + body-sukses (yang ADR-010 tunda ke M3). **Sumber:** audit A-4, ADR-018.
 
-### I-23 — Deteksi limit CC PRIMER (hook `StopFailure`) belum diimplementasi [P2]
-ADR-001/CLAUDE.md §7 tetapkan hook `StopFailure` matcher `rate_limit` sbg jalur deteksi **primer**; yang ada hanya
-fallback pola output (`limit-watcher`). `feedSignal` ada tapi **nol pemanggil produksi**. M3d ditutup tanpa hook + tak
-ada issue yang melacaknya. **Remedi:** tulis settings hooks (`CLAUDE_CONFIG_DIR`/`--settings`) + kanal callback (reuse
-socket kontrol per-sesi) → `feedSignal({type:'stopfailure',error})`. **Sekaligus sumber `cli_session_id` (I-20) via
-payload `SessionStart`.** **Sumber:** audit A-5.
+### I-29 — `acca run <tool> -<flag>` mis-parse commander (butuh `--` pemisah) [P3]
+Ditemukan saat live-verify I-23: `acca run claude -p "…"` → `error: unknown option '-p'` — commander mencoba parse
+`-p` sebagai opsi milik subcommand `run` (bukan diteruskan ke CLI target), walau ada `.argument('[args...]')` variadic.
+Workaround: **`acca run claude -- -p "…"`** (pemisah `--`). Sekelas G-27 (commander mis-parse flag target). **Remedi
+(polish, non-blocking):** `run` command pakai `.enablePositionalOptions()` + `.passThroughOptions()` supaya flag setelah
+`<tool>` diteruskan apa adanya tanpa `--`. Verifikasi tak memecah `acca run claude` (tanpa args) & `acca run agy …`.
+**Sumber:** live-verify I-23 (12 Jul).
 
 ### I-25 — Gate resume `every(usedFraction<1)` terlalu ketat untuk CC [P2]
 `supervisor.ts` blokir resume bila **satu** limit exhausted. Untuk CC, model scoped yang tak dipakai sesi (mis. weekly
@@ -154,6 +162,31 @@ nyata (pola G-33/idle-agy). **Sumber:** audit followup B-3.
 ---
 
 ## Tertutup
+
+### I-23 — Deteksi limit CC PRIMER (hook `StopFailure`) + capture `cli_session_id` (hook `SessionStart`) [P2] ✅ (12 Jul, R6, LIVE-VERIFIED CC 2.1.207)
+**RESOLVED (M3e/R6, Opus inline Tier-1, otorisasi user).** ADR-001/CLAUDE.md §7 menetapkan hook `StopFailure` matcher
+`rate_limit` sbg deteksi limit CC **PRIMER** (event-driven resmi); sebelumnya hanya ada fallback output-scrape
+(`limit-watcher`), `feedSignal` **nol pemanggil produksi**. Satu slice menutup DUA hal (kedua hook lewat kanal yang sama):
+- **Mekanisme:** wrapper generate settings.json terisolasi (`adapters/claude-hooks.ts`, murni) → `claude --settings <file>`
+  (MERGE additif — auth tetap diwarisi kredensial mesin, ADR-005; **BUKAN** `CLAUDE_CONFIG_DIR` yang meng-isolasi auth).
+  Hook **exec-form** (`command`+`args[]`, tak ada shell-quoting lintas-OS) = `acca __hook <sessionId>` (perintah internal
+  tersembunyi, `cli/commands/hook.ts`): baca payload JSON stdin → teruskan field terkontrol ke **socket kontrol per-sesi**
+  (reuse ADR-015, bersama `inject`). Sisi-wrapper `daemon/hook-relay.ts` (`createHookHandler`, testable): **StopFailure** →
+  `watcher.feedSignal({type:'stopfailure',error})` (jalur LIMIT_HIT yg sudah ada); **SessionStart** → `setCliSessionId`
+  (latched sekali) → **menutup paruh CC I-20/R2b**.
+- **Injection firewall (ADR-013):** `hook` = kanal DATA (beda dari `inject` = kanal AKSI tanpa payload). Data hanya mengalir
+  ke (a) taxonomy `classify` yang TETAP & (b) kolom identifier `cli_session_id` — tak ada teks payload jadi keystroke/aksi.
+  Forwarder best-effort (swallow error, exit 0, nol stdout → tak ganggu CC / tak suntik konteks). Settings file (bukan
+  secret) di-unlink saat exit + saat spawn-gagal.
+- **Verifikasi (Opus sendiri):** typecheck+lint+**368 test** (+9: `hook-relay` 4 dispatch/firewall + `claude-hooks` 4 builder/
+  adapter + 1 integrasi settings-file lifecycle). **LIVE-VERIFY CC 2.1.207 (12 Jul, otorisasi user):** (1) `claude --settings`
+  **diterima** (auth diwarisi, sesi jalan) — mengonfirmasi klaim empiris RESEARCH §2c di 2.1.207 (doc resmi tak
+  mendokumentasikan flag ini); (2) **SessionStart fire** (`session_id`+`transcript_path`+`source:startup`); (3) **StopFailure
+  fire** dgn field **`error`** (via `--model` bogus → `error:"model_not_found"` + `prompt_id`/`effort`/`last_assistant_message`,
+  G-5 dikonfirmasi); (4) **jalur PRODUKSI penuh:** `acca run claude` → sesi acca dapat `cli_session_id=fd55a7d2-…` (= nama
+  `.jsonl` transcript, G-34 → id `--resume` sah) + event `cli_session_id_captured{source:hook_sessionstart}`; (5) settings
+  file dibersihkan saat exit. **Sisa opportunistik (bukan gate):** `rate_limit` StopFailure end-to-end asli (tak bisa
+  dipaksa; transport sudah terbukti identik via SessionStart, cabang StopFailure unit-tested). **Sumber:** audit A-5, RESEARCH §2c.
 
 ### B-1 — Dispatch retry tanpa terminal (retry backoff cap 60m selamanya) [P2] ✅ (12 Jul)
 **RESOLVED (`supervisor.ts` `realDispatch`, Opus inline Tier-1).** PROJECT §4 ("Resume gagal N kali → FAILED,
