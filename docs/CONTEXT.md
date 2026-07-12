@@ -30,9 +30,11 @@
   output (`captureSessionId` undefined) → capturer tak dipasang (sumber id CC = hook `SessionStart`, I-23). Firewall
   ADR-013 utuh (capture = klasifikasi murni, tak turunkan aksi dari isi). **Verifikasi (Opus sendiri):** typecheck+lint+**359
   test** (+13: 6 pattern + 6 engine + **1 integrasi PTY nyata** yg cetak baris G-36 → `cli_session_id` terpersist). Tier-1
-  self-review. **Sisa I-20:** (a) CC via I-23; (b) **LIVE-VERIFY** agy nyata (`acca run -- agy` → Ctrl-C 2× → cek id terisi →
-  resume) = butuh user hadir, opportunistik (gabung I-15). **Next:** I-23 (hook StopFailure+SessionStart, tutup CC I-20) ·
-  I-25 per-adapter · live-verify I-20/I-15.
+  self-review. **✅ LIVE-VERIFY agy DITUTUP (sesi ini, otorisasi user, burn minimal 1 turn):** spawn agy 1.1.1 nyata via
+  node-pty → prompt `hi` → Ctrl-C 2× → agy cetak `agy --conversation=<uuid>` → **kode capture produksi menangkap uuid
+  PERSIS** yg dicetak (`0c384fd6…`), regex cocok format nyata (G-36 anotasi + GOTCHAS). Temuan: agy fresh nol-turn tak
+  cetak resume-cmd → butuh ≥1 turn. Harness PII-firewalled (tak print transcript). **Sisa I-20: HANYA CC** (hook
+  `SessionStart`, I-23) — agy TUNTAS. **Next:** I-23 (tutup CC I-20 + deteksi limit CC primer) · I-25 per-adapter · I-15 inject pasca-reset.
 - **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + file audit followup baru) — **B-1 + B-2 DITUTUP (re-audit 12 Jul `AUDIT-2026-07-12-FOLLOWUP.md`).**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → user setuju slice autonomous-safe B-1 (dispatch-terminal-cap)
   + B-2 (reset weekly) nebeng. **B-1 (P2, Opus inline Tier-1, `supervisor.realDispatch`):** PROJECT §4 ("resume gagal

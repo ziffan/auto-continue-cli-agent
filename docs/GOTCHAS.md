@@ -157,6 +157,11 @@ percakapan lama utuh** di sesi baru (isi turn sebelumnya tampil, agy hidup di pr
 agy cetak `--conversation=<id>` (dgn `=`); adapter kita `resumeCmd` pakai `['--conversation', id]` (spasi) — Go-flag
 terima dua-duanya (bentuk `=` terverifikasi live; spasi = low-risk, verifikasi opportunistik). **Sumber:** I-15 live
 11 Jul (`agy-burn-interactive.mjs` + `agy-resume-verify.mjs`).
+**✅ CAPTURE END-TO-END LIVE-VERIFIED (12 Jul, I-20, agy 1.1.1, otorisasi user):** spawn agy nyata via node-pty →
+1 turn (`hi`) → Ctrl-C 2× → agy cetak `agy --conversation=<uuid>` (bentuk `=`, `sawResumeHint:true`) → **kode capture
+PRODUKSI** (`antigravityAdapter.captureSessionId` + `daemon/session-id-capture.ts`) menangkap uuid **persis** yang
+dicetak (`0c384fd6…`). Regex `matchAgyResumeId` cocok dgn format nyata. Catatan: agy fresh yang langsung di-Ctrl-C
+(nol turn) TAK mencetak resume-cmd (tak ada percakapan) → butuh ≥1 turn agar id tercetak.
 
 ## Lingkungan / repo
 
