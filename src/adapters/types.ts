@@ -71,4 +71,9 @@ export interface Adapter {
   /** Bangun spec spawn untuk melanjutkan sesi yang sudah exited (resume-by-id, M3d.6). `cwd` wajib
    * diisi di spec hasil — proses dilanjutkan harus di direktori kerja sesi asli (AC-8). */
   resumeCmd?(sessionId: string, cwd: string): SpawnSpec;
+  /** I-20/R2b: ekstrak `cli_session_id` milik CLI dari SATU baris output (murni — tak akses store/IPC).
+   *  agy = uuid dari resume-cmd yang agy cetak saat exit (`agy --conversation=<uuid>`, G-36). CC TIDAK
+   *  memakai jalur ini — sumber id CC = payload hook `SessionStart` (I-23/G-34), bukan output → `undefined`.
+   *  Wrapper memanggilnya per baris output; hasil pertama non-null → `sessions.setCliSessionId`. */
+  captureSessionId?(text: string): string | null;
 }

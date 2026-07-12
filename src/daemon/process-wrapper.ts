@@ -1,6 +1,8 @@
 import { isAbsolute } from 'node:path';
 import * as pty from 'node-pty';
+import { adapters } from '../adapters/index.js';
 import { createInjectHandler } from './inject-continue.js';
+import { createSessionIdCapturer } from './session-id-capture.js';
 import { sendCommand } from './ipc-client.js';
 import { createIpcServer } from './ipc-server.js';
 import { createLimitWatcher } from './limit-watcher.js';
@@ -117,6 +119,26 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
   // token literal tetap berlaku).
   const idleTracker = createIdleTracker({ tool: spec.tool });
 
+  // I-20/R2b — tangkap `cli_session_id` milik CLI dari output (agy = resume-cmd yang agy cetak saat
+  // exit, G-36) → persist supaya resume-by-id sesi MATI (`agy --conversation <id>`) tak lagi BLOCKED
+  // (paruh korektness R2a sudah pakai `cli_session_id`; ini yang MENGISINYA). Adapter yang tak
+  // memakai jalur output (CC: sumber id = hook `SessionStart`, I-23) → `captureSessionId` undefined →
+  // capturer tak dipasang. Engine murni; wrapper (penulis lifecycle sesinya, ADR-017) yang menulis DB.
+  const adapter = adapters[spec.tool];
+  const idCapturer = adapter.captureSessionId
+    ? createSessionIdCapturer({
+        // Panggil via objek adapter (bukan ekstrak referensi) — captureSessionId murni, tapi memanggil
+        // sebagai method menjaga eslint unbound-method senang. `!` aman: dijaga guard di atas.
+        capture: (line) => adapter.captureSessionId!(line),
+        onCapture: (cliId) => {
+          deps.sessions.setCliSessionId(id, cliId);
+          // Audit-only (tak di-surface Notifier). Id = uuid percakapan (bukan PII); tak di-echo di
+          // payload event untuk jaga log ramping — id tersimpan di kolom `sessions.cli_session_id`.
+          deps.events.append({ session_id: id, type: 'cli_session_id_captured', payload: { source: 'output_resume_cmd' } });
+        },
+      })
+    : undefined;
+
   // M3d.1 — seam Detector→sesi live: engine murni (tak akses store/IPC, ADR-008/013), transisi
   // state dilakukan di sini oleh pemanggil saat `onLimit` menyala (sekali per latch). Didefinisikan
   // SEBELUM control server supaya handler inject (`onInjected`) bisa memanggil `watcher.unlatch()` (R3).
@@ -185,6 +207,7 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
     process.stdout.write(data);
     watcher.feedOutput(data);
     idleTracker.feed(data);
+    idCapturer?.feedOutput(data);
   });
 
   let restoreStdin: (() => void) | undefined;

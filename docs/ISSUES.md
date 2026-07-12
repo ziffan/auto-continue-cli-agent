@@ -29,9 +29,16 @@ siap. **Sisa (issue ini):** benar-benar MENANGKAP id CLI → sampai itu ada, set
 - **DoD:** live-verify dgn CLI nyata (audit §6: jangan ✅ actuation tanpa live smoke jalur default). **Sumber:** audit A-1.
 - **✅ PARUH agy TERPECAHKAN (live-verify 11 Jul, G-36):** sumber id agy = perintah yang agy **CETAK saat exit**
   `agy --conversation=<uuid>` (andal, bukan racy) + `~/.gemini/antigravity-cli/conversations/<uuid>.db`. Resume-load
-  terbukti (`agy --conversation=<id>` memuat percakapan lama). **Sisa I-20:** (a) **CC** masih butuh hook `SessionStart`
-  (I-23) / G-34; (b) menghubungkan capture ini ke `setCliSessionId` di wrapper agy (tangkap dari output exit atau saat
-  spawn). Sampai wiring itu, resume-by-id agy exited masih BLOCKED (paruh korektness R2a), tapi **sumbernya kini pasti**.
+  terbukti (`agy --conversation=<id>` memuat percakapan lama).
+- **✅ WIRING agy DITUTUP (12 Jul, sesi ini):** capture di-wire ke `setCliSessionId`. `matchAgyResumeId` (patterns,
+  UUID-anchored konservatif) → `antigravityAdapter.captureSessionId` → engine murni `daemon/session-id-capture.ts`
+  (buffer/strip-ANSI/scan, latched single-fire, tangani baris parsial-tanpa-newline + uuid terbelah antar-chunk) →
+  wrapper `runSession` feed `onData` → `setCliSessionId(id, cliId)` + event `cli_session_id_captured`. CC TIDAK memakai
+  jalur output (`captureSessionId` undefined) → capturer tak dipasang. **+13 test** (pattern + engine + integrasi PTY
+  nyata yg cetak baris G-36 → id terpersist). **Efek: resume-by-id agy exited kini punya id nyata → tak lagi BLOCKED**
+  (mengisi paruh korektness R2a untuk agy). **Sisa I-20:** (a) **CC** masih butuh hook `SessionStart` (I-23/G-34);
+  (b) **LIVE-VERIFY** end-to-end dgn agy NYATA (`acca run -- agy` → Ctrl-C 2× → cek `cli_session_id` terisi → resume) —
+  butuh user hadir (opportunistik, gabung I-15). Format regex sudah bersumber live (G-36 capture 11 Jul).
 
 ### I-22 — agy resume-by-id sesi MATI: implement opsi #3 (probe standalone OAuth) [P1] — **slice 1 ✅ (12 Jul), slice 2 pending**
 Job `probe` agy pada sesi `exited` → PID mati → `discoverLocalPorts` kosong → throw → `'retry'` backoff cap 60m

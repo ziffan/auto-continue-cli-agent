@@ -20,6 +20,19 @@
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+- **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user) — **I-20 WIRING agy DITUTUP (kode): capture `cli_session_id` agy dari output → resume-by-id agy exited tak lagi BLOCKED.**
+  Lanjut dari B-1/B-2. **I-20 (Opus inline Tier-1):** paruh korektness R2a sudah pakai `cli_session_id`; slice ini yang
+  MENGISINYA untuk agy. Jalur: `matchAgyResumeId` (patterns, regex UUID-anchored konservatif — id non-UUID→null→BLOCKED,
+  bukan resume id salah) → `antigravityAdapter.captureSessionId` → **engine murni baru `daemon/session-id-capture.ts`**
+  (analog limit-watcher: buffer/strip-ANSI/scan, latched single-fire; tangani baris parsial TANPA newline penutup — agy
+  cetak resume-cmd tepat saat exit, G-36 — + uuid terbelah antar-chunk) → wrapper `runSession` feed `onData` →
+  `setCliSessionId(id,cliId)` + event `cli_session_id_captured` (audit-only, id tak di-echo; uuid≠PII). CC tak pakai jalur
+  output (`captureSessionId` undefined) → capturer tak dipasang (sumber id CC = hook `SessionStart`, I-23). Firewall
+  ADR-013 utuh (capture = klasifikasi murni, tak turunkan aksi dari isi). **Verifikasi (Opus sendiri):** typecheck+lint+**359
+  test** (+13: 6 pattern + 6 engine + **1 integrasi PTY nyata** yg cetak baris G-36 → `cli_session_id` terpersist). Tier-1
+  self-review. **Sisa I-20:** (a) CC via I-23; (b) **LIVE-VERIFY** agy nyata (`acca run -- agy` → Ctrl-C 2× → cek id terisi →
+  resume) = butuh user hadir, opportunistik (gabung I-15). **Next:** I-23 (hook StopFailure+SessionStart, tutup CC I-20) ·
+  I-25 per-adapter · live-verify I-20/I-15.
 - **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + file audit followup baru) — **B-1 + B-2 DITUTUP (re-audit 12 Jul `AUDIT-2026-07-12-FOLLOWUP.md`).**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → user setuju slice autonomous-safe B-1 (dispatch-terminal-cap)
   + B-2 (reset weekly) nebeng. **B-1 (P2, Opus inline Tier-1, `supervisor.realDispatch`):** PROJECT §4 ("resume gagal

@@ -1,7 +1,7 @@
 import { discoverLocalPorts } from '../shared/port-discovery.js';
 import { loopbackHttpsPostJson, type LoopbackResponse } from '../shared/http.js';
 import type { UsageSnapshot } from '../shared/types.js';
-import { isTransientRetry, matchAgyLimit, matchOverload } from './patterns.js';
+import { isTransientRetry, matchAgyLimit, matchAgyResumeId, matchOverload } from './patterns.js';
 import { parseAgyQuotaSummary } from './usage.js';
 import type { Adapter, DetectionResult, DetectSignal, SpawnSpec } from './types.js';
 
@@ -102,6 +102,10 @@ export const antigravityAdapter: Adapter = {
   },
   resumeCmd(sessionId: string, cwd: string): SpawnSpec {
     return { file: 'agy', args: ['--conversation', sessionId], cwd };
+  },
+  // I-20/R2b: agy mencetak `agy --conversation=<uuid>` saat exit (G-36) → sumber andal cli_session_id.
+  captureSessionId(text: string): string | null {
+    return matchAgyResumeId(text);
   },
   detect(signal: DetectSignal): DetectionResult {
     switch (signal.type) {
