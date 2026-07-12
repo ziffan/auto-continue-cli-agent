@@ -72,14 +72,6 @@ memilih probe standalone OAuth `retrieveUserQuota` (+refresh `oauth2.googleapis.
   A-4, ADR-018→ADR-019, G-38. **Catatan minor (cleanup non-blocking):** notifier mapping `PROBE_IMPOSSIBLE` kini tak
   ter-emit produksi (pemetaan pure tetap valid/tertes) — kandidat drop bila memang tak dipakai path lain.
 
-### I-29 — `acca run <tool> -<flag>` mis-parse commander (butuh `--` pemisah) [P3]
-Ditemukan saat live-verify I-23: `acca run claude -p "…"` → `error: unknown option '-p'` — commander mencoba parse
-`-p` sebagai opsi milik subcommand `run` (bukan diteruskan ke CLI target), walau ada `.argument('[args...]')` variadic.
-Workaround: **`acca run claude -- -p "…"`** (pemisah `--`). Sekelas G-27 (commander mis-parse flag target). **Remedi
-(polish, non-blocking):** `run` command pakai `.enablePositionalOptions()` + `.passThroughOptions()` supaya flag setelah
-`<tool>` diteruskan apa adanya tanpa `--`. Verifikasi tak memecah `acca run claude` (tanpa args) & `acca run agy …`.
-**Sumber:** live-verify I-23 (12 Jul).
-
 ### I-25 — Gate resume `every(usedFraction<1)` terlalu ketat untuk CC [P2]
 `supervisor.ts` blokir resume bila **satu** limit exhausted. Untuk CC, model scoped yang tak dipakai sesi (mis. weekly
 Opus habis, sesi jalan Sonnet) → blokir resume selamanya. Untuk agy `every` justru benar (dual-limit per grup, G-31).
@@ -172,6 +164,16 @@ nyata (pola G-33/idle-agy). **Sumber:** audit followup B-3.
 ---
 
 ## Tertutup
+
+### I-29 — `acca run <tool> -<flag>` mis-parse commander (butuh `--` pemisah) [P3] ✅ (12 Jul)
+**RESOLVED.** `acca run claude -p "…"` dulu → `error: unknown option '-p'` (commander parse `-p` sbg opsi `run`).
+**Fix:** `program.enablePositionalOptions()` (index.ts) + `run.passThroughOptions()` → flag SETELAH `<tool>`
+diteruskan apa adanya ke `args` (mis. `-p`/`--model`), tak lagi butuh `--`. **Back-compat:** dgn passThroughOptions
+commander tak lagi menelan `--` pemisah (terbawa literal) → action buang **satu** `--` di depan supaya workaround
+lama `acca run claude -- -p x` tetap setara & `--` tak keliru diteruskan ke CLI target. Eksekutor sesi dipisah jadi
+`runExecutor` (injectable) → arg-parsing teruji tanpa PTY. **+5 test** (`run-command.test.ts`: short-flag/long-flag/
+`--`-back-compat/no-args/tool-wajib). Sekelas G-27 (commander mis-parse) — kini tertutup untuk `run`. **Sumber:**
+live-verify I-23 (12 Jul).
 
 ### I-23 — Deteksi limit CC PRIMER (hook `StopFailure`) + capture `cli_session_id` (hook `SessionStart`) [P2] ✅ (12 Jul, R6, LIVE-VERIFIED CC 2.1.207)
 **RESOLVED (M3e/R6, Opus inline Tier-1, otorisasi user).** ADR-001/CLAUDE.md §7 menetapkan hook `StopFailure` matcher

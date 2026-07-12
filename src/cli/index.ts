@@ -11,7 +11,11 @@ const program = new Command();
 program
   .name('acca')
   .description('Supervisor lokal — monitor usage & auto-continue sesi Claude Code / Antigravity CLI')
-  .version('0.1.0');
+  .version('0.1.0')
+  // Wajib agar `run.passThroughOptions()` bekerja: flag setelah `<tool>` diteruskan ke CLI target
+  // (mis. `acca run claude -p "…"`) alih-alih di-parse sbg opsi subcommand (I-29). Opsi program
+  // tetap harus mendahului nama subcommand (`acca --version`, `acca run …`) — pemakaian natural.
+  .enablePositionalOptions();
 
 registerRunCommand(program);
 registerStatusCommand(program);
