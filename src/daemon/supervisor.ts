@@ -152,20 +152,23 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
           return 'done';
         }
 
-        // I-22 (R4 slice 1, ADR-018): probe usage agy MEMBUTUHKAN sesi hidup ber-PTY — Language Server
-        // hanya bind saat ber-PTY (G-3) & port-nya terikat PID sesi itu; sesi agy yang `exited` = PID
-        // mati = tak ada port → probe-via-LS MUSTAHIL. Tanpa guard ini `probeUsage` throw (port kosong)
-        // → outer catch → 'retry' → backoff cap 60m SELAMANYA & SENYAP (audit A-4, bug loop). Hentikan
-        // loop di sini: BLOCKED (butuh aksi manual) + surface `probe_impossible`. Probe standalone OAuth
-        // pre-resume (ADR-018 opsi #3, `retrieveUserQuota`) = slice 2 — saat itu ada, agy-exited bisa
-        // di-probe tanpa LS & guard ini dilonggarkan. CC tak kena: probe CC = HTTP OAuth standalone
-        // (tak butuh PID/PTY hidup), jadi CC-exited tetap dapat di-probe → guard sengaja agy-only.
+        // ADR-019 (men-supersede ADR-018): probe usage agy butuh sesi HIDUP ber-PTY — Language Server
+        // hanya bind saat ber-PTY (G-3) & port-nya terikat PID sesi itu; sesi agy `exited` = PID mati =
+        // tak ada port → probe-via-LS mustahil. Alternatif standalone OAuth (ADR-018 opsi #3,
+        // `retrieveUserQuota`) LIVE-VERIFIED membaca pool kuota SALAH — request harian per-model gemini-cli,
+        // BUKAN limit grup weekly+5h yang agy tegakkan (Summary via OAuth = 403) → tak bisa menggerbang
+        // resume agy (GOTCHAS G-38). Karena itu: JANGAN probe, JANGAN BLOCKED — resume OPTIMISTIC. Job
+        // `probe` ini dijadwalkan pada `reset_at` (kuota sangat mungkin sudah tersedia) → enqueue `resume`
+        // langsung. Bila ternyata masih limit, sesi hasil-resume mem-bind LS-nya sendiri → output TUI
+        // `Individual quota reached` (limit-watcher, G-19) → LIMIT_HIT baru → jadwal ulang di `reset_at`
+        // berikut (dibatasi cap attempts B-1). Actuation JADI probe. CC tak kena: probe CC = HTTP standalone
+        // ke api.anthropic.com yang membaca limit CC nyata tanpa sesi hidup → CC-exited tetap di-probe normal.
         if (session.tool === 'antigravity' && session.proc_state === 'exited') {
-          sessions.markBlocked(job.session_id);
+          jobs.enqueue({ session_id: job.session_id, run_at: deps.now(), kind: 'resume', next_backoff_ms: null });
           events.append({
             session_id: job.session_id,
-            type: 'job_dispatch_error',
-            payload: { jobId: job.id, action: 'probe_impossible', reason: 'agy_exited_no_live_ls', status: 'BLOCKED' },
+            type: 'job_dispatch_done',
+            payload: { jobId: job.id, action: 'optimistic_resume_agy_exited', reason: 'no_standalone_agy_quota_probe' },
           });
           return 'done';
         }

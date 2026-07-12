@@ -234,10 +234,12 @@ gagal di A-1).
   cmd). **Butuh live-verify** (audit §6). Gabung ke slice hook (R6/I-23). Sampai ada → resume-by-id exited = BLOCKED.
 - **R3 — resume-cycle (I-21/A-3, belum):** transisi RESUMED→RUNNING + un-latch watcher + monitor mencakup sesi hidup +
   test siklus 2×.
-- **R4 — agy-exited-policy (I-22/A-4): keputusan LOCK (ADR-018, Ziffan) = Opsi 1** (probe standalone opsi #3 + egress
-  `oauth2.googleapis.com`). Dua slice: (1) **✅ (12 Jul)** guard minimal probe-impossible (agy+exited → BLOCKED +
-  notif `PROBE_IMPOSSIBLE` + stop-retry, menutup bug loop-senyap; guard agy-only karena CC probe standalone); (2) probe
-  standalone OAuth (Tier-1 creds+egress, live-verify) — **pending**. R5 status-completeness (I-24) ✅.
+- **R4 — agy-exited-policy (I-22/A-4): ✅ RESOLVED via ADR-019 (12 Jul, pivot dari ADR-018).** Live-verify slice 2
+  (otorisasi user) buktikan probe standalone OAuth `retrieveUserQuota` baca **pool kuota SALAH** (gemini-cli harian ≠ grup
+  agy weekly+5h; Summary via OAuth=403, G-38) → ADR-018 opsi #3 GUGUR → **ADR-018 di-supersede ADR-019 = optimistic resume
+  + detect** (agy-exited: skip probe, enqueue resume langsung di reset_at; sesi hasil-resume alive → deteksi ulang via LS
+  bila masih limit; bounded B-1). Guard slice-1 (`probe_impossible`) DIGANTI. `oauth2`/`cloudcode-pa` dihapus dari egress
+  (least-privilege). **369 test** hijau, Tier-1 self-review. R5 status-completeness (I-24) ✅.
 - **R6 — stopfailure-hook + sessionstart-capture (I-23) ✅ (12 Jul, LIVE-VERIFIED CC 2.1.207):** wrapper generate
   settings.json terisolasi → `claude --settings <file>` memasang hook **StopFailure** (deteksi limit CC PRIMER,
   ADR-001/§7) + **SessionStart** (capture `cli_session_id` → **tutup paruh CC I-20/R2b**). Forwarder internal
@@ -245,9 +247,9 @@ gagal di A-1).
   firewall (kanal DATA vs AKSI, `daemon/hook-relay.ts`). **368 test** (+9); live production `acca run claude` →
   `cli_session_id` terpersist dari SessionStart nyata. Sisa opportunistik: `rate_limit` StopFailure end-to-end asli.
   R7 resume-gate-per-tool (I-25). R8 housekeeping (I-27/I-28) ✅.
-**Gate keluar (sebelum M-remote):** R1–R3 ✅ + R6 (I-23, deteksi limit CC primer + capture id CC) ✅ + I-15 live-verify
-**lulus dgn CLI nyata** (limit asli, resume nyata melanjutkan percakapan — **sisa terbesar**). R4 minimal varian
-"surface manual" ✅ (slice 1). M5 aman setelah R1 (crash) tertutup — sudah ✅.
+**Gate keluar (sebelum M-remote):** R1–R3 ✅ + **R4 ✅ PENUH (ADR-019 optimistic resume, 12 Jul)** + R6 (I-23, deteksi
+limit CC primer + capture id CC) ✅ + I-15 live-verify **lulus dgn CLI nyata** (limit asli, resume nyata melanjutkan
+percakapan — **sisa terbesar & satu-satunya gate tersisa**). M5 aman setelah R1 (crash) tertutup — sudah ✅.
 
 ## M-remote — Remote-control Telegram (tier A+B+C)
 **Slice (bertahap per tier, satu kanal Telegram — ADR-011):**

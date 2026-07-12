@@ -25,7 +25,7 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 ## 2. Status
 
 Fase: **Implementasi — M3e KOREKSI LOOP** (dari audit 11 Jul, `docs/audit/AUDIT-2026-07-11.md`). **M1–M3d + M4 inti bertes**
-(368 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup + Notifier +
+(369 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup + Notifier +
 proximity + usage-monitor + `acca status` usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
 **KOREKSI (audit):** klaim "loop auto-continue penuh selesai" dulu **overstated** — 4 P1 di jalur resume/continue lolos test
 (seam actuation di-stub). **Progres gate (12 Jul):** R1 (daemon-crash spawn-gagal) ✅ · R2a (resume pakai
@@ -96,6 +96,7 @@ Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file 
 - **Antigravity CLI**: dual limit (refresh 5-jam + kuota mingguan); dua-duanya harus > 0.
   Kuota berkorelasi dengan beban kerja per-prompt (variabel). Ada opsi AI Credits untuk overage.
   `/usage` **stale** di sesi hidup — probe LS `RetrieveUserQuotaSummary` sesi-hidup **JUGA stale** (snapshot launch, G-35) →
-  kuota real-time = fresh-launch / standalone `retrieveUserQuota` OAuth (**ADR-018 Accepted**: opsi #3 + egress
-  `oauth2.googleapis.com`). Resume-by-id agy = `agy --conversation=<id>` (cmd dicetak saat exit, G-36). Prior art: CodexBar (usage agy solved, §5b),
+  kuota real-time agy = **fresh-launch LS**. (**ADR-018 di-SUPERSEDE ADR-019, 12 Jul:** probe standalone `retrieveUserQuota`
+  OAuth terbukti baca **pool kuota SALAH** — request harian gemini-cli, bukan limit grup agy, Summary via OAuth=403, G-38 →
+  agy-exited pakai **optimistic resume + detect**, nol egress OAuth baru.) Resume-by-id agy = `agy --conversation=<id>` (cmd dicetak saat exit, G-36). Prior art: CodexBar (usage agy solved, §5b),
   claude-auto-retry (auto-continue CC via tmux, §5c).

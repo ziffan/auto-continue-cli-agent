@@ -11,9 +11,10 @@
 > bukti baris-per-baris + rencana remedi R1–R8 ada di file audit — entri di bawah = ringkas + pointer. **Gate keluar
 > sebelum M-remote:** I-20..I-22 (R1–R3) selesai + I-15 live-verify LULUS dgn CLI nyata.
 > **Progres gate (12 Jul):** R1 (A-2/I—daemon-crash) ✅ · R2a (A-1 korektness) ✅ · **R3 (I-21 multi-siklus) ✅** ·
-> **R4 slice 1 (I-22 guard probe-impossible agy-exited) ✅** · **R6 (I-23 hook StopFailure + SessionStart) ✅
-> — DELTA: menutup paruh CC I-20 (capture `cli_session_id` via SessionStart) + deteksi limit CC PRIMER, LIVE-VERIFIED
-> CC 2.1.207 (12 Jul).** · **sisa: I-22 slice 2 (probe standalone OAuth) + I-15 live-verify actuation inject/resume asli.**
+> **R4 (I-22 agy-exited) ✅ PENUH — pivot ADR-019:** slice 1 (guard probe-impossible) DIGANTI **optimistic resume +
+> detect**; probe standalone OAuth (ADR-018 opsi #3) DIBATALKAN karena live-verify buktikan ia baca **pool kuota salah**
+> (gemini-cli harian ≠ grup agy weekly+5h, G-38) → ADR-018 di-supersede ADR-019 · **R6 (I-23 hook StopFailure +
+> SessionStart) ✅ — LIVE-VERIFIED CC 2.1.207.** · **sisa gate: HANYA I-15 live-verify actuation inject/resume asli.**
 >
 > **Re-audit 12 Jul (`docs/audit/AUDIT-2026-07-12-FOLLOWUP.md`) → B-1..B-3.** Verifikasi remedi R1–R8 +
 > temuan baru di jalur retry/terminal-state. **B-1 (P2, dispatch-terminal-cap) ✅ + B-2 (P3, reset weekly) ✅
@@ -49,22 +50,27 @@ siap. **Sisa (issue ini):** benar-benar MENANGKAP id CLI → sampai itu ada, set
   G-34 → id `--resume` sah) + event `cli_session_id_captured{source:hook_sessionstart}`. **I-20 TUNTAS (agy + CC).**
   Detail hook = I-23 (Tertutup).
 
-### I-22 — agy resume-by-id sesi MATI: implement opsi #3 (probe standalone OAuth) [P1] — **slice 1 ✅ (12 Jul), slice 2 pending**
-Job `probe` agy pada sesi `exited` → PID mati → `discoverLocalPorts` kosong → throw → `'retry'` backoff cap 60m
-**selamanya, senyap**. **KEPUTUSAN 11 Jul (Ziffan → ADR-018): Opsi 1** — implement probe standalone pre-resume
-(`retrieveUserQuota`) + refresh token via **`oauth2.googleapis.com`** (masuk egress whitelist NFR). Otonomi penuh agy-exited.
-**Dua slice (M3e/R4):**
-1. **✅ Guard minimal (12 Jul, `supervisor.ts` cabang `probe`, Tier-1 self-review):** `tool===antigravity &&
-   proc_state===exited` → `markBlocked` + event `job_dispatch_error {action:'probe_impossible',
-   reason:'agy_exited_no_live_ls', status:'BLOCKED'}` + `return 'done'` → **bug loop-senyap DITUTUP** (tak lagi retry
-   backoff selamanya). Notifier: event **`PROBE_IMPOSSIBLE`** baru (level warn, pesan jelas, menang atas branch BLOCKED
-   generik; reason-code internal tak dibocorkan). **Guard agy-only** (CC probe = HTTP OAuth standalone → CC-exited tetap
-   dapat di-probe). Firewall G-9 utuh. **+2 test** (dispatch agy-exited → BLOCKED/done/no-retry; notifier mapping).
-   **340 test** hijau. Saat slice 2 ada, guard dilonggarkan (agy-exited bisa di-probe tanpa LS).
-2. **Probe standalone (Tier-1: creds + egress, butuh live-verify) — PENDING:** refresh token `oauth2.googleapis.com`
-   (client-id Gemini CLI) → `retrieveUserQuota` → `UsageSnapshot`. Mitigasi ADR-018: allowlist host ketat (`guardEgress`),
-   token dibaca-saja (tak di-log), PII firewall (G-9), refresh pre-resume-only. Live-verify: token disk stale (G-1) → flow
-   refresh harus terbukti balas 200 + body-sukses (yang ADR-010 tunda ke M3). **Sumber:** audit A-4, ADR-018.
+### I-22 — agy resume-by-id sesi MATI [P1] — ✅ RESOLVED via **ADR-019 optimistic resume** (12 Jul; ADR-018 opsi #3 GUGUR)
+Job `probe` agy pada sesi `exited` → PID mati → tak ada LS → probe-via-LS mustahil. **Riwayat:** ADR-018 (11 Jul)
+memilih probe standalone OAuth `retrieveUserQuota` (+refresh `oauth2.googleapis.com`); slice 1 (guard `probe_impossible`
+→ BLOCKED) ditutup lebih dulu.
+- **✅ LIVE-VERIFY 12 Jul (R4 slice 2, otorisasi user) MEMBANTAH ADR-018:** refresh token gemini-cli **200** +
+  `retrieveUserQuota` **200**, tapi isinya = **kuota request harian per-model gemini-cli Code Assist** (`buckets[].{modelId,
+  tokenType:REQUESTS,remainingFraction,resetTime}`; gemini 100%, reset ~24j), **BUKAN** limit grup weekly+5h yang agy tegakkan.
+  Bukti serentak: OAuth gemini **1.0** vs LS `RetrieveUserQuotaSummary` gemini-5h **0.079**; Summary via OAuth = **403**.
+  Kredensial gemini-cli disk fundamental tak bisa baca limit grup agy (G-38). → **probe standalone tak bisa menggerbang
+  resume agy = bug korektness bila diteruskan.**
+- **✅ RESOLVED — ADR-019 (men-supersede ADR-018): optimistic resume + detect.** `supervisor.ts` cabang `probe`:
+  `tool===antigravity && proc_state===exited` → **enqueue `resume` langsung** (skip probe) + event `job_dispatch_done
+  {action:'optimistic_resume_agy_exited'}` + `return 'done'`. Sesi hasil-resume = **alive** (daemon pegang PTY) → siklus
+  limit berikutnya probe-able via LS normal; bila masih limit → `Individual quota reached` (limit-watcher, G-19) → LIMIT_HIT
+  → reschedule di reset_at (cap B-1). Guard slice-1 (`probe_impossible`/BLOCKED) DIGANTI jalur ini. **Egress:**
+  `oauth2.googleapis.com` tak pernah masuk kode + `cloudcode-pa.googleapis.com` (opsi #3, tak dipakai) **dihapus** dari
+  allowlist (least-privilege). **CC tak kena** (probe CC = HTTP `api.anthropic.com` baca limit CC nyata standalone). Firewall
+  G-9 utuh. **369 test** hijau (supervisor-dispatch agy-exited→optimistic-resume di-rewrite; http-egress oauth2/cloudcode
+  kini diblokir). **Trade-off diterima:** ≤1 resume "sia-sia" per siklus masih-limit (bounded reset_at). **Sumber:** audit
+  A-4, ADR-018→ADR-019, G-38. **Catatan minor (cleanup non-blocking):** notifier mapping `PROBE_IMPOSSIBLE` kini tak
+  ter-emit produksi (pemetaan pure tetap valid/tertes) — kandidat drop bila memang tak dipakai path lain.
 
 ### I-29 — `acca run <tool> -<flag>` mis-parse commander (butuh `--` pemisah) [P3]
 Ditemukan saat live-verify I-23: `acca run claude -p "…"` → `error: unknown option '-p'` — commander mencoba parse
