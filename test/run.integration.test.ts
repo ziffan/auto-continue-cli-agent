@@ -114,4 +114,28 @@ describe('runSession integration', () => {
     await waitForExit;
     expect(sessions.getById(sessionId)?.resumed_from).toBe('origin-sess');
   }, 10_000);
+
+  it('I-20: captures agy cli_session_id from the resume cmd printed at exit (G-36)', async () => {
+    const sessions = createSessionsRepo(db);
+    const events = createEventsRepo(db);
+    const jobs = createScheduledJobsRepo(db);
+
+    const uuid = '4f9a8638-1c2d-4e5f-8a9b-0c1d2e3f4a5b';
+    // Proses palsu "agy": cetak baris resume-cmd yang agy CETAK saat exit (G-36) lalu keluar. tool
+    // 'antigravity' → wrapper memasang capturer adapter agy pada stream output.
+    const script = `process.stdout.write('Resume with -c (or command below): agy --conversation=${uuid}\\n'); process.exit(0)`;
+    const { sessionId, waitForExit } = runSession(
+      { file: process.execPath, args: ['-e', script], cwd: process.cwd(), tool: 'antigravity' },
+      { sessions, events, jobs },
+    );
+
+    await waitForExit;
+
+    // cli_session_id terisi dari output → resume-by-id sesi MATI tak lagi BLOCKED (mengisi paruh R2a).
+    expect(sessions.getById(sessionId)?.cli_session_id).toBe(uuid);
+    const captured = events
+      .listBySession(sessionId, 50)
+      .some((e) => e.type === 'cli_session_id_captured');
+    expect(captured).toBe(true);
+  }, 10_000);
 });

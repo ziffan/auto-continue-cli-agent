@@ -50,6 +50,16 @@ const CC_LIMIT_PATTERNS: RegExp[] = [
  */
 const AGY_LIMIT_PATTERNS: RegExp[] = [/\bindividual quota reached\b/i, /\bquota\s+(?:reached|exhausted|exceeded)\b/i];
 
+/**
+ * G-36 (live-verify 11 Jul, agy 1.1.1): saat sesi agy interaktif ditutup (Ctrl-C 2×), agy MENCETAK
+ * perintah resume eksplisit `Resume with -c (or command below): agy --conversation=<uuid>` — ini
+ * sumber ANDAL `cli_session_id` agy untuk resume-by-id (I-20/R2b; bukan tebakan ".db termuda" yang racy).
+ * Tangkap uuid dari bentuk `--conversation=<uuid>` (bentuk `=` terverifikasi live; spasi = low-risk,
+ * Go-flag terima dua-duanya). KONSERVATIF: hanya UUID kanonik (8-4-4-4-12 hex) — id non-UUID TAK
+ * ditangkap (lebih baik BLOCKED/manual daripada resume dgn id salah yang PASTI ditolak CLI).
+ */
+const AGY_RESUME_ID_PATTERN = /--conversation[=\s]+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i;
+
 /** Jam dinding + timezone opsional dalam kurung: "3pm (UTC)" / "2:30pm (America/New_York)". */
 const CLOCK_TIME_PATTERN = /(\d{1,2}(?::\d{2})?\s*[ap]m)(?:\s*\(([^)]+)\))?/i;
 
@@ -107,4 +117,11 @@ export function matchAgyLimit(text: string): { evidence: string; resetHint?: Res
     if (match) return { evidence: match[0], resetHint: extractResetHint(text) };
   }
   return null;
+}
+
+/** Ekstrak `cli_session_id` agy (uuid) dari baris resume-cmd yang agy cetak saat exit (G-36).
+ *  Return uuid (lowercase-normalized) bila match, else null. Konservatif (UUID kanonik saja). */
+export function matchAgyResumeId(text: string): string | null {
+  const match = AGY_RESUME_ID_PATTERN.exec(text);
+  return match?.[1] ? match[1].toLowerCase() : null;
 }
