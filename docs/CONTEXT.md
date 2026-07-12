@@ -11,15 +11,41 @@
   **KOREKSI JUJUR (audit `docs/audit/AUDIT-2026-07-11.md`):** klaim lama "loop auto-continue penuh selesai & bertes" **OVERSTATED** —
   4 P1 di jalur resume/continue lolos 308 test (seam actuation di-stub). **Ditutup:** A-2 (daemon crash saat spawn gagal, R1) +
   A-1 paruh korektness (resume pakai `cli_session_id`, absen→BLOCKED, R2a) + **R3 (I-21) siklus-limit-2 (12 Jul)** +
-  **R4 slice 1 (I-22 guard probe-impossible agy-exited, 12 Jul)**. **Belum:** R2b capture id (I-20), R4 slice 2 (I-22
-  probe standalone OAuth), R5–R8. **Gate keluar sebelum M-remote:** R1–R3 ✅ + I-15
-  live-verify actuation LULUS CLI nyata (masih HARD-STOP unattended — butuh user hadir).
+  **R4 (I-22 agy-exited) ✅ PENUH via ADR-019 (12 Jul, pivot dari ADR-018 — optimistic resume + detect)** +
+  **R6 (I-23) ✅** + I-20 (agy+CC) ✅. **Belum:** I-25 (R7 per-adapter gate). **Gate keluar sebelum M-remote:**
+  R1–R4 ✅ + R6 ✅ + **HANYA I-15 live-verify actuation tersisa** (LULUS CLI nyata; HARD-STOP unattended — butuh user hadir).
   Sisanya di bawah masih akurat. M3d tertutup penuh. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
   `runSession` direlokasi ke `daemon/process-wrapper.ts` (layer inversion ditutup) + resume-chain link;
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+- **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + R4 slice 2 live-verify) — **ADR-018 di-SUPERSEDE ADR-019: premis probe OAuth standalone terbukti KELIRU (live) → R4/I-22 ditutup via optimistic resume + detect.**
+  Sesi buka `/session-start` (proof-of-understanding lengkap) → user pilih fokus **R4 slice 2 (probe OAuth agy) + I-15**.
+  **Grounding live (otorisasi user, R4 slice 2):** creds `~/.gemini/oauth_creds.json` = login **gemini-cli** (token disk
+  stale 8 hari, G-1 re-verified) — dua client OAuth tertanam di `agy.exe` balas `unauthorized_client` untuk refresh_token ini.
+  Client gemini-cli publik (`681255809395-…`, dari repo open-source) **berhasil refresh 200** → `retrieveUserQuota` **200**.
+  **TEMUAN PENENTU (G-38):** shape = `buckets[].{modelId, tokenType:REQUESTS, remainingFraction, resetTime}` per-model gemini,
+  reset **HARIAN**, semua **100%** — tapi ini kuota **request harian gemini-cli Code Assist**, **BUKAN** limit grup weekly+5h
+  yang agy tegakkan (`Individual quota reached`). Eksperimen non-destruktif (probe LS sesi agy hidup 17316, 0 kuota) buktikan
+  divergensi serentak: OAuth gemini **1.0** vs LS `RetrieveUserQuotaSummary` gemini-5h **0.079** + gemini-weekly 0.688 +
+  3p-weekly 0.330; Summary via OAuth = **403**. → **premis ADR-018 opsi #3 GUGUR** (probe standalone baca pool salah → bug
+  korektness bila diteruskan). **Keputusan owner Ziffan (skill adr): ADR-019 men-supersede ADR-018 = optimistic resume +
+  detect.** **Impl (Opus inline Tier-1, state-machine + egress):** `supervisor.ts` cabang `probe` — `antigravity && exited`
+  → **enqueue `resume` langsung** (skip probe mustahil) + event `optimistic_resume_agy_exited` + done (ganti guard slice-1
+  `probe_impossible`/BLOCKED). Sesi hasil-resume = **alive** (daemon pegang PTY) → siklus limit berikutnya probe-able via LS
+  normal; masih-limit → `Individual quota reached` (limit-watcher, G-19) → LIMIT_HIT → reschedule reset_at (cap B-1). Trade-off:
+  ≤1 resume "sia-sia" per siklus (bounded). **Egress least-privilege:** `oauth2.googleapis.com` tak pernah masuk kode +
+  `cloudcode-pa.googleapis.com` (opsi #3, nol pemanggil src) **dihapus** dari `ALLOWED_HOSTS`. CC tak kena (probe CC = HTTP
+  `api.anthropic.com` baca limit CC nyata standalone). **Verifikasi (Opus sendiri):** `npm run check` typecheck+lint+**369 test**
+  (+1: supervisor-dispatch agy-exited→optimistic-resume rewrite; http-egress oauth2/cloudcode kini diblokir). Tier-1 self-review
+  PASS. **Deliverable sampingan:** shape `retrieveUserQuota` OAuth akhirnya tertangkap (item RESEARCH terbuka sejak 3 Jul).
+  **Docs:** DECISIONS (ADR-018→Superseded, **ADR-019 baru**, header/Pending/Change Log), NFR §Security egress (−2 host),
+  GOTCHAS **G-38** + anotasi G-35, ISSUES (I-22 RESOLVED + gate header), MILESTONES M3e R4 + gate-exit, CONTEXT (ini).
+  **Sisa gate M3e = HANYA I-15 live-verify actuation** (inject `continue` pasca-reset + resume nyata — butuh limit asli + user).
+  **Next (Sub-task B, sesi ini):** I-15 — user tawarkan burn gemini (kini gemini-5h 7.9%) untuk verifikasi actuation; catatan:
+  inject **pasca-reset** butuh tunggu reset ~4j (gemini-5h reset 14:22Z) → yang bisa ditangkap sesi ini = deteksi limit fresh +
+  penanda idle/busy agy. **`main` belum di-commit** (perubahan sesi ini). **Catatan minor:** notifier `PROBE_IMPOSSIBLE` kini tak ter-emit (kandidat cleanup).
 - **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + I-23) — **R6/I-23 DITUTUP + LIVE-VERIFIED CC 2.1.207: hook StopFailure (deteksi limit CC PRIMER) + SessionStart (capture `cli_session_id` CC) → paruh CC I-20/R2b TUTUP → I-20 TUNTAS (agy+CC).**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → user pilih fokus **I-23** + otorisasi live-verify CC. **Slice
   (Opus inline Tier-1, IPC trust-boundary + injection firewall):** ADR-001/§7 menetapkan hook `StopFailure` sbg deteksi limit

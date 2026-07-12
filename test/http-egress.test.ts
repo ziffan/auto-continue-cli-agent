@@ -32,7 +32,6 @@ function fakeHttps(status: number, body: string, onWrite?: (chunk: string) => vo
 describe('guardEgress', () => {
   it.each([
     'https://api.anthropic.com/api/oauth/usage',
-    'https://cloudcode-pa.googleapis.com/foo',
     'https://api.telegram.org/botTOKEN/sendMessage',
     'http://localhost:1234/x',
     'http://127.0.0.1:55031/y',
@@ -41,8 +40,14 @@ describe('guardEgress', () => {
     expect(() => guardEgress(url)).not.toThrow();
   });
 
-  it('blocks a host not in the allowlist', () => {
-    expect(() => guardEgress('https://evil.example.com/steal')).toThrow(EgressBlockedError);
+  it.each([
+    'https://evil.example.com/steal',
+    // ADR-019: host Google OAuth publik DIHAPUS dari allowlist (probe agy standalone opsi #3 dibatalkan —
+    // membaca pool kuota salah). Keduanya kini diblokir (least-privilege).
+    'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota',
+    'https://oauth2.googleapis.com/token',
+  ])('blocks a host not in the allowlist: %s', (url) => {
+    expect(() => guardEgress(url)).toThrow(EgressBlockedError);
   });
 
   it('throws for an invalid URL string', () => {

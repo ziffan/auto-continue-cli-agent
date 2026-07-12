@@ -563,7 +563,10 @@ Utamakan **sumber primer** (docs resmi) di atas blog pihak ketiga — tanggal ce
 >    refresh token INTERNAL**. Konsekuensi opsi #3: probe standalone **wajib token segar** — butuh (i) refresh
 >    sendiri via `oauth2.googleapis.com` (→ **egress tambahan di luar whitelist NFR saat ini** + butuh client-id
 >    Gemini CLI) ATAU (ii) ambil token dari LS sesi hidup (→ malah condong ke opsi #2 utk sesi hidup). **Bentuk
->    respons sukses `retrieveUserQuota` masih belum tertangkap** (perlu token valid). Masih perlu: (a) freshness
+>    respons sukses `retrieveUserQuota`** ✅ **TERTANGKAP 12 Jul** (R4 slice 2, client gemini-cli publik `681255809395-…`):
+>    `{buckets[]:{modelId,tokenType:"REQUESTS",remainingFraction,resetTime}}` per-model gemini reset HARIAN — **TAPI ini kuota
+>    request harian gemini-cli, BUKAN limit grup weekly+5h agy** (Summary via OAuth=403) → opsi #3 tak viable utk gerbang resume
+>    agy (G-38, ADR-018→**ADR-019** optimistic resume). Masih perlu: (a) freshness
 >    snapshot `/usage` (#1), (c) **respons sukses** retrieveUserQuota (**ditunda ke M3 atas keputusan user 3 Jul** —
 >    butuh refresh token via `oauth2.googleapis.com`; ditangkap nanti saat wrapper pegang token sesi hidup),
 >    ~~(d) `quotaInfo` non-nil dari LS sesi interaktif ber-PTY nyata~~ ✅ **DITUTUP (3 Jul malam):** agy interaktif

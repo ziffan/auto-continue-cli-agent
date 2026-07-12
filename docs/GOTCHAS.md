@@ -364,6 +364,28 @@ andal = **output TUI** (`Individual quota reached`, limit-watcher — terbukti f
 (sesi baru / standalone OAuth ADR-018). Ini **memperkuat ADR-018** (probe pre-resume standalone = fresh, hindari cache
 sesi). **Cara benar:** untuk kuota real-time launch sesi baru / standalone probe; jangan percaya angka dari LS sesi yang
 sudah lama hidup. **Sumber:** I-15 live-verify 11 Jul (scratchpad `agy-burn-interactive.mjs`).
+**⚠ DIKOREKSI (12 Jul, G-38):** kalimat "standalone OAuth ADR-018 = probe fresh" di atas **usang** — probe standalone OAuth
+`retrieveUserQuota` ternyata membaca **pool kuota BEDA** (gemini-cli harian), bukan limit grup agy → ADR-018 di-supersede
+ADR-019 (optimistic resume). "Probe FRESH yang benar" untuk limit agy = **fresh-launch LS**, bukan OAuth standalone. Lihat G-38.
+
+### G-38 — OAuth `retrieveUserQuota` (gemini-cli) = kuota HARIAN per-model, BUKAN limit grup weekly+5h yang agy tegakkan
+**Jebakan/Fakta (live-verify 12 Jul, Windows, agy 1.1.1, otorisasi user — R4 slice 2, membatalkan premis ADR-018):**
+`~/.gemini/oauth_creds.json` = login **gemini-cli** (bukan client OAuth agy sendiri; dua client tertanam di `agy.exe` balas
+`unauthorized_client` untuk refresh_token ini). Refresh token via **`oauth2.googleapis.com/token`** WAJIB pakai client
+gemini-cli publik (`681255809395-…apps.googleusercontent.com` + secret `GOCSPX-…`, installed-app = tak rahasia) — **berhasil
+HTTP 200**. Lalu `POST cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota` (Bearer, body `{}`) → **200**, bentuk:
+`{ buckets[]: { modelId, tokenType:"REQUESTS", remainingFraction, resetTime(ISO-8601 Z) } }` — **per-MODEL gemini** (gemini-2.5-flash/
+-flash-lite/-pro, gemini-3.1-flash-lite), reset **~24 jam (HARIAN)**, nol PII. **TAPI ini kuota request harian gemini-cli Code
+Assist — BUKAN** limit **grup weekly+5h** yang agy tegakkan untuk `Individual quota reached`. **Bukti divergensi (akun sama,
+serentak 12 Jul):** OAuth `retrieveUserQuota` gemini = **1.0 (100%)** sementara LS `RetrieveUserQuotaSummary` (sesi hidup) =
+**gemini-5h 0.079 (7.9%)** + gemini-weekly 0.688 + 3p-weekly 0.330 + 3p-5h 0.9996. `retrieveUserQuotaSummary` **via OAuth =
+403 PERMISSION_DENIED** (client gemini-cli tak berhak atas quota-group Antigravity 2.0).
+**Dampak:** probe standalone OAuth **TAK BISA** menggerbang resume agy — kalau agy limit (gemini-5h=0) ia tetap lapor gemini
+100% → dispatch keliru "resume". **Premis ADR-018 (opsi #3) gugur** → di-supersede **ADR-019** (optimistic resume + detect;
+`oauth2.googleapis.com`/`cloudcode-pa.googleapis.com` dihapus dari egress). **Cara benar:** limit grup agy HANYA terbaca via
+**LS sesi-hidup** (`RetrieveUserQuotaSummary`, opsi #2) atau **output TUI** (`Individual quota reached`, limit-watcher). Untuk
+agy-exited (tak ada LS): jangan probe standalone — resume optimistik lalu deteksi ulang via LS sesi hasil-resume. **Sumber:**
+R4 slice 2 live-verify 12 Jul (scratchpad `agy-oauth-probe-spike.mjs` + `agy-ls-compare.mjs`), DECISIONS ADR-019.
 
 ### G-33 — agy 1.1.0+ jadikan `request-review` sbg **mode default** → state prompt agy saat idle BEDA (jeda pre-write, bukan hanya prompt kosong)
 **Jebakan/Fakta (CHANGELOG agy 1.1.0, delta-check 11 Jul — belum live-verify):** mulai agy **1.1.0**, mode eksekusi default =
