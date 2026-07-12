@@ -36,9 +36,11 @@ siap. **Sisa (issue ini):** benar-benar MENANGKAP id CLI → sampai itu ada, set
   wrapper `runSession` feed `onData` → `setCliSessionId(id, cliId)` + event `cli_session_id_captured`. CC TIDAK memakai
   jalur output (`captureSessionId` undefined) → capturer tak dipasang. **+13 test** (pattern + engine + integrasi PTY
   nyata yg cetak baris G-36 → id terpersist). **Efek: resume-by-id agy exited kini punya id nyata → tak lagi BLOCKED**
-  (mengisi paruh korektness R2a untuk agy). **Sisa I-20:** (a) **CC** masih butuh hook `SessionStart` (I-23/G-34);
-  (b) **LIVE-VERIFY** end-to-end dgn agy NYATA (`acca run -- agy` → Ctrl-C 2× → cek `cli_session_id` terisi → resume) —
-  butuh user hadir (opportunistik, gabung I-15). Format regex sudah bersumber live (G-36 capture 11 Jul).
+  (mengisi paruh korektness R2a untuk agy).
+- **✅ LIVE-VERIFY agy DITUTUP (12 Jul, agy 1.1.1, otorisasi user):** spawn agy nyata → 1 turn → Ctrl-C 2× → agy cetak
+  `agy --conversation=<uuid>` → **kode capture produksi menangkap uuid persis** yang dicetak (`0c384fd6…`), regex cocok
+  format nyata (G-36 anotasi). Jalur produksi tercakup: capturer-vs-agy-nyata ✅ + glue `runSession`→DB-vs-fixture ✅
+  (integrasi). Resume-load = G-36 (11 Jul). **Sisa I-20: HANYA (a) CC** via hook `SessionStart` (I-23/G-34) — agy TUNTAS.
 
 ### I-22 — agy resume-by-id sesi MATI: implement opsi #3 (probe standalone OAuth) [P1] — **slice 1 ✅ (12 Jul), slice 2 pending**
 Job `probe` agy pada sesi `exited` → PID mati → `discoverLocalPorts` kosong → throw → `'retry'` backoff cap 60m
