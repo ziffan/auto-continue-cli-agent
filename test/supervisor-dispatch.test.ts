@@ -15,7 +15,7 @@ import type { TimerHandle } from '../src/daemon/scheduler.js';
 import { closeDb, openDb, type DatabaseInstance } from '../src/store/db.js';
 import { createScheduledJobsRepo } from '../src/store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../src/store/repositories/sessions.js';
-import type { UsageSnapshot } from '../src/shared/types.js';
+import type { Session, UsageSnapshot } from '../src/shared/types.js';
 
 function uniqueSocketPath(): string {
   const rand = randomBytes(4).toString('hex');
@@ -366,6 +366,82 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(payload.action).toBe('resume_spawned');
     expect(payload.newSessionId).toBe('new-session-1');
     expect(payload.spec.cwd).toBe(realCwd);
+  });
+
+  it('resume: full cycle exited→spawn→continue drives inject on the NEW alive session (C-1/RC-1)', async () => {
+    // Test kontrak ujung-ke-ujung (audit §6: "siapa yang bergerak berikutnya?"): sesi mati di-resume →
+    // sesi baru alive → job continue-nya fire → requestInject dipanggil terhadap sesi BARU.
+    tempDir = join(tmpdir(), `acca-dispatch-test-${randomBytes(4).toString('hex')}`);
+    process.env.ACCA_DATA_DIR = tempDir;
+    db = openDb();
+    socketPath = uniqueSocketPath();
+
+    const sessions = createSessionsRepo(db);
+    sessions.createSession({
+      id: 's-old',
+      tool: 'claude',
+      cwd: process.cwd(),
+      status: 'LIMIT_HIT',
+      proc_state: 'exited',
+      cli_session_id: 'cc-uuid-old',
+      pid: process.pid,
+    });
+    const jobs = createScheduledJobsRepo(db);
+    jobs.enqueue({ session_id: 's-old', run_at: 1_000, kind: 'resume' });
+
+    // spawnResume meniru runSession: buat baris sesi BARU (RUNNING+alive) supaya continue job punya
+    // target hidup yang bisa di-inject lewat jalur alive yang ada.
+    const spawnResume: SupervisorDeps['spawnResume'] = (_spec, session) => {
+      sessions.createSession({
+        id: 's-new',
+        tool: session.tool,
+        cwd: session.cwd,
+        status: 'RUNNING',
+        proc_state: 'alive',
+        pid: process.pid,
+        resumed_from: session.id,
+      });
+      return { sessionId: 's-new' };
+    };
+
+    const injected: InjectRequestResult = { reachable: true, injected: true, reason: null };
+    const requestInject = vi.fn<(session: Session) => Promise<InjectRequestResult>>(() => Promise.resolve(injected));
+
+    const manual = createManualTimer();
+    const nowRef = { value: 0 };
+    const supervisor = createSupervisor({
+      db,
+      socketPath,
+      now: () => nowRef.value,
+      setTimer: manual.setTimer,
+      clearTimer: manual.clearTimer,
+      spawnResume,
+      requestInject,
+      notify: () => {},
+    });
+
+    await supervisor.start();
+    nowRef.value = 1_000;
+    await manual.fire(); // dispatch resume-by-id s-old → spawn s-new + enqueue continue job utk s-new.
+
+    // Sesi lama RESUMED; sesi BARU punya SATU job `resume` terjadwal (bukti RC-1 meng-enqueue continue).
+    expect(createSessionsRepo(db).getById('s-old')?.status).toBe('RESUMED');
+    const newJobs = pendingJobs(db, 's-new');
+    expect(newJobs).toHaveLength(1);
+    expect(newJobs[0]?.kind).toBe('resume');
+
+    // Continue job (run_at = now + delay) belum jatuh tempo saat fire pertama; majukan jam jauh ke depan
+    // lalu fire → job continue kini `due` → dispatch jalur alive s-new → requestInject.
+    expect(requestInject).not.toHaveBeenCalled();
+    nowRef.value = 10_000_000;
+    await manual.fire();
+    await supervisor.stop();
+
+    expect(requestInject).toHaveBeenCalledTimes(1);
+    // Inject ditujukan ke sesi BARU (s-new), bukan sesi lama.
+    expect(requestInject.mock.calls[0]?.[0]?.id).toBe('s-new');
+    // Continue job dibuang (done) setelah inject — tak ada retry-spin.
+    expect(pendingJobs(db, 's-new')).toHaveLength(0);
   });
 
   it('resume: proc_state exited + cwd exists but cli_session_id NULL → BLOCKED, NO spawn, old session NOT resumed (A-1)', async () => {
