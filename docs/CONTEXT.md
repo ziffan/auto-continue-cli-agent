@@ -51,10 +51,16 @@
   Tertutup + C-4..C-7 Terbuka + header gate ketiga), GOTCHAS **G-39** (FK continue-enqueue), DECISIONS Change Log, CONTEXT (ini),
   CLAUDE.md §2/README test count 386→393. **Commit `49de523` (kode) di branch `m3e-rc1-rc3`** + commit docs (session-end ini);
   **BELUM ff-merge `main` / push (nunggu perintah).**
-  **Next konkret:** (1) ff-merge `m3e-rc1-rc3` → `main` + push; (2) **C-4/RC-4** (`dispatch-liveness-reconcile`, P2 sedang — cek
-  `isProcessAlive` di awal dispatch → markOrphanExited → jalur exited; attempts-cap catch generik) **sebelum M5**; (3) C-5/C-6/C-7
-  (P3, nebeng); (4) **I-15 live-verify actuation** (inject/resume asli + kalibrasi RESUME_CONTINUE_DELAY_MS — satu-satunya gate M3e
-  tersisa, butuh limit+user, HARD-STOP unattended); lalu **M-remote tier A** / **M5**.
+  **Commit `49de523` (kode) + `4ab4eb7` (docs) → ff-merge `main` + PUSHED (`origin/main`=4ab4eb7).**
+  **⚠ WAJIB SESI BERIKUTNYA (permintaan user Ziffan 13 Jul):** **REVIEW INDEPENDEN oleh agent TERPISAH atas batch RC-1..RC-4**
+  (jalur actuation Tier-1) **SEBELUM gate M3e dinyatakan hijau** — RC-1/RC-2/RC-3 (commit `49de523`, sudah di `main`) kutulis
+  Opus INLINE lalu self-tier-review (penulis=reviewer, blind-spot di-flag); RC-4 (C-4, belum dibuat) menyusul. DoD: diff RC-1..RC-4
+  ditinjau reviewer tanpa konteks penulisan (skill `tier-review` Step 0) → APPROVE sebelum ✅ gate. Lihat [[rc1-rc4-independent-review-pending]].
+  **Next konkret:** (1) **REVIEW INDEPENDEN RC-1..RC-3** (`git show 49de523`) via agent terpisah — lalu (2) **C-4/RC-4**
+  (`dispatch-liveness-reconcile`, P2 sedang — cek `isProcessAlive` di awal dispatch → markOrphanExited → jalur exited; attempts-cap
+  catch generik) **sebelum M5**, lalu review RC-4 juga; (3) C-5/C-6/C-7 (P3, nebeng); (4) **I-15 live-verify actuation** (inject/resume
+  asli + kalibrasi RESUME_CONTINUE_DELAY_MS — satu-satunya gate M3e tersisa, butuh limit+user, HARD-STOP unattended); lalu
+  **M-remote tier A** / **M5**.
 - **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + 4 slice autonomous-safe) — **idle-tracker-agy + I-29 + notifier cleanup + I-25/R7 DITUTUP → gate keluar M3e tersisa HANYA I-15 live-verify actuation.**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → user pilih rangkaian slice autonomous-safe. **Semua Opus inline Tier-1, hijau (386 test, +17 sesi ini, 2 skip POSIX):**
   **(1) idle-tracker-agy (`f921797`, I-15 partial):** `BUSY_MARKERS.antigravity = /esc to cancel/i` di `shared/idle-tracker.ts`
