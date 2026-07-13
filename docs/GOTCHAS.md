@@ -255,6 +255,18 @@ ada yang jawab (`connect` sukses) → daemon hidup → propagate (reject); tak a
 (`ECONNREFUSED`) → socket stale → baru unlink + `listen` ulang **sekali** (guard `isRetry` cegah loop).
 **Sumber:** tier-review M3a (4 Jul), `src/daemon/ipc-server.ts`.
 
+### G-39 — Enqueue job untuk sesi HASIL-actuation kena FK `scheduled_jobs.session_id`→`sessions.id`; kegagalannya JANGAN flip dispatch ke retry
+**Jebakan (RC-1, C-1, audit ketiga):** menjadwalkan job `resume` (continue-inject) untuk sesi BARU hasil resume-by-id
+(`spawned.sessionId`) menulis ke `scheduled_jobs` — yang ber-FK ke `sessions` (`foreign_keys=ON`, G-30). Di **produksi**
+default `runSession` **createSession dulu** sebelum mengembalikan id → FK terpenuhi. Tapi di **test** dgn `spawnResume`
+STUB yang mengembalikan `sessionId` **tanpa** membuat baris → `jobs.enqueue` melempar `SQLITE_CONSTRAINT_FOREIGNKEY`.
+**Dampak lebih dalam:** bila enqueue itu berada di dalam `try` dispatch tanpa guard, exception naik ke catch generik →
+dispatch return `'retry'` → resume-by-id **di-spawn ULANG** tiap backoff → **loop spawn sesi baru** (padahal resume asli
+SUDAH sukses `markResumed`). **Cara benar:** (a) continue-enqueue = **best-effort** di `try/catch` sendiri (audit senyap
+`resume_continue_enqueue_failed`, tetap `'done'`) — kegagalan follow-up tak boleh membatalkan actuation yang sudah sukses
+maupun memicu re-spawn; (b) test yang men-stub `spawnResume` dan mengandalkan continue-job **wajib** membuat baris sesi baru
+(RUNNING+alive) dulu supaya FK terpenuhi (pola G-30 seed-parent). **Sumber:** RC-1 impl + tier-review 13 Jul, `src/daemon/supervisor.ts`.
+
 ---
 
 ## Detector wiring / PTY (M3d)
@@ -539,6 +551,7 @@ agy/CC saat limit asli. **Sumber:** R3/I-21, `src/daemon/{limit-watcher,process-
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-13 (sesi RC, audit ketiga) | **G-39** baru (enqueue continue-job utk sesi hasil-resume kena FK `scheduled_jobs.session_id`; produksi `runSession` createSession dulu → aman, tapi stub test wajib seed baris; kegagalan enqueue JANGAN flip dispatch ke `'retry'` = loop re-spawn → best-effort try/catch). Dari RC-1 (C-1). |
 | 2026-07-12 (autonomous-run, R3/I-21) | **G-37** baru (auto-continue multi-siklus: inject-continue → sesi kembali RUNNING bukan RESUMED-terminal, transisi+un-latch ditulis wrapper (ADR-017), notif "resumed" pindah ke `job_dispatch_done inject_continue`; RESIDUAL TUI-repaint bisa re-fire LIMIT_HIT palsu → live-verify I-15). Dari implementasi R3 (I-21 CLOSED). |
 | 2026-07-12 (autonomous-run, I-28) | **G-20 watch DITUTUP** (A-15): `stripAnsi` diperluas dari CSI-saja ke +OSC (judul window `\x1b]0;..\x07`, term BEL/ST) +designasi charset → teks di sekitar sekuens tak salah lolos ke detektor limit/idle-tracker. **G-6 diatasi** (A-12): `.gitattributes` `* text=auto eol=lf` → repo & working tree LF lintas-OS, stop warning CRLF. Dari housekeeping audit I-28. |
 | 2026-07-11 (I-15 live-verify, agy 1.1.1 Windows) | **G-35** (probe agy via sesi LS hidup = snapshot launch-time, STALE dalam-sesi → I-17 caveat + perkuat ADR-018 fresh-probe), **G-36** (cli_session_id agy = cmd resume yang agy CETAK saat exit `agy --conversation=<uuid>`; `.db` termuda racy; resume-load ✅). **G-17 diperluas** (exhaustion = `0` present ATAU absent), **G-19 re-verified** (pesan limit + detektor + limit≠exit ✅ di 1.1.1), **G-33 DIKOREKSI** (tak ada request-review mode; `--mode`=accept-edits/plan). Dari burn `3p-5h` ~11% ke limit (I-15, otorisasi user). |

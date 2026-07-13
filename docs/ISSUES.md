@@ -19,6 +19,12 @@
 > **Re-audit 12 Jul (`docs/audit/AUDIT-2026-07-12-FOLLOWUP.md`) → B-1..B-3.** Verifikasi remedi R1–R8 +
 > temuan baru di jalur retry/terminal-state. **B-1 (P2, dispatch-terminal-cap) ✅ + B-2 (P3, reset weekly) ✅
 > ditutup 12 Jul** (sesi ini). **B-3 (P3) tetap terbuka** — digabung ke I-15/R2b (butuh live-verify).
+>
+> **Audit menyeluruh KETIGA 13 Jul (`docs/audit/AUDIT-2026-07-12-MENYELURUH.md`, merged PR #1) → C-1..C-8.**
+> Gate diverifikasi independen di Linux (388/388). **1 P1 baru: C-1 (resume-load ≠ continue) — MASUK gate keluar M3e.**
+> **Ditutup 13 Jul (sesi RC): C-1 (RC-1) ✅ + C-2 (RC-2 validasi UUID hook) ✅ + C-3 (RC-3 capturer last-wins) ✅**
+> (393 test). **Terbuka: C-4 (P2, proc_state basi retry-senyap → RC-4, sebelum M5), C-5/C-6/C-7 (P3).** C-8 (drift CONTEXT)
+> dikoreksi. **Gate keluar M3e kini: HANYA I-15 live-verify actuation** (inject/resume asli, butuh limit+user).
 
 ### I-20 — Capture `cli_session_id` (R2b, penangkap id CLI untuk resume-by-id) [P1, blocker M-remote] — ✅ agy + CC TUNTAS (12 Jul)
 **Konteks:** A-1. Paruh korektness sudah ditutup R2a (`df3904b`): resume-by-id kini pakai `session.cli_session_id`;
@@ -151,9 +157,66 @@ pendek pasca-spawn (exit <3s + code≠0 → perlakukan `resume_spawn_failed`) AT
 pertama sesi baru mengalir. **Putuskan bentuknya saat live-verify** — jangan spekulasi penanda sebelum ada data
 nyata (pola G-33/idle-agy). **Sumber:** audit followup B-3.
 
+### C-4 — `proc_state` basi ('alive' padahal wrapper mati keras) menghidupkan lagi retry-senyap A-4/B-1 [P2, sebelum M5] → RC-4
+`reconcileOrphans` hanya dipanggil di `supervisor.start()` — daemon long-running TAK re-cek liveness; wrapper
+yang mati keras SETELAH start meninggalkan `proc_state='alive'` + job pending. **agy:** probe sesi "alive" palsu
+→ `discoverLocalPorts(pid mati)` throw → **catch generik → `'retry'` TANPA attempts-cap & TANPA notif** (payload
+tanpa `status:BLOCKED` → notifier null) → backoff 60m selamanya senyap (pola A-4 lewat pintu lain, B-1 hanya tutup
+cabang spesifik). **CC:** probe sukses → inject wrapper unreachable → `inject_skipped` (ter-surface) tapi buntu
+manual padahal auto-recovery bisa (pid mati + cli_session_id ada → resume-by-id). **Remedi (RC-4, sedang):** di awal
+dispatch cek `proc_state==='alive' && pid && !isProcessAlive(pid)` → `markOrphanExited` → jalur `exited`; + attempts-cap
+pada catch generik (tutup KELUARGA retry-senyap). **Sumber:** audit ketiga C-4. **Rekomendasi:** sebelum M5 (daemon jalan berhari-hari).
+
+### C-5 — Probe LS agy sesi ALIVE = snapshot launch-time beku (G-35) → gate `still_limited`/`usage_available` agy-alive berbasis data basi [P3] → RC-5
+ADR-019 menutup agy-**exited** (optimistic); agy-**alive** masih pura-pura probe-nya bermakna (self-correcting via
+inject→detect R3, tapi event `usage_available_enqueue_resume` menyesatkan audit-trail). **Remedi:** perlakukan agy-alive
+konsisten ADR-019 (skip probe stale → langsung enqueue resume di reset_at) ATAU minimal tandai `reason:'ls_snapshot_stale'`.
+**Sumber:** audit ketiga C-5, G-35.
+
+### C-6 — Pesan limit agy memuat reset eksplisit (`Resets in 4h31m7s`, G-19) tapi `extractResetHint` hanya kenali `in N hours` → jatuh ke backoff [P3] → RC-6
+`resetHint` kosong → jadwal reset agy pakai backoff 5m→15m→60m padahal jam pasti tersedia (boros siklus probe/inject
+sia-sia, perbesar jendela G-37). **Remedi:** pola relatif `(\d+h)?(\d+m)?(\d+s)?` pada `Resets in …` → `relativeHours`/
+`relativeMinutes` (perluas `ResetHint`); fixture dari korpus G-19. **Sumber:** audit ketiga C-6.
+
+### C-7 — Empty-state `acca status` masih sarankan `acca run -- <cli>` (bentuk pra-I-29) [P3] → RC-7
+`status.ts` empty-state pakai `--` yang kini dibuang & `<tool>` wajib. **Remedi:** ganti `acca run <claude|agy>`;
+cek string bantuan lain. **Sumber:** audit ketiga C-7.
+
 ---
 
 ## Tertutup
+
+### C-1 — Resume-by-id MEMUAT percakapan tapi tak MELANJUTKANNYA (nol inject `continue` ke sesi hasil-resume) [P1] ✅ (13 Jul, RC-1)
+**RESOLVED (RC-1, Opus inline Tier-1).** `claude --resume <id>` / `agy --conversation=<id>` memuat percakapan lalu
+**diam di prompt** (bukti live G-36) — tak ada jalur kode meng-inject `continue` ke sesi HASIL-resume → US-3/AC-3 gagal
+separuh (sesi ditinggal tidur "resumed" tapi tak lanjut kerja). Juga melemahkan paruh "detect" ADR-019 (sesi yang cuma
+di-load tak mencetak `Individual quota reached` → LIMIT_HIT tak terpicu). **Fix (`supervisor.ts` cabang resume, pasca
+`resume_spawned`):** enqueue job `resume` untuk sesi BARU (`spawned.sessionId`, `run_at = now + RESUME_CONTINUE_DELAY_MS`
+15s) → sesi baru RUNNING+alive → dispatch **jalur alive yang ada** meng-`requestInject` (gating idle/foreground, token
+literal di wrapper — **nol kanal baru, injection firewall ADR-013 utuh**). Bila masih limit (agy optimistic ADR-019):
+inject memicu `Individual quota reached` → limit-watcher sesi BARU → LIMIT_HIT → reschedule reset_at → siklus "detect"
+berjalan seperti didesain. Enqueue **best-effort** (try/catch + event `resume_continue_enqueue_failed`): kegagalan FK
+(baris sesi baru belum ada — tak terjadi pada default `runSession`) tak boleh flip dispatch ke `'retry'` (cegah re-spawn
+loop). **+1 test kontrak** (`supervisor-dispatch`: siklus penuh exited→spawn→continue-enqueue→fire→requestInject sesi
+BARU). **Nit (→ I-15):** bila CLI tak idle dalam 15s, continue job di-skip (`inject_skipped`→done, tanpa retry) → strict
+improvement atas pre-RC-1 (nol inject), kalibrasi delay = live-verify. **Sumber:** audit ketiga C-1.
+
+### C-2 — Kanal `hook` simpan `ccSessionId` tanpa validasi → string arbitrer bisa jadi argv `claude --resume <val>` [P2] ✅ (13 Jul, RC-2)
+**RESOLVED (RC-2).** `hook-relay.ts` dulu guard hanya `typeof string && length>0`; nilai tersimpan ke `cli_session_id`
+lalu dipakai `resumeCmd` → `['--resume', <val>]`. Permukaan: named pipe Windows ber-ACL terbuka (I-26/A-8) → proses lokal
+lain bisa menulis payload hook (kanal DATA sejak I-23). **Fix:** helper `isCanonicalUuid` (`shared/ids.ts`, regex
+8-4-4-4-12 case-insensitive) gate di `createHookHandler` **sebelum** capture (dan sebelum latch `!ccIdCaptured` → UUID sah
+berikutnya tetap tertangkap); non-UUID → no-op senyap (konsisten kekonservatifan capturer agy). Firewall struktural, bukan
+kebetulan spawn tanpa shell. **+3 test** (2 `isCanonicalUuid` + 1 hook non-UUID rejection). **Sumber:** audit ketiga C-2.
+
+### C-3 — Capturer id agy latch pada match PERTAMA → isi transcript bisa membajak `cli_session_id` sebelum print-exit sah [P2] ✅ (13 Jul, RC-3)
+**RESOLVED (RC-3).** `session-id-capture.ts` men-latch (`captured=true`) pada match pertama; sumber SAH justru dicetak agy
+saat EXIT (G-36) = kandidat TERAKHIR. Capturer di-feed SELURUH output → `--conversation=<uuid>` di ISI transcript (agent
+baca web/dokumen/repo, tak tepercaya per ADR-013) bisa mengunci id salah permanen (UUID valid → BLOCKED-guard R2a tak
+menolong). **Fix:** latch-first → **last-match-wins** + emit-on-change (`lastEmitted`): tak pernah berhenti scan, id baru
+menimpa via `setCliSessionId` (idempoten); id exit-printed (paling akhir) otomatis menang; event `cli_session_id_captured`
+hanya saat nilai berubah (tak spam). **+1 test** (uuid palsu di ISI transcript lebih awal → id yang dicetak saat exit menang).
+Dampak dibatasi (UUID kanonik saja, mis-resume/DoS bukan exec) tapi ditutup struktural sesuai ADR-013. **Sumber:** audit ketiga C-3.
 
 ### I-25 — Gate resume `every(usedFraction<1)` terlalu ketat untuk CC [P2] ✅ (12 Jul, R7)
 **RESOLVED (Opus inline Tier-1).** Keputusan "usage available untuk resume" dipindah ke adapter
