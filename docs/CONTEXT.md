@@ -20,6 +20,41 @@
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
+  **Audit KETIGA (13 Jul, PR #1) → C-1 P1 (resume-load≠continue) masuk gate; DITUTUP sesi ini (RC-1) + C-2/C-3 eras kanal data.**
+- **Terakhir diupdate:** 2026-07-13 (sesi Ubuntu, dgn user — `/session-start` + RC-1/RC-2/RC-3 dari audit ketiga) — **C-1 P1 (resume-load ≠ continue) DITUTUP (masuk gate) + C-2/C-3 eras kanal data. Gate keluar M3e kembali = HANYA I-15 live-verify actuation.**
+  Sesi buka: pull `origin/main` (fast-forward 32 commit; **koreksi drift C-8** — lokal kini SINKRON penuh origin di `393de50`,
+  merge PR #1 audit-remediation) → `/session-start` (proof lengkap) → baca **audit menyeluruh KETIGA**
+  (`docs/audit/AUDIT-2026-07-12-MENYELURUH.md`, top-commit; CONTEXT/ISSUES lama basi thd-nya) yang menemukan **1 P1 baru**:
+  **C-1 — resume-by-id MEMUAT percakapan tapi tak MELANJUTKANNYA** (nol jalur inject `continue` ke sesi hasil-resume → US-3/AC-3
+  gagal separuh; I-15 live-verify resume-by-id pasti menabraknya) + 3 P2 (C-2/C-3/C-4) + 4 P3 (C-5..C-8). User pilih **RC-1 +
+  RC-2/RC-3** (RC-1 masuk gate; RC-2/RC-3 pengeras kanal data sebelum M-remote). **Semua Opus inline Tier-1, self-review
+  APPROVE-WITH-NITS, hijau (393 test, +5, 2 skip POSIX):**
+  **(1) RC-1 (`supervisor.ts` cabang resume):** pasca `resume_spawned` sukses → **enqueue job `resume` untuk sesi BARU**
+  (`spawned.sessionId`, `run_at = now + RESUME_CONTINUE_DELAY_MS` 15s) → sesi baru RUNNING+alive → dispatch **jalur alive yang
+  ADA** meng-`requestInject` (gating idle/foreground, token literal wrapper — **nol kanal baru, firewall ADR-013 utuh**). Masih
+  limit (agy optimistic ADR-019) → inject memicu `Individual quota reached` → limit-watcher sesi BARU → LIMIT_HIT → reschedule
+  reset_at = **siklus "detect" ADR-019 berjalan seperti didesain**. Enqueue **best-effort** (try/catch + event
+  `resume_continue_enqueue_failed`): kegagalan FK (baris sesi baru belum ada — TAK terjadi pada default `runSession` yg
+  createSession dulu, G-39) tak boleh flip ke `'retry'` (cegah re-spawn loop). **+1 test kontrak** siklus penuh
+  exited→spawn→continue-enqueue→fire→requestInject sesi BARU (audit §6: "siapa bergerak berikutnya?"). **Nit (→I-15):** bila CLI
+  tak idle dalam 15s → continue di-skip (`inject_skipped`→done, tanpa retry); strict improvement atas pre-RC-1 (nol inject),
+  kalibrasi delay = live-verify.
+  **(2) RC-2 (`hook-relay.ts` + `shared/ids.ts`):** hook `ccSessionId` dulu guard hanya `typeof string && length>0` → string
+  arbitrer bisa jadi argv `claude --resume <val>` (named pipe Win ber-ACL terbuka I-26). Fix: helper **`isCanonicalUuid`**
+  (regex 8-4-4-4-12) gate SEBELUM capture & sebelum latch → non-UUID no-op senyap, UUID sah berikutnya tetap tertangkap.
+  **+3 test.**
+  **(3) RC-3 (`session-id-capture.ts`):** capturer latch-first → isi transcript (tak tepercaya ADR-013) bisa membajak
+  `cli_session_id` sebelum resume-cmd sah yg agy cetak saat EXIT (G-36, kandidat TERAKHIR). Fix: **last-match-wins** +
+  emit-on-change → id exit-printed menang; event hanya saat berubah. **+1 test** (uuid palsu di ISI lebih awal → exit-printed menang).
+  **Verifikasi (Opus sendiri):** `npm run check` typecheck 0-error + lint + **393 test**; `npm run build` bersih. Tier-1
+  self-review APPROVE-WITH-NITS (state machine + firewall; blind-spot penulis=reviewer di-flag). **Docs:** ISSUES (C-1/C-2/C-3
+  Tertutup + C-4..C-7 Terbuka + header gate ketiga), GOTCHAS **G-39** (FK continue-enqueue), DECISIONS Change Log, CONTEXT (ini),
+  CLAUDE.md §2/README test count 386→393. **Commit `49de523` (kode) di branch `m3e-rc1-rc3`** + commit docs (session-end ini);
+  **BELUM ff-merge `main` / push (nunggu perintah).**
+  **Next konkret:** (1) ff-merge `m3e-rc1-rc3` → `main` + push; (2) **C-4/RC-4** (`dispatch-liveness-reconcile`, P2 sedang — cek
+  `isProcessAlive` di awal dispatch → markOrphanExited → jalur exited; attempts-cap catch generik) **sebelum M5**; (3) C-5/C-6/C-7
+  (P3, nebeng); (4) **I-15 live-verify actuation** (inject/resume asli + kalibrasi RESUME_CONTINUE_DELAY_MS — satu-satunya gate M3e
+  tersisa, butuh limit+user, HARD-STOP unattended); lalu **M-remote tier A** / **M5**.
 - **Terakhir diupdate:** 2026-07-12 (sesi Windows, dgn user — `/session-start` + 4 slice autonomous-safe) — **idle-tracker-agy + I-29 + notifier cleanup + I-25/R7 DITUTUP → gate keluar M3e tersisa HANYA I-15 live-verify actuation.**
   Sesi buka `/session-start` (proof-of-understanding lengkap) → user pilih rangkaian slice autonomous-safe. **Semua Opus inline Tier-1, hijau (386 test, +17 sesi ini, 2 skip POSIX):**
   **(1) idle-tracker-agy (`f921797`, I-15 partial):** `BUSY_MARKERS.antigravity = /esc to cancel/i` di `shared/idle-tracker.ts`
