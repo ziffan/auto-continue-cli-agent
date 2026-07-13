@@ -10,6 +10,8 @@
 // teks payload yang pernah jadi keystroke atau aksi turunan → injection firewall ADR-013 utuh (jalur
 // perintah & jalur data terpisah). Bentuk payload tak dikenal → no-op senyap.
 
+import { isCanonicalUuid } from '../shared/ids.js';
+
 export interface HookMessage {
   event?: unknown;
   error?: unknown;
@@ -36,7 +38,12 @@ export function createHookHandler(deps: HookHandlerDeps): (args: unknown) => { o
     } else if (
       a.event === 'SessionStart' &&
       typeof a.ccSessionId === 'string' &&
-      a.ccSessionId.length > 0 &&
+      // C-2 (audit ketiga 12 Jul): validasi UUID kanonik SEBELUM menyimpan — nilai ini kelak jadi argv
+      // `claude --resume <id>`. Socket kontrol per-sesi 0600 di POSIX, tapi named pipe Windows ber-ACL
+      // terbuka (I-26/A-8) → proses lokal lain bisa menulis payload hook; bentuk non-UUID (mis. berawalan
+      // `--`) → no-op senyap (konsisten kekonservatifan capturer agy, patterns.ts). Firewall struktural,
+      // bukan kebetulan spawn tanpa shell.
+      isCanonicalUuid(a.ccSessionId) &&
       !ccIdCaptured
     ) {
       ccIdCaptured = true;

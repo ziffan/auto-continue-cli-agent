@@ -33,6 +33,13 @@ const DEFAULT_USAGE_PROBE_INTERVAL_MS = 120_000;
  *  adapter) langsung terminal tanpa attempts. `still_limited` TIDAK dibatasi — limit memang akan reset. */
 const MAX_DISPATCH_ATTEMPTS = 3;
 
+/** RC-1 (C-1, audit ketiga 12 Jul): jeda sebelum inject `continue` ke sesi HASIL-resume. `claude
+ *  --resume <id>` / `agy --conversation <id>` hanya MEMUAT percakapan lalu diam di prompt — untuk
+ *  benar-benar melanjutkan kerja (US-3/AC-3) sesi baru harus di-inject. Delay kecil memberi CLI waktu
+ *  selesai me-load transcript sebelum menerima keystroke; bila masih rendering, gating idle/foreground
+ *  sesi baru yang menahan (perilaku benar yang sudah ada). Injectable via `now()`; nilai konservatif. */
+const RESUME_CONTINUE_DELAY_MS = 15_000;
+
 /** I-6: setTimer produksi yang MEMBUNGKUS rejection. `setTimeout` mengabaikan Promise yang
  *  dikembalikan fn (scheduler mem-pass `runDue` async), jadi tanpa .catch sebuah rejection (mis.
  *  arm()/listPending() gagal karena DB closed) menjadi unhandledRejection yang bisa mematikan
@@ -357,6 +364,38 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         type: 'job_dispatch_done',
         payload: { jobId: job.id, action: 'resume_spawned', newSessionId: spawned.sessionId, spec },
       });
+      // C-1 (RC-1, audit ketiga 12 Jul): resume-by-id hanya MEMUAT percakapan — CLI berhenti diam di
+      // prompt tanpa melanjutkan turn yang terputus (bukti live G-36). Untuk benar-benar melanjutkan
+      // KERJA (US-3/AC-3), jadwalkan job `resume` untuk sesi BARU (RUNNING+alive → dispatch jalur alive
+      // yang ada meng-`requestInject`: gating idle/foreground, token literal di wrapper — nol kanal baru,
+      // injection firewall utuh). Bila ternyata masih limit (agy optimistic ADR-019), inject memicu
+      // `Individual quota reached` → limit-watcher sesi BARU → LIMIT_HIT → reschedule di reset_at (siklus
+      // "detect" ADR-019 berjalan seperti didesain). scheduler.arm() pasca-dispatch memuat job ini.
+      // Best-effort: resume sendiri SUDAH sukses (markResumed di atas). Bila enqueue gagal (mis. FK —
+      // baris sesi baru belum ada; tak terjadi pada default runSession yang createSession dulu), JANGAN
+      // biarkan kegagalan ini mengubah hasil jadi 'retry' → itu akan men-spawn resume BERULANG (loop).
+      // Audit senyap + tetap 'done'.
+      if (spawned.sessionId) {
+        try {
+          jobs.enqueue({
+            session_id: spawned.sessionId,
+            run_at: deps.now() + RESUME_CONTINUE_DELAY_MS,
+            kind: 'resume',
+            next_backoff_ms: null,
+          });
+        } catch (err) {
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_error',
+            payload: {
+              jobId: job.id,
+              action: 'resume_continue_enqueue_failed',
+              newSessionId: spawned.sessionId,
+              error: err instanceof Error ? err.message : String(err),
+            },
+          });
+        }
+      }
       return 'done';
     } catch (err) {
       events.append({

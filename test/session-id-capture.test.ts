@@ -65,12 +65,27 @@ describe('createSessionIdCapturer', () => {
     expect(onCapture).toHaveBeenCalledWith(UUID);
   });
 
-  it('LATCHED: fire tepat sekali walau baris berulang', () => {
+  it('emit-on-change: baris id IDENTIK berulang → fire tepat sekali (nilai tak berubah)', () => {
     const onCapture = vi.fn();
     const cap = createSessionIdCapturer({ capture, onCapture });
     cap.feedOutput(`${RESUME_LINE}\n`);
     cap.feedOutput(`${RESUME_LINE}\n`);
     expect(onCapture).toHaveBeenCalledTimes(1);
+  });
+
+  it('LAST-MATCH-WINS (C-3): uuid di ISI transcript lebih awal, id yang dicetak saat EXIT menang', () => {
+    const onCapture = vi.fn();
+    const cap = createSessionIdCapturer({ capture, onCapture });
+    // Threat model ADR-013: output agy bisa memuat teks tak tepercaya (web/dokumen/repo) yang KEBETULAN
+    // menyebut perintah agy ber-uuid — latch-first akan mengunci uuid palsu ini permanen.
+    const FAKE = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    cap.feedOutput(`the README says: agy --conversation=${FAKE}\n`);
+    // …lalu agy mencetak resume-cmd SAH saat exit (kandidat TERAKHIR di stream).
+    cap.feedOutput(`${RESUME_LINE}\n`);
+    // Kedua match ter-emit (palsu lalu sah); nilai TERAKHIR (yang menang di setCliSessionId) = yang sah.
+    expect(onCapture).toHaveBeenNthCalledWith(1, FAKE);
+    expect(onCapture).toHaveBeenNthCalledWith(2, UUID);
+    expect(onCapture).toHaveBeenLastCalledWith(UUID);
   });
 
   it('strip ANSI: baris ber-warna tetap tertangkap', () => {

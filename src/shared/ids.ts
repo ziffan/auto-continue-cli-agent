@@ -16,6 +16,16 @@ export function genSessionId(): string {
   return id;
 }
 
+/** UUID kanonik (8-4-4-4-12 hex). Validasi `cli_session_id` yang masuk dari kanal data (hook CC
+ *  `SessionStart` — I-23; agy resume-cmd — G-36): nilai ini kelak menjadi argv `claude --resume <id>` /
+ *  `agy --conversation <id>`, jadi bentuk selain UUID kanonik ditolak (C-2: lebih baik BLOCKED/no-op
+ *  daripada meneruskan string arbitrer dari pihak yang bisa menulis ke socket kontrol ke argv CLI). */
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isCanonicalUuid(value: string): boolean {
+  return CANONICAL_UUID.test(value);
+}
+
 /** I-27 (audit A-9): hasilkan id sesi yang dijamin belum dipakai. `genSessionId` 4-char (≈1 jt
  *  kombinasi) + retensi never-purge → probabilitas birthday-collision naik seiring baris bertambah;
  *  tanpa cek, tabrakan PK membuat `createSession` throw `SQLITE_CONSTRAINT_PRIMARYKEY` → `acca run`

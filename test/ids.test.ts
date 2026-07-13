@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { genSessionId, genUniqueSessionId } from '../src/shared/ids.js';
+import { genSessionId, genUniqueSessionId, isCanonicalUuid } from '../src/shared/ids.js';
 
 describe('genSessionId', () => {
   it('menghasilkan id 4-char base32 lowercase', () => {
@@ -40,5 +40,27 @@ describe('genUniqueSessionId (I-27/A-9 retry-on-collision)', () => {
       }),
     ).toThrow();
     expect(calls).toBe(8);
+  });
+});
+
+describe('isCanonicalUuid (C-2 validasi cli_session_id lintas-kanal)', () => {
+  it('menerima UUID kanonik 8-4-4-4-12 (case-insensitive)', () => {
+    expect(isCanonicalUuid('fd55a7d2-1c2d-4e5f-8a9b-0c1d2e3f4a5b')).toBe(true);
+    expect(isCanonicalUuid('FD55A7D2-1C2D-4E5F-8A9B-0C1D2E3F4A5B')).toBe(true);
+  });
+
+  it('menolak bentuk non-UUID (cegah argv `--resume <sampah>`)', () => {
+    for (const bad of [
+      'uuid-abc', // placeholder lama
+      'not-a-uuid',
+      '1234',
+      '',
+      '--resume', // berawalan flag → berbahaya bila diteruskan ke argv
+      'fd55a7d2-1c2d-4e5f-8a9b-0c1d2e3f4a5b extra', // ada ekor
+      'zd55a7d2-1c2d-4e5f-8a9b-0c1d2e3f4a5b', // 'z' bukan hex
+      'fd55a7d2-1c2d-4e5f-8a9b-0c1d2e3f4a5', // kurang 1 digit
+    ]) {
+      expect(isCanonicalUuid(bad)).toBe(false);
+    }
   });
 });
