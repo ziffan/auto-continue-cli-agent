@@ -133,3 +133,4 @@ M-remote tetap DITUNDA sampai tabel di atas hijau (kecuali I-26 yang memang jata
 |---|---|---|
 | 2026-07-12 | Re-audit pasca-remedi: 9 temuan tertutup penuh, 2 sebagian, 4 terjadwal; 3 temuan baru (B-1 P2, B-2/B-3 P3) + usulan urutan lanjutan. Catatan artefak verifikasi mount. | Claude (audit session) × Ziffan |
 | 2026-07-12 | **B-1 (dispatch-terminal-cap) + B-2 (reset weekly) DIREMEDIASI** (`supervisor.ts`/`status.ts`/`sessions.archive`, +6 test → 346). B-3 tetap terbuka (gabung I-15/R2b, butuh live-verify). Detail: ISSUES B-1/B-2 Tertutup + CONTEXT. | Opus (impl session) × Ziffan |
+| 2026-07-12 | **Audit menyeluruh ketiga → `AUDIT-2026-07-12-MENYELURUH.md`** (8 commit pasca-followup: I-20/I-23/ADR-019/idle-agy/I-29/I-25). Gate diverifikasi independen Linux 388/388. Temuan baru: **C-1 (P1, resume-load ≠ continue — nol inject pasca-resume-by-id)** + C-2..C-4 (P2) + C-5..C-8 (P3); RC-1 masuk gate keluar M3e. | Claude (audit session) × Ziffan |
