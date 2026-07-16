@@ -3,8 +3,9 @@
 # (FINDINGS F4/F10). Kata-kata di bawah = pesan nyata + variasi rendering/wrap yang SETIA pada
 # teks asli (bukan tebakan; pola "weekly"/"daily allowance" provisional lama dibuang — tak pernah
 # teramati). Catatan: agy TETAP HIDUP di prompt setelah pesan ini (limit != exit, seperti CC) →
-# jalur continue = alive/inject (ADR-014). Reset ditampilkan RELATIF ("Resets in 59m14s"); sumber
-# reset andal = resetTime absolut dari LS probe (G-19), bukan scrape teks TUI ini.
+# jalur continue = alive/inject (ADR-014). Reset ditampilkan RELATIF ("Resets in 59m14s"); C-6 (17 Jul):
+# countdown relatif ini KINI di-parse (relativeMinutes/Seconds) — TAPI presedensi estimator tetap menaruh
+# resetTime absolut LS-probe (isoTimestamp, G-19) DI ATASNYA → LS menang saat ada; relatif hanya ganti backoff.
 ⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 59m14s.
 Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 59m14s.
 Individual quota reached.

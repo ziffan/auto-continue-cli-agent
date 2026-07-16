@@ -66,6 +66,15 @@ const CLOCK_TIME_PATTERN = /(\d{1,2}(?::\d{2})?\s*[ap]m)(?:\s*\(([^)]+)\))?/i;
 /** Relatif: "in 5 hours" / "in 5 hour". */
 const RELATIVE_HOURS_PATTERN = /\bin (\d+) hours?\b/i;
 
+/**
+ * C-6 (audit ketiga): countdown reset agy KOMPAK `Resets in 4h31m7s` / `Resets in 59m14s` (G-19 — angka
+ * langsung menempel unit, TANPA spasi). Tangkap komponen jam/menit/detik → ResetHint relatif (di bawah
+ * isoTimestamp LS-probe dalam presedensi estimator, jadi TAK menggeser sumber reset absolut yang lebih
+ * andal — hanya menggantikan backoff saat output = satu-satunya sinyal). Wajib prefiks `resets in` +
+ * unit RAPAT (`\d+h` bukan `\d+\s*h`) supaya tak keliru menangkap bentuk kata "in 5 hours" (spasi) atau
+ * angka+huruf acak di transcript. Minimal satu komponen harus ada (dijaga di extractResetHint). */
+const AGY_RELATIVE_RESET_PATTERN = /\bresets?\s+in\s+(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/i;
+
 /** Cocokkan overload/transient (429/5xx/529). Return substring yang match, atau null. */
 export function matchOverload(text: string): string | null {
   for (const pattern of OVERLOAD_PATTERNS) {
@@ -80,7 +89,7 @@ export function isTransientRetry(text: string): boolean {
   return TRANSIENT_RETRY_PATTERN.test(text);
 }
 
-/** Ekstrak reset-hint (clockTime/timezone/relativeHours) dari baris yang sudah diklasifikasi limit. */
+/** Ekstrak reset-hint (clockTime/timezone/relative h/m/s) dari baris yang sudah diklasifikasi limit. */
 function extractResetHint(text: string): ResetHint | undefined {
   const hint: ResetHint = {};
 
@@ -88,6 +97,16 @@ function extractResetHint(text: string): ResetHint | undefined {
   const relativeValue = relative?.[1];
   if (relativeValue !== undefined) {
     hint.relativeHours = Number(relativeValue);
+  }
+
+  // C-6: countdown kompak agy `Resets in 4h31m7s`. Hanya berlaku bila BUKAN bentuk kata di atas
+  // (mutually exclusive: `\d+h` rapat tak cocok "5 hours" berspasi). Set hanya komponen yang match.
+  const agyRel = AGY_RELATIVE_RESET_PATTERN.exec(text);
+  if (agyRel) {
+    const [, h, m, s] = agyRel;
+    if (h !== undefined) hint.relativeHours = Number(h);
+    if (m !== undefined) hint.relativeMinutes = Number(m);
+    if (s !== undefined) hint.relativeSeconds = Number(s);
   }
 
   const clock = CLOCK_TIME_PATTERN.exec(text);

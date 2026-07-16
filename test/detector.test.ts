@@ -57,8 +57,11 @@ describe('AC-1: Antigravity VERIFIED corpus (agy-limit.txt, real 4 Jul) → kind
 
 describe('Pesan limit agy ASLI (terkonfirmasi 4 Jul 2026, kuota 5-jam Gemini habis — G-19)', () => {
   // Sumber: scratchpad agy-REAL-limit-message.txt. agy TETAP HIDUP di prompt setelah pesan ini
-  // (limit != exit) → jalur continue = alive/inject (ADR-014). Reset "59m14s" = relatif; sumber
-  // reset andal = resetTime absolut dari LS probe (bukan scrape teks ini), jadi tak ada resetHint.
+  // (limit != exit) → jalur continue = alive/inject (ADR-014). Reset "59m14s" = relatif.
+  // C-6 (audit ketiga): countdown relatif ini KINI di-parse → ResetHint relatif. Dulu sengaja
+  // TIDAK (dianggap "reset andal = LS probe"), tapi presedensi estimator tetap menaruh isoTimestamp
+  // LS-probe DI ATAS relatif → LS absolut tetap menang saat tersedia; parse relatif hanya
+  // menggantikan backoff sia-sia saat output = satu-satunya sinyal (mempersempit jendela G-37).
   const real = '⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 59m14s.';
 
   it('terklasifikasi limit dgn evidence frasa terverifikasi', () => {
@@ -68,9 +71,24 @@ describe('Pesan limit agy ASLI (terkonfirmasi 4 Jul 2026, kuota 5-jam Gemini hab
     expect(r.evidence).toMatch(/individual quota reached/i);
   });
 
-  it('tak mengarang resetHint dari format relatif "59m14s" (reset andal = LS probe)', () => {
+  it('C-6: parse countdown relatif "59m14s" → relativeMinutes/relativeSeconds', () => {
     const r = classify('antigravity', { type: 'output', text: real });
-    expect(r.resetHint).toBeUndefined();
+    expect(r.resetHint?.relativeMinutes).toBe(59);
+    expect(r.resetHint?.relativeSeconds).toBe(14);
+    expect(r.resetHint?.relativeHours).toBeUndefined();
+  });
+
+  it('C-6: estimateReset dari countdown relatif → now + 59m14s (exact), MASIH di bawah isoTimestamp LS', () => {
+    const r = classify('antigravity', { type: 'output', text: real });
+    const now = 1_700_000_000_000;
+    const est = estimateReset(r.resetHint, { now, detectedAt: now });
+    expect(est).toEqual({ resetAt: now + (59 * 60 + 14) * 1_000, source: 'exact' });
+    // isoTimestamp (LS-probe) menang atas relatif bila keduanya ada (presedensi utuh).
+    const withIso = estimateReset(
+      { ...r.resetHint, isoTimestamp: '2026-01-01T00:00:00.000Z' },
+      { now, detectedAt: now },
+    );
+    expect(withIso).toEqual({ resetAt: Date.parse('2026-01-01T00:00:00.000Z'), source: 'exact' });
   });
 
   it('baris "Error ID: <uuid>" sendiri BUKAN sinyal limit (hanya uuid)', () => {

@@ -98,7 +98,10 @@ tapi **tetap jangan** andalkan print-mode utk deteksi limit agy (server-fail vs 
 `⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in <Xm Ys>.` + baris `Error ID: <uuid>`.
 Setelah pesan, agy **TETAP HIDUP** di prompt (footer `? for shortcuts` balik) — **limit≠exit** (seperti CC) → jalur
 **inject-continue** ADR-014 viable untuk agy. Reset ditampilkan **relatif** ("Resets in 59m14s"), korelasi `resetTime`
-absolut LS. **Juga:** agy **tak mendukung sesi print konkuren** (state `~/.gemini`/LS/token di-share → hang) → burner/probe wajib sekuensial.
+absolut LS. **⚠ Update C-6 (17 Jul):** countdown relatif kompak ini (`Resets in Xh Ym Zs`, unit RAPAT tanpa spasi)
+KINI di-parse `extractResetHint` → `relativeMinutes`/`relativeSeconds` (dulu sengaja tidak). Presedensi estimator
+tetap: `isoTimestamp` LS-probe absolut **DI ATAS** relatif → LS menang saat ada; parse relatif hanya menggantikan
+backoff sia-sia saat output = satu-satunya sinyal (mempersempit jendela false-positive G-37). **Juga:** agy **tak mendukung sesi print konkuren** (state `~/.gemini`/LS/token di-share → hang) → burner/probe wajib sekuensial.
 **Dampak:** fixture detektor agy = pola `Individual quota reached` (bukan tebakan); gating continue agy = alive-path.
 **Cara benar:** korpus detektor agy pakai pesan ASLI ini; jangan spawn banyak sesi agy serentak. **Sumber:** FINDINGS F4/F10/F11, 4 Jul (`agy-REAL-limit-message.txt`).
 **✅ Re-verified live 11 Jul (agy 1.1.1):** pesan **IDENTIK** (`⚠ Individual quota reached. Please upgrade your
