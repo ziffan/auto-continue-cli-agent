@@ -168,7 +168,7 @@ export function registerStatusCommand(program: Command): void {
         const active = sessions.listActive();
 
         if (active.length === 0) {
-          console.log('Belum ada sesi. Jalankan: acca run -- <cli>');
+          console.log('Belum ada sesi. Jalankan: acca run <claude|agy>');
           return;
         }
 
