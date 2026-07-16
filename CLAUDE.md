@@ -25,7 +25,7 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 ## 2. Status
 
 Fase: **Implementasi — M3e KOREKSI LOOP** (dari tiga audit menyeluruh, `docs/audit/AUDIT-2026-07-11.md` + `-12-FOLLOWUP` +
-`-12-MENYELURUH`). **M1–M3d + M4 inti bertes** (393 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset →
+`-12-MENYELURUH`). **M1–M3d + M4 inti bertes** (392 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset →
 probe usage → inject-continue sesi hidup / resume-by-id sesi mati + Notifier + proximity + usage-monitor + `acca status`
 usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
 **KOREKSI (audit):** klaim "loop auto-continue penuh selesai" dulu **overstated** — audit menemukan P1 di jalur resume/continue
@@ -33,8 +33,11 @@ usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
 agy G-36 + CC hook `SessionStart`) · R3/I-21 (multi-siklus sesi hidup) · **R4/I-22 (agy-exited) via ADR-019 optimistic resume**
 (pivot dari ADR-018 — probe OAuth standalone terbukti baca pool kuota SALAH, G-38) · R6/I-23 (deteksi limit CC PRIMER hook
 `StopFailure`, live-verified 2.1.207) · R7/I-25 (gate resume per-adapter) · idle-tracker-agy · **RC-1/C-1 (resume-by-id kini
-inject `continue` ke sesi hasil-resume — dulu cuma me-load lalu diam) + RC-2/RC-3 (eras kanal data hook/capturer).**
-**Sisa gate keluar M3e = HANYA I-15 live-verify actuation** (inject/resume asli + kalibrasi delay; butuh limit+user, HARD-STOP
+inject `continue` ke sesi hasil-resume — dulu cuma me-load lalu diam) + RC-2/RC-3 (eras kanal data hook/capturer)** ·
+**ADR-020 (token inject = instruksi NL eksplisit; live-verify 16 Jul agy 1.1.3 + CC 2.1.211 buktikan kata "continue"
+telanjang TAK me-resume agy → `CONTINUE_TOKEN` diganti, firewall utuh, G-40).**
+**Sisa gate keluar M3e = HANYA I-15 live-verify actuation** (inject/resume asli + kalibrasi delay + **live-verify literal
+English token pasca-reset agy nyata** — konsep terbukti limit asli owner via frasa Indonesia; butuh limit+user, HARD-STOP
 unattended). Terbuka non-gate: **C-4/RC-4** (proc_state basi retry-senyap, sebelum M5), C-5/C-6/C-7 (P3).
 **Berikutnya:** I-15 (opportunistik) → **M-remote & M5 DITUNDA** sampai gate keluar hijau.
 Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file itu dulu.
@@ -91,8 +94,9 @@ Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file 
   **harus `cd` ke cwd asli sesi**. Usage **terekspos resmi** ke statusLine JSON (v2.1.80+, isu #18121)
   + endpoint OAuth usage (undocumented) → **monitor** pakai jalur itu. **Deteksi limit** primer =
   hook **`StopFailure`** matcher `rate_limit` (v2.1.78+); fallback pola output PTY. **Limit ≠ exit**:
-  sesi interaktif tetap hidup di prompt → lanjut = inject "continue" ke PTY; resume-by-id untuk sesi
-  yang mati; wrapper proses = lifecycle + fallback. (RESEARCH §2, §2b–2c.)
+  sesi interaktif tetap hidup di prompt → lanjut = inject instruksi continue eksplisit ke PTY (token literal
+  tetap = "continue the work that was interrupted by the usage limit", ADR-020/G-40 — kata "continue" telanjang
+  tak me-resume agy); resume-by-id untuk sesi yang mati; wrapper proses = lifecycle + fallback. (RESEARCH §2, §2b–2c.)
 - **Antigravity CLI**: dual limit (refresh 5-jam + kuota mingguan); dua-duanya harus > 0.
   Kuota berkorelasi dengan beban kerja per-prompt (variabel). Ada opsi AI Credits untuk overage.
   `/usage` **stale** di sesi hidup — probe LS `RetrieveUserQuotaSummary` sesi-hidup **JUGA stale** (snapshot launch, G-35) →
