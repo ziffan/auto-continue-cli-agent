@@ -444,6 +444,130 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(pendingJobs(db, 's-new')).toHaveLength(0);
   });
 
+  it('resume: continue-target (resumed_from set) that EXITED before continue → BLOCKED, NO re-spawn (F-1 loop sever)', async () => {
+    // F-1 (review independen RC-1, 16 Jul): continue-job (kind:'resume') dijadwalkan utk sesi HASIL-resume.
+    // Bila sesi itu EXIT sebelum job fire (paling mudah CC: hook SessionStart mengisi cli_session_id di
+    // startup lalu proses mati cepat), job mendarat di cabang exited. TANPA guard: resume-by-id spawn sesi
+    // BARU → RC-1 enqueue continue lagi → loop ~tiap 15s tak terbatas. Guard Opsi B: resumed_from != null
+    // && detected_at == null → BLOCKED, TAK re-spawn.
+    tempDir = join(tmpdir(), `acca-dispatch-test-${randomBytes(4).toString('hex')}`);
+    process.env.ACCA_DATA_DIR = tempDir;
+    db = openDb();
+    socketPath = uniqueSocketPath();
+
+    const sessions = createSessionsRepo(db);
+    // Sesi ASAL (parent rantai resume) — wajib ada dulu: `sessions.resumed_from` = FK self-reference.
+    sessions.createSession({
+      id: 's-old',
+      tool: 'claude',
+      cwd: process.cwd(),
+      status: 'RESUMED',
+      proc_state: 'exited',
+      pid: process.pid,
+    });
+    // Continue-target: hasil resume (resumed_from='s-old'), EXITED, cli_session_id ADA + cwd ADA (kedua
+    // guard lain LOLOS) tapi BELUM pernah kena limit (detected_at null = ciri crash-sebelum-kerja).
+    sessions.createSession({
+      id: 's-continue-crashed',
+      tool: 'claude',
+      cwd: process.cwd(),
+      status: 'LIMIT_HIT',
+      proc_state: 'exited',
+      cli_session_id: 'cc-uuid-continue',
+      pid: process.pid,
+      resumed_from: 's-old',
+    });
+    const jobs = createScheduledJobsRepo(db);
+    jobs.enqueue({ session_id: 's-continue-crashed', run_at: 1_000, kind: 'resume' });
+
+    // Bila guard gagal, resume-by-id akan memanggil spawnResume → itu bukti loop terbuka.
+    const spawnResume = vi.fn(() => ({ sessionId: 'should-not-spawn' }));
+
+    const manual = createManualTimer();
+    const nowRef = { value: 0 };
+    const supervisor = createSupervisor({
+      db,
+      socketPath,
+      now: () => nowRef.value,
+      setTimer: manual.setTimer,
+      clearTimer: manual.clearTimer,
+      spawnResume,
+      notify: () => {},
+    });
+    await supervisor.start();
+    nowRef.value = 1_000;
+    await manual.fire();
+    await supervisor.stop();
+
+    // Guard memutus loop: TAK spawn sesi baru.
+    expect(spawnResume).not.toHaveBeenCalled();
+    // Ditandai BLOCKED (surface manual), bukan RESUMED.
+    expect(createSessionsRepo(db).getById('s-continue-crashed')?.status).toBe('BLOCKED');
+    // Job asli dibuang (done); tak ada job baru → loop tak berlanjut.
+    expect(pendingJobs(db, 's-continue-crashed')).toHaveLength(0);
+    const events = eventsFor(db, 's-continue-crashed');
+    const err = events.find((e) => e.type === 'job_dispatch_error');
+    expect((err?.payload as { action: string }).action).toBe('continue_target_exited');
+  });
+
+  it('resume: RC-1 continue-enqueue FK failure is best-effort → dispatch stays done, old session RESUMED, no retry (F-2/G-39)', async () => {
+    // F-2 (review independen): properti anti-loop inti RC-1 — "enqueue continue GAGAL jangan flip dispatch
+    // ke retry" (G-39, alasan seluruh try/catch ada) — sebelumnya tak punya test. Stub spawnResume balikan
+    // sessionId TANPA membuat baris → FK (scheduled_jobs.session_id→sessions.id, foreign_keys=ON) throw →
+    // assert dispatch tetap 'done' + markResumed tetap + event resume_continue_enqueue_failed, TAK re-spawn.
+    tempDir = join(tmpdir(), `acca-dispatch-test-${randomBytes(4).toString('hex')}`);
+    process.env.ACCA_DATA_DIR = tempDir;
+    db = openDb();
+    socketPath = uniqueSocketPath();
+
+    const sessions = createSessionsRepo(db);
+    // Sesi asal biasa (resumed_from=null → guard F-1 tak fire) yang exited + siap resume-by-id.
+    sessions.createSession({
+      id: 's-old-fk',
+      tool: 'claude',
+      cwd: process.cwd(),
+      status: 'LIMIT_HIT',
+      proc_state: 'exited',
+      cli_session_id: 'cc-uuid-fk',
+      pid: process.pid,
+    });
+    const jobs = createScheduledJobsRepo(db);
+    jobs.enqueue({ session_id: 's-old-fk', run_at: 1_000, kind: 'resume' });
+
+    // Spawn "sukses" tapi TIDAK membuat baris sesi → enqueue continue-job kena FK.
+    const spawnResume = vi.fn(() => ({ sessionId: 's-new-ghost' }));
+
+    const manual = createManualTimer();
+    const nowRef = { value: 0 };
+    const supervisor = createSupervisor({
+      db,
+      socketPath,
+      now: () => nowRef.value,
+      setTimer: manual.setTimer,
+      clearTimer: manual.clearTimer,
+      spawnResume,
+      notify: () => {},
+    });
+    await supervisor.start();
+    nowRef.value = 1_000;
+    await manual.fire();
+    await supervisor.stop();
+
+    // Spawn tetap terpanggil (resume-by-id sukses).
+    expect(spawnResume).toHaveBeenCalledTimes(1);
+    // Sesi lama RESUMED (markResumed jalan SEBELUM enqueue yang gagal).
+    expect(createSessionsRepo(db).getById('s-old-fk')?.status).toBe('RESUMED');
+    // Job asli dibuang (done) — TIDAK di-retry (kegagalan enqueue tak boleh flip ke 'retry' = loop re-spawn).
+    expect(pendingJobs(db, 's-old-fk')).toHaveLength(0);
+    // Kegagalan FK ter-audit eksplisit.
+    const events = eventsFor(db, 's-old-fk');
+    const failed = events.find(
+      (e) => e.type === 'job_dispatch_error' && (e.payload as { action?: string }).action === 'resume_continue_enqueue_failed',
+    );
+    expect(failed).toBeDefined();
+    expect((failed?.payload as { newSessionId: string }).newSessionId).toBe('s-new-ghost');
+  });
+
   it('resume: proc_state exited + cwd exists but cli_session_id NULL → BLOCKED, NO spawn, old session NOT resumed (A-1)', async () => {
     // Regresi A-1 (audit 11 Jul): tanpa cli_session_id, resume-by-id dulu men-spawn dgn id supervisor
     // 4-char yang PASTI ditolak CLI nyata (+ keliru markResumed). Sekarang: BLOCKED + surface, tak spawn.

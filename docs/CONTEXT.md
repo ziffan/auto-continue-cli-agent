@@ -6,6 +6,15 @@
 
 ## Status saat ini
 
+- **Terakhir diupdate:** 2026-07-16 (sesi Windows, dgn user — slice F-1+F-2, Opsi B) — **gate REVIEW M3e ✅ HIJAU: F-1 (loop re-spawn) + F-2 (test) DITUTUP.** Sisa gate keluar M3e = HANYA I-30/I-31 (residual live).
+  Owner pilih **Opsi B (guard tanpa migrasi)** untuk F-1. **Slice (Opus inline Tier-1, state-machine + firewall):** guard di cabang exited `supervisor.ts` (SEBELUM cwd/cli_session_id/resume-by-id):
+  `if (session.resumed_from !== null && session.detected_at === null)` → `markBlocked` + event `continue_target_exited` + `return 'done'` (TAK re-spawn). Memutus loop RC-1 (continue-job mendarat di sesi hasil-resume
+  yang exit <15s → resume-by-id → enqueue continue lagi → loop ~15s). **Semantik dua kolom (sound):** `markLimitHit` isi `detected_at` (limit nyata); `markRunningAfterInject` NULL-kan HANYA di jalur alive
+  (proc tetap 'alive' → tak capai cabang exited) → siklus resume SEHAT lolos guard; `acca run` (resumed_from=null) tak tersentuh. Loop-sever tak bergantung `markBlocked`. **F-2:** +test regresi FK best-effort
+  (`spawnResume` balikan sessionId tanpa baris → FK throw → dispatch tetap 'done' + RESUMED + no-retry + event). **Verifikasi (Opus sendiri):** `npm run check` typecheck+lint+**394 test** (+2; 2 skip POSIX).
+  Tier-1 self-review PASS (blind-spot penulis=reviewer di-flag: guard implisit, dimitigasi komentar + test yang mengunci semantik; re-review independen tak gate-required — gate=temuan F-1, remedi kecil+owner-approved).
+  **Docs:** ISSUES (F-1/F-2 → Tertutup + gate header review ✅ hijau), CONTEXT (ini), CLAUDE.md §2 test count 392→394. **Next:** slice **I-30 (reset clock-wrap) + I-31 (repaint FP)** = penutup residual live I-15 → gate M3e TUNTAS → M-remote/M5.
+
 - **Fase:** **M3e KOREKSI LOOP (dari audit 11 Jul) ← fase sekarang.** M4 inti ✅ (Notifier + proximity + usage-monitor +
   `acca status` usage-view + `acca log`; **AC-4 ✅** — reset_at terjadwal + liveness daemon di `acca status` (I-24 ditutup 12 Jul); AC-5 ✅). **M-remote DITUNDA.**
   **KOREKSI JUJUR (audit `docs/audit/AUDIT-2026-07-11.md`):** klaim lama "loop auto-continue penuh selesai & bertes" **OVERSTATED** —
