@@ -48,6 +48,12 @@ retensi never-purge → tabel membengkak + notif RESUMED berulang. Pra-RC-1 loop
 (mis. `kind:'continue'`) yang saat landing di sesi non-alive → surface/terminal, TAK re-resume (rekomendasi — sever di akar
 semantik: continue hanya bermakna utk sesi alive); (b) depth-cap rantai `resumed_from`; (c) wariskan `attempts` ke job
 continue supaya `MAX_DISPATCH_ATTEMPTS` mengikat rantai. **Sumber:** review independen F-1. **Slice Tier-1 state-machine.**
+**Rekonsiliasi remedi (audit doc §Remediasi, konvergen dgn Opus):** rekomendasi = **Opsi A `kind:'continue'`** (JobKind baru +
+migrasi rebuild `scheduled_jobs` widen CHECK + handler dispatch `continue`: alive→`injectAlive` helper, exited→`continue_target_exited`
+warn TANPA re-resume; loop mustahil by-construction). **Opsi B (tanpa migrasi, ~6 baris):** guard cabang exited
+`if (resumed_from !== null && detected_at === null)` → BLOCKED (`detected_at` null = crash vs terisi = siklus-limit sehat;
+`markRunningAfterInject` NULL-kan `detected_at` hanya di jalur alive → tak pernah capai cabang exited → guard sahih). **Keputusan
+owner A-vs-B saat implementasi slice.**
 
 ### F-2 — Gap test: cabang best-effort FK RC-1 (`resume_continue_enqueue_failed`) tak diuji [P2, gate M3e]
 Properti anti-loop inti RC-1 — "enqueue gagal JANGAN flip dispatch ke `'retry'`" (G-39, alasan seluruh try/catch ada) —
