@@ -25,7 +25,7 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 ## 2. Status
 
 Fase: **Implementasi — M3e KOREKSI LOOP** (dari tiga audit menyeluruh, `docs/audit/AUDIT-2026-07-11.md` + `-12-FOLLOWUP` +
-`-12-MENYELURUH`). **M1–M3d + M4 inti bertes** (394 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset →
+`-12-MENYELURUH`). **M1–M3d + M4 inti bertes** (401 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset →
 probe usage → inject-continue sesi hidup / resume-by-id sesi mati + Notifier + proximity + usage-monitor + `acca status`
 usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
 **KOREKSI (audit):** klaim "loop auto-continue penuh selesai" dulu **overstated** — audit menemukan P1 di jalur resume/continue
@@ -38,14 +38,15 @@ inject `continue` ke sesi hasil-resume — dulu cuma me-load lalu diam) + RC-2/R
 telanjang TAK me-resume agy → `CONTINUE_TOKEN` diganti, firewall utuh, G-40).**
 **16 Jul (sesi ini):** **review independen RC-1..RC-3** (agent CC fresh, syarat gate) + **live-verify I-15 CC full-loop pada
 limit CC ASLI** (beban review = bahan-bakar burn). **Paruh CC I-15 = ✅ LULUS** — deteksi PRIMER `StopFailure rate_limit`
-fire + **inject-continue OTOMATIS end-to-end melanjutkan kerja CC** (konfirmasi owner). **TAPI gate M3e BELUM hijau:**
-review temukan **F-1 (P2, BLOCKING)** — RC-1 buka loop re-spawn (continue-job landing di sesi hasil-resume yg exit cepat;
-verifikasi Opus CONFIRMED `supervisor.ts:286–398`) + **F-2** (gap test FK). Live-verify singkap 2 residual: **I-31**
-(G-37 repaint re-fire LIMIT_HIT palsu, terkonfirmasi) + **I-30** (reset clock-wrap → jadwal +24 jam).
-**Sisa gate keluar M3e:** (a) **F-1+F-2** (slice Tier-1; remedi konvergen = `kind:'continue'` distinct / Opsi B guard no-migrasi,
-keputusan owner) · (b) **I-30/I-31** (residual live) · (c) **I-15 agy literal English pasca-reset** (opportunistik, butuh
-limit+user). Terbuka non-gate: **C-4/RC-4** (sebelum M5), C-5/C-6/C-7 + F-3..F-6 (P3).
-**Berikutnya:** slice F-1+F-2+I-30/I-31 → gate hijau → **M-remote & M5 DITUNDA** sampai itu. Artefak: `docs/audit/AUDIT-RC-1-3-INDEPENDENT-2026-07-16.md` + `LIVE-VERIFY-I15-CC-2026-07-16.md`.
+fire + **inject-continue OTOMATIS end-to-end melanjutkan kerja CC** (konfirmasi owner). Review temukan **F-1 (P2, BLOCKING)** —
+RC-1 buka loop re-spawn (continue-job landing di sesi hasil-resume yg exit cepat; verifikasi Opus CONFIRMED
+`supervisor.ts:286–398`) + **F-2** (gap test FK). Live-verify singkap 2 residual: **I-31** (G-37 repaint re-fire LIMIT_HIT
+palsu, terkonfirmasi) + **I-30** (reset clock-wrap → jadwal +24 jam).
+**✅ SEMUA gate keluar M3e HIJAU (16 Jul):** **F-1** (Opsi B guard `resumed_from!=null && detected_at==null`→BLOCKED) +
+**F-2** (test FK best-effort) + **I-31** (grace-window OUTPUT-CC 5s di limit-watcher) + **I-30** (guard estimator recent-past
+≤2h→probe near-now) — **DITUTUP, 401 test.** Opportunistik non-gate: konfirmasi live sejati I-31/I-30 + I-15 agy literal
+English pasca-reset (butuh limit+user). Terbuka non-gate: **C-4/RC-4** (sebelum M5), C-5/C-6/C-7 + F-3..F-6 (P3).
+**Berikutnya:** **M-remote tier A / M5** (gate M3e tuntas). Artefak: `docs/audit/AUDIT-RC-1-3-INDEPENDENT-2026-07-16.md` + `LIVE-VERIFY-I15-CC-2026-07-16.md`.
 Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file itu dulu.
 
 ## 3. Peta dokumen (sumber kebenaran)

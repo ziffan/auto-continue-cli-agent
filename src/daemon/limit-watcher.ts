@@ -20,6 +20,12 @@ export interface LimitWatcherDeps {
   /** Dipanggil TEPAT SEKALI pada sinyal `limit` pertama (latched). Engine TAK akses store/IPC —
    *  pemanggil yang melakukan transisi state (ADR-008/013: engine murni, tak menurunkan aksi dari isi output). */
   onLimit: (result: DetectionResult) => void;
+  /** I-31 (G-37 terkonfirmasi live 16 Jul): jam untuk grace-window pasca-unlatch (deterministik di test,
+   *  CONVENTIONS.md — engine tak panggil Date.now sendiri). Default `Date.now` untuk kenyamanan produksi. */
+  now?: () => number;
+  /** I-31: audit opsional saat sinyal limit dari OUTPUT ditolak grace-window pasca-unlatch (repaint banner
+   *  lama CC). Engine tetap murni — hanya callback; pemanggil (wrapper) yang menulis event. */
+  onOutputSuppressed?: (result: DetectionResult) => void;
 }
 
 export interface LimitWatcher {
@@ -40,15 +46,35 @@ export interface LimitWatcher {
 const MAX_BUFFER_LEN = 65536;
 const BUFFER_TAIL_LEN = 4096;
 
+/**
+ * I-31 (G-37): jendela pasca-`unlatch()` di mana sinyal limit dari OUTPUT **CC** diabaikan. Setelah
+ * inject-continue sukses (unlatch), TUI CC me-repaint banner limit LAMA (ber-`\n`) yang mengalir lewat
+ * `feedOutput` → tanpa guard ini ia diklasifikasi ulang sbg limit BARU (LIMIT_HIT palsu, live 16 Jul).
+ * HANYA jalur output CC yang disuppress: (a) re-limit CC SAH datang lewat `feedSignal` (hook StopFailure =
+ * deteksi PRIMER CC, I-23) yang TAK disuppress → tetap fire seketika; (b) agy TAK disuppress → re-limit
+ * langsung ADR-019 optimistic ("Individual quota reached") tetap terdeteksi. Genuine cycle-2 CC via output
+ * (fallback tanpa hook) selalu >window kemudian → tetap terdeteksi. 5s = margin aman atas repaint (live: repaint
+ * di detik yang sama dgn inject); reversibel. */
+const POST_UNLATCH_OUTPUT_GRACE_MS = 5_000;
+
 export function createLimitWatcher(deps: LimitWatcherDeps): LimitWatcher {
+  const now = deps.now ?? ((): number => Date.now());
   let buffer = '';
   let latched = false;
+  // I-31: timestamp unlatch terakhir; null = belum pernah unlatch (tak ada suppression sebelum siklus-1).
+  let unlatchedAt: number | null = null;
 
   function classifyLine(line: string): void {
     if (latched) return;
     const stripped = stripAnsi(line);
     const result = classify(deps.tool, { type: 'output', text: stripped });
     if (result.kind === 'limit') {
+      // I-31: suppress repaint banner lama CC dalam grace-window pasca-unlatch (OUTPUT-only, CC-only).
+      // TAK melatch → sinyal limit SAH setelah window (atau via feedSignal/hook) tetap bisa fire.
+      if (deps.tool === 'claude' && unlatchedAt !== null && now() - unlatchedAt < POST_UNLATCH_OUTPUT_GRACE_MS) {
+        deps.onOutputSuppressed?.(result);
+        return;
+      }
       latched = true;
       deps.onLimit(result);
     }
@@ -87,6 +113,8 @@ export function createLimitWatcher(deps: LimitWatcherDeps): LimitWatcher {
     unlatch(): void {
       latched = false;
       buffer = '';
+      // I-31: arm grace-window OUTPUT-CC. Sinyal hook (feedSignal) TAK terpengaruh (authoritative).
+      unlatchedAt = now();
     },
   };
 }
