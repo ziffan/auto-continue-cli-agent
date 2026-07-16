@@ -89,6 +89,11 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     /** B-1: seed `scheduled_jobs.attempts` awal (simulasi job yang sudah di-retry N kali) supaya
      *  cabang attempts-cap bisa diuji dengan SATU fire alih-alih men-drive banyak siklus backoff. */
     jobAttempts?: number;
+    /** C-4/RC-4: override pid sesi (default = pid test = alive). Pid mati → uji reconcile liveness. */
+    pid?: number;
+    /** C-4: dijalankan SETELAH start() (reconcileOrphans sudah lewat) & SEBELUM fire() — simulasi wrapper
+     *  mati keras SETELAH daemon start (mis. set pid ke pid mati) supaya reconcile DISPATCH yang diuji. */
+    beforeFire?: (database: DatabaseInstance) => void;
   }): Promise<{ db: DatabaseInstance }> {
     tempDir = join(tmpdir(), `acca-dispatch-test-${randomBytes(4).toString('hex')}`);
     process.env.ACCA_DATA_DIR = tempDir;
@@ -106,7 +111,8 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
       // pid = pid proses test ITU SENDIRI (selalu "alive") — supaya reconcileOrphans() yang
       // dijalankan supervisor.start() tidak diam-diam menulis-ulang proc_state 'alive'→'exited'
       // sebelum dispatch sempat berjalan (itu akan mengubah cabang yang diuji secara tak sengaja).
-      pid: process.pid,
+      // C-4/RC-4: opts.pid (mis. pid mati) meng-override utk menguji reconcile liveness saat dispatch.
+      pid: opts.pid ?? process.pid,
     });
     const jobs = createScheduledJobsRepo(db);
     const job = jobs.enqueue({ session_id: opts.sessionId, run_at: 1_000, kind: opts.jobKind });
@@ -133,6 +139,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     });
 
     await supervisor.start();
+    opts.beforeFire?.(db);
     nowRef.value = 1_000;
     await manual.fire();
     await supervisor.stop();
@@ -788,5 +795,89 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(active.some((s) => s.resumed_from === 's-resume-giveup')).toBe(false);
     // Sesi lama BLOCKED sendiri tetap aktif (butuh perhatian user).
     expect(active.some((s) => s.id === 's-resume-giveup')).toBe(true);
+  });
+
+  const DEAD_PID = 2_147_483_646; // pid yg (hampir) pasti tak ada → isProcessAlive → false (ESRCH)
+
+  it('C-4: probe agy proc_state alive tapi PID MATI (mati SETELAH start) → reconcile ke exited → optimistic resume (bukan retry-senyap)', async () => {
+    // reconcileOrphans hanya jalan di start(); wrapper agy yang mati keras SETELAH itu tinggalkan
+    // proc_state='alive' basi → dulu probeAgyUsage(pid mati) throw → catch generik retry 60m senyap.
+    // Kini reconcile DISPATCH tandai exited → cabang optimistic_resume_agy_exited (ADR-019). beforeFire
+    // set pid mati SETELAH start (start pakai process.pid → reconcileOrphans start tak menyentuhnya).
+    const { db: database } = await setupAndFire({
+      sessionId: 's-orphan-agy',
+      procState: 'alive',
+      cwd: process.cwd(),
+      jobKind: 'probe',
+      tool: 'antigravity',
+      beforeFire: (db2) => db2.prepare('UPDATE sessions SET pid = @p WHERE id = @id').run({ p: DEAD_PID, id: 's-orphan-agy' }),
+    });
+
+    // Reconcile menulis proc_state exited (status LIMIT_HIT dipertahankan).
+    const sess = createSessionsRepo(database).getById('s-orphan-agy');
+    expect(sess?.proc_state).toBe('exited');
+    const events = eventsFor(database, 's-orphan-agy');
+    expect(events.some((e) => e.type === 'job_dispatch_reconcile' && (e.payload as { action?: string }).action === 'orphan_reconciled_at_dispatch')).toBe(true);
+    // Cabang exited agy → enqueue resume (optimistic), BUKAN retry-spin.
+    const done = events.find((e) => e.type === 'job_dispatch_done');
+    expect((done?.payload as { action?: string }).action).toBe('optimistic_resume_agy_exited');
+    const remaining = pendingJobs(database, 's-orphan-agy');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.kind).toBe('resume');
+  });
+
+  it('C-4: resume CC proc_state alive tapi PID MATI → reconcile ke exited → resume-by-id (bukan inject ke wrapper mati)', async () => {
+    // CC: dulu proc alive basi → jalur inject → requestInject wrapper unreachable → buntu manual, padahal
+    // auto-recovery mungkin (pid mati + cli_session_id ada → resume-by-id). Kini reconcile → resume-by-id.
+    const spawnResume = vi.fn(() => ({ sessionId: 's-orphan-cc-new' }));
+    // requestInject TAK boleh dipanggil (bukti jalur BUKAN inject-alive) — beri stub yg gagal test bila dipakai.
+    const requestInject = vi.fn(() => Promise.resolve({ reachable: false, injected: false, reason: 'should_not_inject' }));
+
+    const { db: database } = await setupAndFire({
+      sessionId: 's-orphan-cc',
+      procState: 'alive',
+      cwd: process.cwd(),
+      jobKind: 'resume',
+      tool: 'claude',
+      cliSessionId: 'cc-uuid-orphan',
+      requestInject,
+      spawnResume,
+      beforeFire: (db2) => db2.prepare('UPDATE sessions SET pid = @p WHERE id = @id').run({ p: DEAD_PID, id: 's-orphan-cc' }),
+    });
+
+    expect(requestInject).not.toHaveBeenCalled(); // BUKAN jalur inject-alive
+    expect(spawnResume).toHaveBeenCalledTimes(1); // resume-by-id
+    expect(createSessionsRepo(database).getById('s-orphan-cc')?.status).toBe('RESUMED');
+    const events = eventsFor(database, 's-orphan-cc');
+    expect(events.some((e) => e.type === 'job_dispatch_reconcile')).toBe(true);
+    expect(events.some((e) => e.type === 'job_dispatch_done' && (e.payload as { action?: string }).action === 'resume_spawned')).toBe(true);
+  });
+
+  it('RC-4: error dispatch tak-terduga di BATAS attempts → BLOCKED + dispatch_gave_up + done (bukan retry selamanya)', async () => {
+    // probeUsage throw (mis. discoverLocalPorts pd pid basi yg lolos reconcile, atau glitch). pid ALIVE
+    // (process.pid) → reconcile skip → probe → throw → catch generik. jobAttempts=2 → +1=3=MAX → BLOCKED.
+    adapters.claude.probeUsage = vi.fn((): Promise<UsageSnapshot> => Promise.reject(new Error('discoverLocalPorts: boom')));
+
+    const { db: database } = await setupAndFire({ sessionId: 's-catch-cap', procState: 'alive', cwd: process.cwd(), jobKind: 'probe', jobAttempts: 2 });
+
+    expect(pendingJobs(database, 's-catch-cap')).toHaveLength(0); // done, bukan retry
+    expect(createSessionsRepo(database).getById('s-catch-cap')?.status).toBe('BLOCKED');
+    const err = eventsFor(database, 's-catch-cap').find(
+      (e) => e.type === 'job_dispatch_error' && (e.payload as { action?: string }).action === 'dispatch_gave_up',
+    );
+    expect(err).toBeDefined();
+    expect((err?.payload as { status: string }).status).toBe('BLOCKED');
+    expect((err?.payload as { attempts: number }).attempts).toBe(3);
+  });
+
+  it('RC-4: error dispatch tak-terduga DI BAWAH batas attempts → retry (transien, tak langsung menyerah)', async () => {
+    adapters.claude.probeUsage = vi.fn((): Promise<UsageSnapshot> => Promise.reject(new Error('transient glitch')));
+
+    const { db: database } = await setupAndFire({ sessionId: 's-catch-retry', procState: 'alive', cwd: process.cwd(), jobKind: 'probe', jobAttempts: 0 });
+
+    const remaining = pendingJobs(database, 's-catch-retry');
+    expect(remaining).toHaveLength(1); // retry (job dipertahankan)
+    expect(remaining[0]?.attempts).toBe(1);
+    expect(createSessionsRepo(database).getById('s-catch-retry')?.status).not.toBe('BLOCKED');
   });
 });
