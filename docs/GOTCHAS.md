@@ -566,6 +566,14 @@ latch dibuka). **RESIDUAL (butuh live-verify I-15, belum):** bila TUI agy/CC me-
 umumnya repaint in-place tanpa `\n`. Sekelas residual idle-false-positive (G-29) — konfirmasi perilaku repaint
 agy/CC saat limit asli. **Sumber:** R3/I-21, `src/daemon/{limit-watcher,process-wrapper,supervisor,inject-continue}.ts`,
 `src/store/repositories/sessions.ts`, `src/notify/notifier.ts`.
+**⚠ RESIDUAL TERKONFIRMASI LIVE (16 Jul, limit CC ASLI, otorisasi user → I-31):** repaint memang **re-fire LIMIT_HIT
+palsu**. Trace: inject-continue sukses (`status RUNNING reason:inject_continue`, un-latch) → **detik yang sama**
+`LIMIT_HIT {source:"output", evidence:"hit your session limit"}` → probe dijadwalkan sia-sia. **Terbukti FALSE-POSITIVE:**
+sesi CC (Terminal B) **jalan normal & menyelesaikan kerja** pasca-inject (owner + daemon log `Session resumed
+(inject-continue)`) — banner limit LAMA yang di-repaint (ber-`\n`), bukan limit baru. Asumsi "TUI repaint in-place
+tanpa `\n`" GUGUR untuk CC. **Dampak:** `unlatch()` reset-buffer TAK cukup; sesi ter-tandai LIMIT_HIT palsu + probe
++24 jam (via clock-wrap I-30). **Remedi → I-31** (grace-window pasca-unlatch / butuh baris output BARU non-banner /
+korelasi probe-usage). **Sumber:** live-verify I-15 CC full-loop 16 Jul (`docs/audit/LIVE-VERIFY-I15-CC-2026-07-16.md`).
 
 ---
 
