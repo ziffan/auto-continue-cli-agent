@@ -1,6 +1,6 @@
 // Estimasi reset_at (epoch ms UTC) dari ResetHint. Murni — `now` di-inject (test deterministik),
 // TAK PERNAH panggil Date.now() di sini (CONVENTIONS.md). Presedensi (yang pertama usable menang):
-// epochSeconds > isoTimestamp > relativeHours > clockTime(+tz) > heuristik windowHint > backoff.
+// epochSeconds > isoTimestamp > relative(h/m/s) > clockTime(+tz) > heuristik windowHint > backoff.
 
 import type { ResetHint } from '../adapters/types.js';
 import type { ResetSource } from '../shared/types.js';
@@ -181,8 +181,18 @@ export function estimateReset(hint: ResetHint | undefined, opts: EstimateOpts): 
     // ISO tak valid → jatuh ke hint berikutnya, bukan langsung heuristik.
   }
 
-  if (hint?.relativeHours !== undefined) {
-    return { resetAt: opts.now + hint.relativeHours * MS_PER_HOUR, source: 'exact' };
+  // Relatif h/m/s (C-6): CC "in 5 hours" (relativeHours) atau agy kompak "Resets in 4h31m7s"
+  // (relativeHours+relativeMinutes+relativeSeconds). Jumlahkan komponen yang ada → now + total.
+  if (
+    hint?.relativeHours !== undefined ||
+    hint?.relativeMinutes !== undefined ||
+    hint?.relativeSeconds !== undefined
+  ) {
+    const relMs =
+      (hint.relativeHours ?? 0) * MS_PER_HOUR +
+      (hint.relativeMinutes ?? 0) * MS_PER_MINUTE +
+      (hint.relativeSeconds ?? 0) * MS_PER_SECOND;
+    return { resetAt: opts.now + relMs, source: 'exact' };
   }
 
   if (hint?.clockTime !== undefined) {

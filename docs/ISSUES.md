@@ -337,10 +337,17 @@ inject→detect R3, tapi event `usage_available_enqueue_resume` menyesatkan audi
 konsisten ADR-019 (skip probe stale → langsung enqueue resume di reset_at) ATAU minimal tandai `reason:'ls_snapshot_stale'`.
 **Sumber:** audit ketiga C-5, G-35.
 
-### C-6 — Pesan limit agy memuat reset eksplisit (`Resets in 4h31m7s`, G-19) tapi `extractResetHint` hanya kenali `in N hours` → jatuh ke backoff [P3] → RC-6
-`resetHint` kosong → jadwal reset agy pakai backoff 5m→15m→60m padahal jam pasti tersedia (boros siklus probe/inject
-sia-sia, perbesar jendela G-37). **Remedi:** pola relatif `(\d+h)?(\d+m)?(\d+s)?` pada `Resets in …` → `relativeHours`/
-`relativeMinutes` (perluas `ResetHint`); fixture dari korpus G-19. **Sumber:** audit ketiga C-6.
+### C-6 — Pesan limit agy memuat reset eksplisit (`Resets in 4h31m7s`, G-19) tapi `extractResetHint` hanya kenali `in N hours` → jatuh ke backoff [P3] ✅ (17 Jul, autonomous-run)
+**RESOLVED (17 Jul, Opus inline Tier-1).** `ResetHint` diperluas `relativeMinutes`/`relativeSeconds`;
+`AGY_RELATIVE_RESET_PATTERN = /\bresets?\s+in\s+(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/i` (unit RAPAT tanpa spasi —
+tak keliru menangkap bentuk kata "in 5 hours") menangkap countdown kompak agy `Resets in 59m14s`/`4h31m7s` di
+`extractResetHint`; `estimateReset` menjumlahkan komponen h/m/s → `now + total` (source `exact`). **Presedensi
+DIPERTAHANKAN:** relatif tetap DI BAWAH `isoTimestamp` (LS-probe absolut) → sumber reset LS yang lebih andal tetap
+menang saat tersedia; parse relatif hanya menggantikan **backoff sia-sia** saat output = satu-satunya sinyal
+(mempersempit jendela G-37). **Reversal dicatat:** test lama `detector.test.ts` yang meng-assert "tak mengarang
+resetHint dari 59m14s" (rasionalisasi 4 Jul "reset andal = LS probe") diganti — komentar fixture `agy-limit.txt` +
+G-19 direkonsiliasi. **+6 test** (2 detector parse+estimate-with-iso-precedence, 4 estimator kombinasi h/m/s +
+presedensi iso/clockTime). **Sumber:** audit ketiga C-6.
 
 ### C-7 — Empty-state `acca status` masih sarankan `acca run -- <cli>` (bentuk pra-I-29) [P3] ✅ (17 Jul, autonomous-run)
 **RESOLVED (17 Jul, Opus inline).** Empty-state `status.ts` kini `Belum ada sesi. Jalankan: acca run <claude|agy>`

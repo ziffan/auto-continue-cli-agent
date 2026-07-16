@@ -33,6 +33,39 @@ describe('estimateReset — precedence: epochSeconds > isoTimestamp > relativeHo
     expect(result).toEqual({ resetAt: now + 3 * MS_PER_HOUR, source: 'exact' });
   });
 
+  describe('C-6 — agy relative countdown (h/m/s components)', () => {
+    const MS_PER_MINUTE = 60_000;
+    const MS_PER_SECOND = 1_000;
+
+    it('relativeHours+relativeMinutes+relativeSeconds → exact, now + total (4h31m7s)', () => {
+      const now = 1_700_000_000_000;
+      const hint: ResetHint = { relativeHours: 4, relativeMinutes: 31, relativeSeconds: 7 };
+      const result = estimateReset(hint, { now, detectedAt: now });
+      expect(result).toEqual({ resetAt: now + 4 * MS_PER_HOUR + 31 * MS_PER_MINUTE + 7 * MS_PER_SECOND, source: 'exact' });
+    });
+
+    it('relativeMinutes+relativeSeconds only (59m14s, no hours) → now + total', () => {
+      const now = 1_700_000_000_000;
+      const hint: ResetHint = { relativeMinutes: 59, relativeSeconds: 14 };
+      const result = estimateReset(hint, { now, detectedAt: now });
+      expect(result).toEqual({ resetAt: now + 59 * MS_PER_MINUTE + 14 * MS_PER_SECOND, source: 'exact' });
+    });
+
+    it('relative components sit BELOW isoTimestamp in precedence (LS probe absolute wins)', () => {
+      const now = 1_700_000_000_000;
+      const hint: ResetHint = { isoTimestamp: '2026-01-01T00:00:00.000Z', relativeMinutes: 59, relativeSeconds: 14 };
+      const result = estimateReset(hint, { now, detectedAt: now });
+      expect(result).toEqual({ resetAt: Date.parse('2026-01-01T00:00:00.000Z'), source: 'exact' });
+    });
+
+    it('relative components sit ABOVE clockTime in precedence', () => {
+      const now = 1_700_000_000_000;
+      const hint: ResetHint = { relativeMinutes: 30, clockTime: '3pm', timezone: 'UTC' };
+      const result = estimateReset(hint, { now, detectedAt: now });
+      expect(result).toEqual({ resetAt: now + 30 * MS_PER_MINUTE, source: 'exact' });
+    });
+  });
+
   describe('clockTime — UTC', () => {
     it('target later today (no wrap)', () => {
       // now = 2026-04-10T10:00:00Z, target 3pm UTC same day = 15:00Z

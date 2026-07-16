@@ -21,6 +21,8 @@ export interface ResetHint {
   clockTime?: string; // "3pm" / "2:30pm" dari output → exact (butuh resolusi tz)
   timezone?: string; // "UTC" | "America/New_York" | "Europe/Dublin" | ...
   relativeHours?: number; // "try again in 5 hours" → exact relatif
+  relativeMinutes?: number; // agy "Resets in 4h31m7s" komponen menit (C-6, G-19)
+  relativeSeconds?: number; // agy "Resets in 4h31m7s" komponen detik (C-6, G-19)
 }
 
 /**
