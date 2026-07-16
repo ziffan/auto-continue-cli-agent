@@ -14,6 +14,23 @@ Kenapa ritual ini ada: semua konteks proyek hidup di file, bukan di ingatan agen
 Sesi yang langsung menyentuh kode tanpa membaca docs akan menciptakan konvensinya sendiri,
 me-relitigasi keputusan lama, dan mengulang gotcha yang sudah dibayar mahal.
 
+## Step 0 — Sinkron dengan remote (WAJIB, SEBELUM baca docs)
+
+Proyek ini lintas-mesin (Ubuntu daily + Windows weekend) — mesin/sesi lain bisa sudah push
+ke `origin`. Memulai kerja di basis yang **basi** → commit di atas base lama → konflik push +
+kolisi nomor (ADR/G-/I-), rebase menyakitkan. Cegah di awal:
+
+1. `git fetch origin` (jangan asumsikan lokal terkini).
+2. Cek divergensi: `git rev-list --left-right --count HEAD...origin/main` (atau `git status`).
+   - **Lokal di belakang / diverge** → **integrasikan DULU** (`git pull --rebase` bila lokal bersih;
+     bila ada commit lokal, rebase ke `origin/main`) **sebelum** menyentuh tugas. Baca commit baru
+     origin (mungkin ada audit/keputusan/renumber yang mengubah rencana).
+   - **Sinkron / lokal di depan bersih** → lanjut.
+3. Bila working tree kotor saat fetch menunjukkan divergensi → laporkan ke user, jangan paksa.
+
+Jangan lewati langkah ini walau "cuma mau baca" — status di `CONTEXT.md` lokal bisa ketinggalan
+dari kebenaran di `origin`.
+
 ## Step 1 — Baca berurutan
 
 Baca file berikut dalam urutan ini (lewati yang tidak ada, catat ketiadaannya):
