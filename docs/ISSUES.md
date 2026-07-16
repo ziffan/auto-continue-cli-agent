@@ -81,8 +81,14 @@ dispatch tetap `'done'` + sesi lama `RESUMED` (`markResumed` jalan sebelum enque
 berlanjut) + event `resume_continue_enqueue_failed` ter-emit dgn `newSessionId`. **Sumber:** review independen F-2.
 
 ### F-3..F-6 — nits RC-2/RC-3 [P3, non-blocking]
-- **F-3 (RC-2):** validasi UUID di jalur TULIS (hook), tak di jalur PAKAI (resume dispatch `if (!cli_session_id)`,
-  `supervisor.ts:304`). Aman sekarang (semua penulis UUID-only); saran defense-in-depth gate titik-pakai.
+- **F-3 (RC-2):** ✅ (17 Jul, autonomous-run, Opus inline Tier-1). Validasi UUID kini DITEGAKKAN di jalur PAKAI —
+  guard `isCanonicalUuid(session.cli_session_id)` di cabang resume-by-id `supervisor.ts` (SETELAH cek `cli_session_id`
+  absen, SEBELUM `adapter.resumeCmd` yang menaruh id ke argv `claude --resume <id>` / `agy --conversation <id>`);
+  non-UUID → `markBlocked` + event `job_dispatch_error {action:'blocked', reason:'cli_session_id_malformed', status:'BLOCKED'}`
+  + `return 'done'` (terminal, tak retry-spin). TAK PERNAH menolak nilai sah (kedua adapter produksi = UUID-kanonik:
+  agy `matchAgyResumeId` anchored; CC hook `SessionStart` di-gate RC-2). Firewall struktural di batas actuation
+  (payload tak echo id). **+1 test** (exited + cli_session_id non-UUID → BLOCKED + NO spawn). Fixture uji lama yang
+  memakai id palsu non-UUID (`cc-uuid-*`) diganti UUID kanonik (lebih setia ke produksi). **Sumber:** review independen F-3.
 - **F-4 (RC-3):** residual pembajakan capturer — kill sebelum agy cetak resume-cmd → uuid palsu (match terakhir) menang.
   Melekat ADR-013; last-match-wins tetap > latch-first (bukan regresi).
 - **F-5 (RC-3):** efisiensi — early-return dihapus → `stripAnsi`+regex atas residual ≤64KB tiap chunk seumur-hidup sesi agy.
@@ -336,9 +342,11 @@ konsisten ADR-019 (skip probe stale → langsung enqueue resume di reset_at) ATA
 sia-sia, perbesar jendela G-37). **Remedi:** pola relatif `(\d+h)?(\d+m)?(\d+s)?` pada `Resets in …` → `relativeHours`/
 `relativeMinutes` (perluas `ResetHint`); fixture dari korpus G-19. **Sumber:** audit ketiga C-6.
 
-### C-7 — Empty-state `acca status` masih sarankan `acca run -- <cli>` (bentuk pra-I-29) [P3] → RC-7
-`status.ts` empty-state pakai `--` yang kini dibuang & `<tool>` wajib. **Remedi:** ganti `acca run <claude|agy>`;
-cek string bantuan lain. **Sumber:** audit ketiga C-7.
+### C-7 — Empty-state `acca status` masih sarankan `acca run -- <cli>` (bentuk pra-I-29) [P3] ✅ (17 Jul, autonomous-run)
+**RESOLVED (17 Jul, Opus inline).** Empty-state `status.ts` kini `Belum ada sesi. Jalankan: acca run <claude|agy>`
+(bentuk post-I-29; `--` tak lagi wajib/dipakai). Sweep string bantuan lain: doc-comment `UnknownToolError`
+(`adapters/index.ts`) contoh `acca run -- foo` → `acca run foo`. Tak ada tempat lain memakai bentuk `run -- <cli>`.
+String UX di `console.log` sengaja TAK dikunci test (brittle, low-value P3). **Sumber:** audit ketiga C-7.
 
 ---
 

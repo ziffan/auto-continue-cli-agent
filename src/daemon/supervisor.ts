@@ -7,6 +7,7 @@ import { adapters } from '../adapters/index.js';
 import type { SpawnSpec } from '../adapters/types.js';
 import { runSession } from './process-wrapper.js';
 import { isProcessAlive } from '../shared/proc.js';
+import { isCanonicalUuid } from '../shared/ids.js';
 import { sessionControlSocketPath } from '../shared/paths.js';
 import type { Session } from '../shared/types.js';
 import type { DatabaseInstance } from '../store/db.js';
@@ -363,6 +364,25 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
           session_id: job.session_id,
           type: 'job_dispatch_error',
           payload: { jobId: job.id, action: 'blocked', reason: 'cli_session_id_missing', status: 'BLOCKED' },
+        });
+        return 'done';
+      }
+
+      // F-3 (review independen RC-2, defense-in-depth): validasi UUID di TITIK-PAKAI, bukan hanya
+      // titik-tulis. `cli_session_id` mengalir langsung ke argv `claude --resume <id>` / `agy
+      // --conversation <id>` di `adapter.resumeCmd` di bawah. Penulis saat ini SUDAH UUID-kanonik
+      // (agy: `matchAgyResumeId` UUID-anchored; CC: hook `SessionStart` di-gate `isCanonicalUuid`, RC-2),
+      // jadi ini TAK PERNAH menolak nilai sah dari kedua adapter produksi — tapi bila suatu jalur tulis
+      // masa depan lolos nilai non-UUID (mis. named pipe Win ber-ACL terbuka, I-26/A-8), JANGAN spawn CLI
+      // dengan argumen sembarang. BLOCKED (surface manual) = firewall struktural di batas actuation,
+      // bukan mengandalkan kebenaran setiap penulis. (Kedua adapter produksi memakai id UUID; adapter
+      // ber-id non-UUID di masa depan perlu validasi per-adapter — belum ada.)
+      if (!isCanonicalUuid(session.cli_session_id)) {
+        sessions.markBlocked(job.session_id);
+        events.append({
+          session_id: job.session_id,
+          type: 'job_dispatch_error',
+          payload: { jobId: job.id, action: 'blocked', reason: 'cli_session_id_malformed', status: 'BLOCKED' },
         });
         return 'done';
       }

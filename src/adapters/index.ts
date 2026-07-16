@@ -8,7 +8,7 @@ export const adapters: Record<Tool, Adapter> = {
   antigravity: antigravityAdapter,
 };
 
-/** Dilempar saat nama tool dari CLI tak dikenali (mis. `acca run -- foo`). */
+/** Dilempar saat nama tool dari CLI tak dikenali (mis. `acca run foo`). */
 export class UnknownToolError extends Error {
   constructor(public readonly input: string) {
     super(`Tool tidak dikenal: "${input}". Gunakan "claude" atau "antigravity"/"agy".`);
