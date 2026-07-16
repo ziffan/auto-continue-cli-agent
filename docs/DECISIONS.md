@@ -2,8 +2,10 @@
 
 > Format Nygard. ADR *Accepted* immutable — revisi = ADR baru yang men-supersede.
 > Status per ADR: **Proposed** (masih bisa berubah) / Accepted / Deprecated / Superseded.
-> Status per 2026-07-12: **ADR-001…017 + ADR-019 Accepted (locked); ADR-018 Superseded by ADR-019** (12 Jul —
+> Status per 2026-07-16: **ADR-001…017 + ADR-019 + ADR-020 Accepted (locked); ADR-018 Superseded by ADR-019** (12 Jul —
 > premis probe OAuth standalone terbukti baca pool kuota salah saat live-verify → optimistic resume + detect).
+> (ADR-020, 16 Jul: **amandemen token** ADR-014 §1 — live-verify agy 1.1.3 + CC 2.1.211 buktikan kata "continue" telanjang
+> tak andal untuk agy; token diganti instruksi NL eksplisit. Meng-amandemen, TIDAK men-supersede ADR-014 — strategi lain tetap.)
 > (ADR-017, 11 Jul: wrapper=penulis-sah lifecycle-sesinya + daemon=sole-coordinator-bukan-sole-writer → menutup residual
 > I-10 by-design.) ADR-001 di-**Accept 4 Jul** setelah
 > verifikasi terakhir tertutup: pesan limit CC ASLI (4 Jul pagi) + **pesan limit agy TUI ASLI + varian quota-habis
@@ -298,6 +300,9 @@ Dependensi keputusan (uji hook `StopFailure`) sudah **selesai** 3 Jul.
    → tanpa konfirmasi. Token yang di-inject = **literal tetap** (`"continue"` + newline), **tak pernah** diturunkan
    dari isi output agent (injection firewall, ADR-008/013). Alasan preferred: pertahankan konteks sesi in-memory/TUI
    yang **tak** dipulihkan penuh oleh resume-by-id, lebih murah/cepat (tak re-load transcript, tak spawn proses baru).
+   *(**Token di-AMANDEMEN oleh ADR-020, 16 Jul:** live-verify buktikan kata `"continue"` telanjang tak andal untuk agy
+   → literal diganti instruksi NL eksplisit `"continue the work that was interrupted by the usage limit\r"`. Sifat
+   "literal tetap, hardcoded wrapper, firewall utuh" TAK berubah — hanya isi kalimatnya. Lihat ADR-020.)*
 2. **`alive` + gating GAGAL → JANGAN inject; surface + notifikasi (manual).** Tak meng-auto-kill sesi hidup
    (bisa sedang di shell/kerja tak ter-persist) — konsisten "jangan hard delete" + human-in-the-loop.
 3. **`exited` → resume-by-id** di cwd asli: `claude --resume <id>` / `agy --conversation <id>` (print-mode:
@@ -319,6 +324,9 @@ foreground/idle rapuh terhadap perubahan TUI CLI → butuh test + fixture footer
 AI Credits aktif (fallthrough senyap tanpa stop — G-16) → gating agy harus konfirmasi exhaustion via probe LS
 (`remainingFraction` absent, G-17) **dan** credit off, bukan hanya "sesi berhenti". Keystroke continue agy = TBD saat
 impl M3d.7 (agy hidup di prompt → kandidat "continue"/Enter, uji di M3d). RESEARCH §2b, GOTCHAS G-16..G-19.)*
+*(**TBD keystroke agy DIISI 16 Jul → ADR-020 (agy 1.1.3 + CC 2.1.211, otorisasi user):** kata `"continue"` telanjang
+**tak andal** — agy menafsirnya pesan NL baru ("no context"/"more of same"), bukan resume turn. Instruksi eksplisit
+"lanjutkan pekerjaan yang tadi terhenti" **berhasil resume agy DAN CC di limit ASLI** → token diganti (ADR-020, G-40).)*
 **Alternatives Rejected:** **Selalu kill→resume-by-id** (mental model lebih simpel) — ditolak: buang konteks in-memory,
 lebih lambat (re-load transcript + startup baru), dan mubazir untuk sesi yang masih hidup; **auto-kill saat gating gagal**
 — ditolak: berisiko menghancurkan kerja tak ter-persist / mengetik ke shell yang salah; **inject tanpa gating foreground/idle**
@@ -489,6 +497,47 @@ bentrok dgn resume; lifecycle proses buang) dan **mahal** (spawn dua sesi: probe
 mem-probe via LS-nya → redundan. Ditolak demi kesederhanaan (owner). **agy-exited = manual** (guard slice-1 permanen) —
 paling least-privilege, tapi owner tetap ingin otonomi penuh & optimistic-resume mencapainya tanpa biaya egress.
 
+## ADR-020: Token inject-continue = instruksi NL eksplisit, bukan kata "continue" telanjang (amandemen token ADR-014 §1)
+**Status:** **Accepted** (locked 2026-07-16, owner Ziffan) — *immutable; revisi = ADR baru yang men-supersede.*
+**Meng-amandemen ADR-014 §1** (nilai `CONTINUE_TOKEN` saja) — **TIDAK men-supersede** ADR-014: strategi alive-inject
+preferred + gating berlapis + fallback resume-by-id + cwd→BLOCKED + gating-gagal=manual **tetap berlaku**. Pola sama
+ADR-017 (scope-ulang/amandemen sebagian, bukan supersede penuh). Mengisi "keystroke continue agy = TBD" yang ADR-014 catat.
+**Context:** ADR-014 §1 mematok token inject = literal tetap `"continue"` + newline, **dengan catatan eksplisit token/
+keystroke agy = TBD sampai live-verify**. Live-verify 16 Jul (agy **1.1.3** + CC **2.1.211**, otorisasi user) mengisi TBD itu
+dan **membantah kecukupan kata "continue" telanjang** untuk agy:
+- Inject `"continue\r"` ke agy idle → agy memperlakukannya sebagai **pesan NL baru**, ditafsir kontekstual: sesi tanpa
+  pekerjaan-terputus → *"I do not have context from a previous session, please explain the task"*; setelah turn selesai →
+  *"more of the same"* (mis. cuaca hari berikutnya) — **bukan** melanjutkan yang terhenti. agy **tak punya primitif
+  "resume turn terputus"** untuk kata "continue" seperti Claude Code.
+- **Bukti penentu (limit ASLI, owner, sesi sama):** saat kuota habis lalu reset, mengetik kalimat **eksplisit**
+  *"lanjutkan pekerjaan, tadi terhenti karena limit"* → **agy DAN Claude Code langsung melanjutkan pekerjaan yang
+  terhenti**. Instruksi yang jelas berhasil di kedua tool; satu kata "continue" tidak andal untuk agy.
+Mekanisme inject sendiri (IPC daemon→wrapper→gating→PTY write) **terbukti benar** (`injected:true`, keystroke sampai ke
+agy — live 16 Jul). Yang salah = **pilihan token**, bukan seam-nya.
+**Decision:** `CONTINUE_TOKEN` diganti dari `"continue\r"` → instruksi NL eksplisit berbahasa Inggris:
+**`"continue the work that was interrupted by the usage limit\r"`** (owner pilih English demi netralitas workspace;
+padanan bahasa apa pun berfungsi — agent multibahasa). Token tetap:
+- **Literal tetap yang di-hardcode di WRAPPER** — TAK PERNAH diturunkan dari output/transcript agent → **injection
+  firewall ADR-008/013 UTUH** (kalimat lebih panjang tak mengubah properti ini; ia tetap konstanta buta tanpa payload IPC).
+- **Bersama untuk agy + CC** (keduanya resume dengan instruksi eksplisit → tak perlu token per-tool).
+Elemen ADR-014 lain tak berubah.
+**Consequences:**
+- (+) Auto-continue agy jalur alive-inject kini **bermakna** (bukan mengetik kata ambigu yang membakar turn untuk hal
+  salah). Sejalan JTBD inti (lanjut otomatis pasca-reset, kedua tool).
+- (+) Satu token untuk dua tool; **nol dep/egress baru**; perubahan = satu konstanta + komentar.
+- (−) **Literal English belum di-live-verify langsung** (yang terbukti owner = frasa Indonesia). Risiko rendah (konsep
+  terbukti lintas-bahasa; agent multibahasa) + **reversible** (ganti konstanta). Live-verify inject English pasca-reset
+  agy = **satu observasi tersisa** (kelas I-15, opportunistik / via harness Esc-cancel).
+- (−) Token lebih panjang → lebih banyak keystroke ke PTY (tak signifikan).
+**Alternatives Rejected:**
+- **Pertahankan `"continue"` telanjang** — ditolak: live-verify buktikan tak andal untuk agy (ambigu → "no context"/
+  "more of same"; agy tak punya semantik resume-turn untuk satu kata itu).
+- **Enter/`\r` saja tanpa teks** — ditolak: agy idle prompt kosong → Enter = baris kosong/no-op, tak memicu resume.
+- **Token per-tool** (beda utk CC vs agy) — ditolak (belum perlu): instruksi eksplisit yang sama resume kedua tool;
+  per-tool = kompleksitas tanpa manfaat terbukti. Revisit bila satu tool kelak butuh frasa beda.
+- **Token Bahasa Indonesia** (frasa yang terbukti owner) — tak dipilih (owner preferensi English utk netralitas
+  workspace); tetap kandidat cadangan bila English gagal live-verify.
+
 ## Pending decisions (belum diputuskan)
 
 | Keputusan | Owner | Target |
@@ -508,6 +557,7 @@ paling least-privilege, tapi owner tetap ingin otonomi penuh & optimistic-resume
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-16 (sesi Windows, I-15 live-verify token → **ADR-020**) | **ADR-020 baru + di-LOCK (amandemen token ADR-014 §1, owner Ziffan).** Live-verify agy **1.1.3** + CC **2.1.211** (otorisasi user) mengisi "keystroke agy = TBD" ADR-014: kata **`"continue"` telanjang tak andal utk agy** — agy menafsirnya pesan NL baru ("I do not have context…"/"more of same"), bukan resume turn. **Bukti penentu (limit ASLI, sesi sama, owner):** kalimat eksplisit "lanjutkan pekerjaan, tadi terhenti karena limit" → **agy DAN CC langsung melanjutkan pekerjaan terhenti**. Mekanisme inject terbukti benar (`injected:true`). **Keputusan:** `CONTINUE_TOKEN` `"continue\r"` → **`"continue the work that was interrupted by the usage limit\r"`** (English, owner). Literal-tetap-hardcoded-wrapper → **injection firewall utuh** (hanya isi kalimat berubah); bersama agy+CC; nol dep/egress. **Amandemen (bukan supersede)** — strategi ADR-014 lain tetap; pola ADR-017. **Sisa:** live-verify literal English pasca-reset agy (kelas I-15, reversible). Delta versi tercatat: agy 1.1.1→1.1.3, CC 2.1.207→2.1.211 (patch; G-33 `esc to cancel` + G-36 resume-cmd re-confirmed holds @1.1.3). Dampak docs: DECISIONS (ADR-020 + anotasi ADR-014 §1 & catatan agy + header), GOTCHAS G-40 baru, ISSUES I-15, CONTEXT, CLAUDE.md §7/README. |
 | 2026-07-13 (sesi RC, audit ketiga C-1..C-3) | **Keputusan MINOR reversible (bukan ADR)** — realisasi remedi audit menyeluruh ketiga (`docs/audit/AUDIT-2026-07-12-MENYELURUH.md`, merged PR #1). **RC-1 (C-1, P1, masuk gate):** resume-by-id hanya MEMUAT percakapan → tak melanjutkan kerja; kini `supervisor.ts` pasca `resume_spawned` **enqueue job `resume` untuk sesi BARU** (RUNNING+alive → jalur alive yang ada meng-inject `continue`; nol kanal baru, firewall ADR-013 utuh; masih-limit → detect ADR-019 seperti didesain). Enqueue best-effort (try/catch, cegah re-spawn loop, G-39). `RESUME_CONTINUE_DELAY_MS=15s` (kalibrasi=I-15). **RC-2 (C-2):** `isCanonicalUuid` (`shared/ids.ts`) gate `ccSessionId` hook sebelum jadi argv `--resume`. **RC-3 (C-3):** capturer id agy latch-first → **last-match-wins** (id exit-printed G-36 menang atas isi transcript tak tepercaya). Semua dalam ADR-014/019/013 (bukan ADR baru); reversible. Opus inline Tier-1 self-review APPROVE-WITH-NITS, **393 test**. Dampak docs: ISSUES (C-1/C-2/C-3 Tertutup, C-4..C-7 Terbuka), GOTCHAS G-39, CONTEXT, CLAUDE.md §2/README test count 386→393. |
 | 2026-07-12 (sesi Windows, 4 slice autonomous-safe) | **Keputusan MINOR reversible (bukan ADR).** **I-25/R7** (realisasi remedi audit A-7): keputusan "usage available untuk resume" dipindah ke adapter — interface `Adapter.isUsageAvailable?(snapshot)` (opsional; supervisor fallback `?? every(<1)`). CC override `claudeUsageAvailable` gate HANYA window mengikat (global tanpa `scope` + scoped `isActive`); agy TAK override (default `every(<1)` benar utk dual-limit per grup, G-31 — perilaku agy TAK berubah). Reversible; tak ubah arsitektur/ADR. Juga: **I-29** (commander `enablePositionalOptions`+`passThroughOptions` → flag pasca-`<tool>` diteruskan tanpa `--`; strip satu `--` back-compat), **notifier cleanup** (`PROBE_IMPOSSIBLE` dead-code sejak ADR-019 dihapus), **idle-tracker-agy** (marker `esc to cancel`, G-33 — realisasi ADR-014 poin iii utk agy). Semua Opus inline Tier-1, 386 test. Dampak docs: ISSUES (I-25/I-29→Tertutup, I-22 cleanup, I-15 item-b), GOTCHAS G-33, CONTEXT, CLAUDE.md §2/README test count 369→386. |
 | 2026-07-12 (sesi Windows, R4 slice 2 → **ADR-019**) | **ADR-018 di-SUPERSEDE ADR-019.** Live-verify (otorisasi user) R4 slice 2 membuktikan **premis ADR-018 keliru**: refresh token gemini-cli **200** + `retrieveUserQuota` **200**, tapi isinya = **kuota request harian per-model gemini-cli Code Assist** (`buckets[].{modelId,tokenType:REQUESTS,remainingFraction,resetTime}`, gemini 100% reset ~24j), **BUKAN** limit grup **weekly+5h** yang agy tegakkan. Bukti divergensi serentak (akun sama): OAuth gemini **1.0** vs LS `RetrieveUserQuotaSummary` gemini-5h **0.079**; `retrieveUserQuotaSummary` via OAuth = **403**. Kredensial gemini-cli disk **fundamental tak bisa** baca limit grup agy. **Keputusan (Ziffan): ADR-019 = optimistic resume + detect** — agy-exited: skip probe (mustahil standalone), resume-by-id di `reset_at`; sesi hasil-resume tangkap `Individual quota reached` bila masih limit → reschedule (bounded reset_at + B-1 cap). **Nol egress/creds/OAuth baru** → `oauth2.googleapis.com` DIBATALKAN + `cloudcode-pa.googleapis.com` (opsi #3, tak dipakai) DIHAPUS dari allowlist. Deliverable sampingan: shape `retrieveUserQuota` OAuth akhirnya tertangkap (item RESEARCH terbuka sejak 3 Jul). Dampak docs: DECISIONS (ADR-018→Superseded, ADR-019 baru, header/Pending), NFR §Security egress (−2 host), GOTCHAS G-38, ISSUES I-22, MILESTONES M3e/R4, CONTEXT. |

@@ -2,7 +2,7 @@
 //
 //   • WRAPPER side (`createInjectHandler`): `acca run` pemilik PTY meng-host handler ini di socket
 //     kontrol per-sesi (`sessionControlSocketPath`). Saat daemon minta, ia menjalankan gating lokal
-//     (ADR-014) lalu menulis token "continue" LITERAL ke PTY-nya sendiri.
+//     (ADR-014) lalu menulis token continue LITERAL (instruksi tetap, ADR-020) ke PTY-nya sendiri.
 //   • DAEMON side (`requestInject`): supervisor me-connect sebagai klien ke socket kontrol sesi dan
 //     mengirim perintah `inject` (TANPA payload apa pun).
 //
@@ -15,10 +15,14 @@
 import { checkInjectGating } from '../shared/pty-control.js';
 import { DaemonNotRunningError, sendCommand } from './ipc-client.js';
 
-/** Token continue LITERAL TETAP. `\r` = Enter di terminal raw (ConPTY/xterm kirim CR, bukan LF) →
- *  mengetik "continue" lalu menekan Enter di prompt agent yang idle. TAK PERNAH diturunkan dari
- *  output (injection firewall). Keystroke pasti untuk agy = TBD live-verify (ADR-014 catatan agy). */
-export const CONTINUE_TOKEN = 'continue\r';
+/** Token continue LITERAL TETAP (ADR-014 §1, di-AMANDEMEN ADR-020). `\r` = Enter di terminal raw
+ *  (ConPTY/xterm kirim CR, bukan LF) → mengetik instruksi lalu menekan Enter di prompt agent yang idle.
+ *  TAK PERNAH diturunkan dari output (injection firewall — konstanta buta, perintah IPC `inject` tanpa payload).
+ *  **Kenapa kalimat eksplisit, bukan kata "continue" telanjang (ADR-020, live-verify 16 Jul, G-39):** agy
+ *  memperlakukan "continue" sebagai pesan NL baru ("no context…"/"more of same"), BUKAN resume turn — ia tak
+ *  punya primitif resume-turn utk satu kata itu (beda dari CC). Instruksi eksplisit "…work that was interrupted
+ *  by the usage limit" terbukti me-resume agy DAN CC di limit ASLI (owner). Satu token utk kedua tool. */
+export const CONTINUE_TOKEN = 'continue the work that was interrupted by the usage limit\r';
 
 /** Balasan handler inject (wrapper→daemon). `injected:false` + `reason` bila gating menolak. */
 export interface InjectHandlerResult {

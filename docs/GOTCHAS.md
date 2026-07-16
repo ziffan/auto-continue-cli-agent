@@ -463,6 +463,28 @@ meng-**echo** balik dgn terjemahan line-ending → child stdin menerima `"contin
 masalah fungsional (agent tetap dapat "continue"+Enter), tapi **jangan assert byte-exact `\r`** pada sisi child —
 assert `includes('continue')`. **Sumber:** Sub-task 2 + smoke live (6 Jul), `daemon/supervisor.ts`.
 
+### G-40 — Token inject-continue: kata "continue" TELANJANG tak me-resume agy (ditafsir pesan NL baru); butuh instruksi eksplisit
+**Jebakan/Fakta (live-verify 16 Jul, agy 1.1.3 + CC 2.1.211, otorisasi user — ADR-020):** `CONTINUE_TOKEN='continue\r'`
+(warisan meniru claude-auto-retry/CC) di-inject ke **agy** idle di prompt **TIDAK melanjutkan turn yang terhenti**. agy
+memperlakukan "continue" sebagai **pesan natural-language baru**, ditafsir kontekstual: sesi tanpa pekerjaan-terputus →
+*"I do not have context from a previous session, please explain the task"*; setelah turn SELESAI → *"more of the same"*
+(mis. cuaca hari berikutnya). agy **tak punya primitif "resume turn terputus"** untuk kata itu (beda dari CC yang punya
+semantik continue). **Bukti penentu (limit ASLI, owner, sesi sama):** saat kuota habis lalu reset, mengetik kalimat
+**eksplisit** *"lanjutkan pekerjaan, tadi terhenti karena limit"* → **agy DAN Claude Code langsung melanjutkan pekerjaan
+yang terhenti**. **Dampak:** auto-continue jalur alive-inject (ADR-014 §1) dengan token satu-kata = agy membakar turn untuk
+hal salah (bukan resume). **Cara benar (ADR-020):** token = **instruksi NL eksplisit** —
+`'continue the work that was interrupted by the usage limit\r'` (English, owner) — tetap **literal tetap hardcoded di
+wrapper** (injection firewall utuh, kalimat lebih panjang tak mengubah properti; perintah IPC `inject` tetap tanpa payload);
+satu token untuk agy + CC. **Catatan mekanisme:** inject **`injected:true`** live (keystroke sampai ke agy) — yang salah
+token, bukan seam-nya. **Sinyal English (16 Jul):** inject token English → agy balas *"**Resuming Our Work**. I do not have
+the context from your previous session…"* → **mengenali instruksi sebagai resume** (beda "continue" telanjang → "more of
+same"). **Sisa (opportunistik):** end-to-end "token me-resume pekerjaan NYATA" = butuh **limit asli** (owner sudah buktikan
+konsep dgn frasa Indonesia; English = variasi risiko-rendah, reversible). **Jebakan harness proxy Esc-cancel:** (1) readiness
+WAJIB berbasis output (footer `? for shortcuts` + output mengendap), bukan `idleTracker.isIdle()` (default-true saat boot →
+prompt terkirim saat agy "Signing in…"); (2) **bahkan setelah fix, prompt esai scripted TAK submit di TUI agy** (FASE-3 busy
+timeout 2×) → proxy **tak andal menyediakan turn-terputus** → verifikasi resume-nyata = limit asli, bukan proxy. **Sumber:**
+I-15 live-verify 16 Jul (scratchpad `inject-now.mjs` + `esc-cancel-test.mjs` + `esc-cancel.log`), ADR-020.
+
 ---
 
 ## Gating inject-continue (M3d/I-13) — foreground & idle (7 Jul)
@@ -551,6 +573,7 @@ agy/CC saat limit asli. **Sumber:** R3/I-21, `src/daemon/{limit-watcher,process-
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-16 (I-15 live-verify token, agy 1.1.3 + CC 2.1.211) | **G-40** baru (token inject-continue: kata "continue" telanjang TAK me-resume agy — ditafsir pesan NL baru "no context"/"more of same"; agy tak punya primitif resume-turn utk satu kata; instruksi eksplisit "lanjutkan pekerjaan yang terhenti" resume agy DAN CC di limit ASLI → ADR-020 ganti token; mekanisme inject `injected:true` benar; harness proxy butuh readiness-gate berbasis output bukan `isIdle()` default-true saat boot). **G-33 `esc to cancel` + G-36 resume-cmd `agy --conversation=` re-confirmed holds @agy 1.1.3.** Dari I-15 live-verify token 16 Jul (otorisasi user). |
 | 2026-07-13 (sesi RC, audit ketiga) | **G-39** baru (enqueue continue-job utk sesi hasil-resume kena FK `scheduled_jobs.session_id`; produksi `runSession` createSession dulu → aman, tapi stub test wajib seed baris; kegagalan enqueue JANGAN flip dispatch ke `'retry'` = loop re-spawn → best-effort try/catch). Dari RC-1 (C-1). |
 | 2026-07-12 (autonomous-run, R3/I-21) | **G-37** baru (auto-continue multi-siklus: inject-continue → sesi kembali RUNNING bukan RESUMED-terminal, transisi+un-latch ditulis wrapper (ADR-017), notif "resumed" pindah ke `job_dispatch_done inject_continue`; RESIDUAL TUI-repaint bisa re-fire LIMIT_HIT palsu → live-verify I-15). Dari implementasi R3 (I-21 CLOSED). |
 | 2026-07-12 (autonomous-run, I-28) | **G-20 watch DITUTUP** (A-15): `stripAnsi` diperluas dari CSI-saja ke +OSC (judul window `\x1b]0;..\x07`, term BEL/ST) +designasi charset → teks di sekitar sekuens tak salah lolos ke detektor limit/idle-tracker. **G-6 diatasi** (A-12): `.gitattributes` `* text=auto eol=lf` → repo & working tree LF lintas-OS, stop warning CRLF. Dari housekeeping audit I-28. |
