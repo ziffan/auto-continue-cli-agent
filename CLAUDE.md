@@ -25,7 +25,7 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 ## 2. Status
 
 Fase: **Implementasi — M3e KOREKSI LOOP** (dari tiga audit menyeluruh, `docs/audit/AUDIT-2026-07-11.md` + `-12-FOLLOWUP` +
-`-12-MENYELURUH`). **M1–M3d + M4 inti bertes** (401 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset →
+`-12-MENYELURUH`). **M1–M3d + M4 inti bertes** (402 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset →
 probe usage → inject-continue sesi hidup / resume-by-id sesi mati + Notifier + proximity + usage-monitor + `acca status`
 usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
 **KOREKSI (audit):** klaim "loop auto-continue penuh selesai" dulu **overstated** — audit menemukan P1 di jalur resume/continue
