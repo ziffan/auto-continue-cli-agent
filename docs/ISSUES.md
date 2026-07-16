@@ -25,6 +25,65 @@
 > **Ditutup 13 Jul (sesi RC): C-1 (RC-1) ✅ + C-2 (RC-2 validasi UUID hook) ✅ + C-3 (RC-3 capturer last-wins) ✅**
 > (393 test). **Terbuka: C-4 (P2, proc_state basi retry-senyap → RC-4, sebelum M5), C-5/C-6/C-7 (P3).** C-8 (drift CONTEXT)
 > dikoreksi. **Gate keluar M3e kini: HANYA I-15 live-verify actuation** (inject/resume asli, butuh limit+user).
+>
+> **Review independen RC-1..RC-3 (16 Jul, `docs/audit/AUDIT-RC-1-3-INDEPENDENT-2026-07-16.md`) → F-1..F-6.**
+> Agent CC independen (fresh, tanpa konteks penulisan) me-review batch RC (commit `49de523`) — **verifikasi Opus
+> orkestrator ke kode: F-1 CONFIRMED.** Verdict: **RC-1 CHANGES-REQUESTED · RC-2 APPROVE · RC-3 APPROVE-WITH-NITS.**
+> **Gate M3e BELUM hijau:** F-1 (P2, blocking) + F-2 (P2 test) harus ditutup. F-3..F-6 (P3) non-blocking.
+>
+> **Live-verify I-15 CC full-loop (16 Jul, `docs/audit/LIVE-VERIFY-I15-CC-2026-07-16.md`) — limit CC ASLI.**
+> **Deteksi PRIMER `StopFailure rate_limit` = ✅ LULUS** (paruh "tak bisa dipaksa") + **actuation inject-continue FIRE**
+> pada sesi CC ter-limit nyata (T-1/T-2). **TAPI membongkar residual live:** **G-37 terkonfirmasi** (repaint pasca-inject
+> re-fire LIMIT_HIT palsu → I-31) + **reset clock-wrap** (output "resets 10:20pm" di-parse setelah lewat → jadwal +24 jam,
+> padahal probe tahu reset benar → I-30). Sisa I-15 CC = tutup I-30/I-31 lalu re-verify inject benar-benar melanjutkan turn.
+
+### F-1 — RC-1 memperkenalkan loop re-spawn (continue-job landing di sesi hasil-resume yang exit cepat) [P2, BLOCKING gate M3e]
+**CONFIRMED (verifikasi Opus ke `supervisor.ts:286–398`, 16 Jul).** RC-1 enqueue job continue (`kind:'resume'`, +15s)
+untuk sesi hasil-resume. Bila sesi itu **exit <15s** (paling mudah CC — hook `SessionStart` mengisi `cli_session_id`
+di startup) → job continue fire → `proc_state==='exited'` → masuk lagi cabang resume-by-id (cwd ada + cli_session_id
+ada) → `spawnResumeFn` spawn sesi BARU → RC-1 enqueue continue lagi → **loop ~tiap 15s, tak terbatas**. `MAX_DISPATCH_ATTEMPTS`
+**hanya** menjaga jalur `spawnFailed` (baris 340), **bukan** spawn-sukses-lalu-crash — tiap iterasi sesi+job baru `attempts=0`,
+retensi never-purge → tabel membengkak + notif RESUMED berulang. Pra-RC-1 loop ini tak ada. Blind-spot penulis=reviewer
+(guard FK-loop G-39 ada; guard spawn-loop tidak). **Remedi (pilih owner):** (a) job continue diberi **intent berbeda**
+(mis. `kind:'continue'`) yang saat landing di sesi non-alive → surface/terminal, TAK re-resume (rekomendasi — sever di akar
+semantik: continue hanya bermakna utk sesi alive); (b) depth-cap rantai `resumed_from`; (c) wariskan `attempts` ke job
+continue supaya `MAX_DISPATCH_ATTEMPTS` mengikat rantai. **Sumber:** review independen F-1. **Slice Tier-1 state-machine.**
+
+### F-2 — Gap test: cabang best-effort FK RC-1 (`resume_continue_enqueue_failed`) tak diuji [P2, gate M3e]
+Properti anti-loop inti RC-1 — "enqueue gagal JANGAN flip dispatch ke `'retry'`" (G-39, alasan seluruh try/catch ada) —
+**tak punya test regresi** (`grep test/` = nol referensi `resume_continue_enqueue_failed`). Happy-path teruji jujur;
+guard-nya tidak. **Remedi:** stub `spawnResume` yang balikan `sessionId` **tanpa** buat baris → FK throw → assert dispatch
+tetap `'done'` + `markResumed` tetap + event `resume_continue_enqueue_failed` ter-emit. **Sumber:** review independen F-2.
+
+### F-3..F-6 — nits RC-2/RC-3 [P3, non-blocking]
+- **F-3 (RC-2):** validasi UUID di jalur TULIS (hook), tak di jalur PAKAI (resume dispatch `if (!cli_session_id)`,
+  `supervisor.ts:304`). Aman sekarang (semua penulis UUID-only); saran defense-in-depth gate titik-pakai.
+- **F-4 (RC-3):** residual pembajakan capturer — kill sebelum agy cetak resume-cmd → uuid palsu (match terakhir) menang.
+  Melekat ADR-013; last-match-wins tetap > latch-first (bukan regresi).
+- **F-5 (RC-3):** efisiensi — early-return dihapus → `stripAnsi`+regex atas residual ≤64KB tiap chunk seumur-hidup sesi agy.
+- **F-6 (RC-3):** emit-on-change bisa `setCliSessionId`/`append` berkali-kali bila output banyak uuid distinct (spam log, bukan korektness).
+**Sumber:** review independen F-3..F-6.
+
+### I-30 — Reset clock-wrap: reset dari output-scrape yang sudah lewat di-wrap +24 jam, padahal probe tahu reset benar [P2, sebelum M-remote]
+**Live-verify 16 Jul (T-4):** pasca re-LIMIT_HIT via output pada 22:31, `extractResetHint`/reset-estimator parse
+"resets 10:20pm" (10:20pm sudah lewat) → "next occurrence" = **BESOK 22:20** (`resetSource:"exact"`, G-13 class),
+padahal `usage_snapshot_claude.resetAt` acca = **22:20 malam ini** (benar). → auto-continue terjadwal **24 jam meleset**.
+**Remedi:** (a) prioritaskan `resetAt` absolut dari probe/snapshot atas clock-time output (unambiguous > ambigu-arah);
+(b) clock-time yang **sudah lewat** jangan otomatis wrap ke besok bila konteks (probe reset baru saja) menunjukkan reset
+tadi — anggap "baru saja reset". **Sumber:** live-verify I-15 CC full-loop 16 Jul.
+
+### I-31 — G-37 terkonfirmasi live: repaint baris limit lama pasca-inject re-fire LIMIT_HIT palsu [P2, sebelum M-remote]
+**Live-verify 16 Jul (T-3):** detik yang sama dengan inject-continue (`unlatch` R3), `LIMIT_HIT {source:"output",
+evidence:"hit your session limit"}` muncul — indikasi kuat **repaint banner limit LAMA** di TUI CC mengalir lewat
+`onData` ber-newline → limit-watcher (baru di-unlatch) klasifikasi ulang sbg limit BARU. Residual G-37/R3-I-21 yang
+selama ini teoretis → nyata. **DIKONFIRMASI FALSE-POSITIVE (owner):** CC (Terminal B) jalan normal & selesaikan kerja
+pasca-inject → banner LAMA yang di-repaint, bukan limit baru. **Dampak korektness:** sesi ter-tandai LIMIT_HIT palsu +
+job probe bogus dijadwalkan (interaksi I-30 → +24 jam) → bila daemon hidup saat itu & sesi sudah EXITED, bisa memicu
+resume-by-id tak diinginkan (keluarga F-1). **Remedi (kandidat):**
+(a) grace-window pasca-unlatch (abaikan match limit untuk N ms/baris setelah inject); (b) require ≥1 baris output BARU
+non-banner sebelum re-latch; (c) korelasi dgn probe (bila probe baru saja usage_available, tolak re-LIMIT_HIT output
+dalam window pendek). **Sumber:** live-verify I-15 CC full-loop 16 Jul, G-37.
+
 
 ### I-20 — Capture `cli_session_id` (R2b, penangkap id CLI untuk resume-by-id) [P1, blocker M-remote] — ✅ agy + CC TUNTAS (12 Jul)
 **Konteks:** A-1. Paruh korektness sudah ditutup R2a (`df3904b`): resume-by-id kini pakai `session.cli_session_id`;
@@ -130,6 +189,16 @@ instruksi sebagai resume** (mencari konteks-terputus) — beda dari "continue" t
 pengalaman limit-nyata owner. **Proxy Esc-cancel GAGAL menyediakan konteks-terputus:** prompt esai scripted tak submit di TUI
 agy (FASE-3 `esc to cancel` timeout 2× walau readiness-gate sudah diperbaiki) → tak ada turn terputus saat inject → end-to-end
 "token me-resume pekerjaan NYATA" = **tetap butuh limit asli** (opportunistik). **Sumber:** I-15 live-verify token 16 Jul (`esc-cancel.log`).
+
+**✅ PARUH CC DETEKSI + ACTUATION-FIRE TERTANGKAP pada LIMIT ASLI (16 Jul full-loop, `docs/audit/LIVE-VERIFY-I15-CC-2026-07-16.md`):**
+sesi review ter-wrap `acca run claude` (`6eum`) kena limit 5-jam CC ASLI → (T-1) **`StopFailure rate_limit` jalur PRIMER fire**
+→ `LIMIT_HIT {source:"stopfailure"}` @22:06 (menutup paruh CC "tak bisa dipaksa" — bukan output-scrape); (T-2) probe→
+usage_available→enqueue resume→**inject-continue SUKSES** ke PTY CC ter-limit @22:31 (`status RUNNING reason:inject_continue`);
+(T-3) **outcome dikonfirmasi owner: CC MELANJUTKAN kerja terputus & menyelesaikannya** (rencana remedi) via jalur produksi
+penuh → **paruh CC I-15 (deteksi + actuation OTOMATIS end-to-end) = ✅ LULUS.** Residual yang HARUS ditutup (mengotori
+state/jadwal, bukan blok bukti): **G-37 re-fire palsu → sesi ter-LIMIT_HIT palsu pasca-resume (I-31)** + **reset clock-wrap
+→ probe salah +24 jam (I-30)**. `cli_session_id` CC via `hook_sessionstart` (I-20/I-23) juga re-confirmed live.
+**Sumber:** live-verify full-loop 16 Jul.
 
 ### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13] — ENGINE READY (10 Jul), wiring→I-17
 Claude Code menampilkan warning ~90% (window 5-jam) & ~75% (mingguan) di terminal, tapi itu **UI-only,
