@@ -6,7 +6,10 @@
 
 ## Status saat ini
 
-- **Terakhir diupdate:** 2026-07-16 (sesi Windows, dgn user — slice I-30+I-31) — **SEMUA gate keluar M3e ✅ HIJAU** (F-1/F-2 + I-30/I-31 ditutup; 401 test). Berikutnya: **M-remote tier A / M5**.
+- **Terakhir diupdate:** 2026-07-16 (sesi Windows, dgn user — slice I-30+I-31 + PTY-integration test I-31) — **SEMUA gate keluar M3e ✅ HIJAU** (F-1/F-2 + I-30/I-31 ditutup; **402 test**). Berikutnya: **M-remote tier A / M5**.
+  **+PTY-integration test I-31 (live TANPA limit, permintaan user):** replay byte banner limit CC nyata lewat PTY nyata + wrapper PRODUKSI + control socket nyata → child cetak banner (LIMIT_HIT#1) → inject-continue via socket nyata → unlatch →
+  child repaint → **`limit_suppressed` (bukan LIMIT_HIT#2)**. Menutup gap wiring yang di-stub unit test (nowMs/onData→feedOutput/socket-inject→unlatch). **Negative-control terbukti** (grace dimatikan → test gagal 2 LIMIT_HIT). Stabil 3×. Nol kuota terbakar.
+  Jawaban "bisa konfirmasi live tanpa hit limit?": **I-30 = murni, unit test sudah verifikasi penuh**; **I-31 = ya, PTY-integration ini** (byte banner dari capture live 16 Jul); **I-15 agy English resume = genuinely butuh turn terputus nyata** (tetap opportunistik).
   Lanjutan sesi F-1/F-2. Owner pilih **I-31 = grace-window OUTPUT-CC** + **I-30 = guard estimator recent-past**. **Slice (Opus inline Tier-1, engine murni + firewall):**
   **I-31 (`limit-watcher.ts`):** pasca `unlatch()`, sinyal limit dari OUTPUT untuk sesi CC dalam `POST_UNLATCH_OUTPUT_GRACE_MS` (5s) → diabaikan (audit `limit_suppressed`, tak melatch) → repaint banner limit lama CC
   tak lagi re-fire LIMIT_HIT palsu (G-37 ditutup). CC-only + OUTPUT-only: hook `feedSignal` (StopFailure PRIMER) tak disuppress (re-limit CC sah fire); **agy tak tersentuh** (ADR-019 immediate detect utuh); genuine cycle-2 CC via

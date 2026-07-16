@@ -8,10 +8,21 @@ import { createEventsRepo } from '../src/store/repositories/events.js';
 import { createScheduledJobsRepo } from '../src/store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../src/store/repositories/sessions.js';
 import { runSession } from '../src/daemon/process-wrapper.js';
-import { sessionHookSettingsPath } from '../src/shared/paths.js';
+import { adapters } from '../src/adapters/index.js';
+import { requestInject } from '../src/daemon/inject-continue.js';
+import { sessionControlSocketPath, sessionHookSettingsPath } from '../src/shared/paths.js';
 
 const tempDir = join(tmpdir(), `acca-run-test-${randomBytes(4).toString('hex')}`);
 process.env.ACCA_DATA_DIR = tempDir;
+
+const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+async function waitFor(pred: () => boolean, timeoutMs: number): Promise<void> {
+  const start = Date.now();
+  while (!pred()) {
+    if (Date.now() - start > timeoutMs) throw new Error('waitFor: timeout');
+    await delay(25);
+  }
+}
 
 let db: DatabaseInstance;
 
@@ -167,4 +178,81 @@ describe('runSession integration', () => {
     await waitForExit;
     expect(existsSync(settingsPath)).toBe(false); // dibersihkan saat exit (best-effort unlink)
   }, 10_000);
+
+  it(
+    'I-31: repaint banner limit lama CC pasca-inject via PTY nyata → limit_suppressed, BUKAN LIMIT_HIT kedua',
+    async () => {
+      // Live-verify TANPA limit nyata: replay byte banner limit CC (kelas yang classify() kenali, korpus +
+      // live 16 Jul) lewat PTY nyata + wrapper PRODUKSI + control socket nyata. Child "CC palsu": cetak
+      // banner (→ LIMIT_HIT#1), lalu saat menerima keystroke continue (inject NYATA → onInjected → unlatch)
+      // me-REPAINT banner → harus DISUPPRESS grace-window OUTPUT-CC (I-31), bukan LIMIT_HIT#2. Menutup gap
+      // wiring yang di-stub unit test: nowMs → watcher · onData → feedOutput · control-socket inject → unlatch.
+      const sessions = createSessionsRepo(db);
+      const events = createEventsRepo(db);
+      const jobs = createScheduledJobsRepo(db);
+
+      // tool 'claude' WAJIB (grace CC-only). Tapi supervisorHooks CC menyisipkan `--settings` yang ditolak
+      // node stand-in → nonaktifkan utk test ini (jalur hook = OUTPUT-independent, diuji terpisah via
+      // feedSignal). Yang diuji = jalur OUTPUT-scrape repaint. Restore di finally.
+      // supervisorHooks murni (tak menyentuh `this`) — aman disimpan lepas untuk restore; unbound-method
+      // di sini false positive (sama pola stub adapter di supervisor-dispatch.test.ts).
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      const originalHooks = adapters.claude.supervisorHooks;
+      adapters.claude.supervisorHooks = undefined;
+
+      // Banner limit CC (ANSI-wrapped, \r\n). `\\x1b`/`\\r\\n` di sini = teks literal yang, saat disisipkan
+      // ke `node -e`, dievaluasi jadi byte ESC + CRLF nyata di PTY.
+      const banner = "\\x1b[31mYou've hit your session limit\\x1b[0m\\r\\n";
+      const script =
+        `const b = "${banner}";` +
+        `process.stdout.write(b);` + // banner#1 → LIMIT_HIT#1
+        `let done=false;process.stdin.resume();` +
+        // repaint HANYA sbg reaksi keystroke continue (inject) → jamin urutan inject→unlatch→banner#2.
+        `process.stdin.on('data',()=>{if(done)return;done=true;process.stdout.write(b);setTimeout(()=>process.exit(0),500);});` +
+        `setTimeout(()=>process.exit(0),8000);`; // safety: exit walau tak ada inject
+
+      try {
+        const { sessionId, waitForExit } = runSession(
+          { file: process.execPath, args: ['-e', script], cwd: process.cwd(), tool: 'claude' },
+          { sessions, events, jobs },
+        );
+
+        // Banner#1 diproses → LIMIT_HIT#1 (latch).
+        await waitFor(() => sessions.getById(sessionId)?.status === 'LIMIT_HIT', 6000);
+
+        // Inject continue via CONTROL SOCKET nyata (idle=true: tak ada 'esc to interrupt'; foreground ok).
+        // onInjected → markRunningAfterInject (LIMIT_HIT→RUNNING) + watcher.unlatch() → arm grace-window.
+        const controlPath = sessionControlSocketPath(sessionId);
+        let injected = false;
+        for (let i = 0; i < 15 && !injected; i++) {
+          const r = await requestInject(controlPath);
+          injected = r.injected;
+          if (!injected) await delay(100);
+        }
+        expect(injected).toBe(true);
+
+        // Child terima keystroke → repaint banner#2 (dalam grace) → disuppress. Tunggu event muncul.
+        await waitFor(
+          () => events.listBySession(sessionId, 100).some((e) => e.type === 'limit_suppressed'),
+          6000,
+        );
+        await waitForExit;
+
+        const evs = events
+          .listBySession(sessionId, 200)
+          .map((e) => ({ type: e.type, payload: JSON.parse(e.payload) as Record<string, unknown> }));
+        const limitHits = evs.filter((e) => e.type === 'status_change' && e.payload.to === 'LIMIT_HIT');
+        const suppressed = evs.filter((e) => e.type === 'limit_suppressed');
+
+        // Inti I-31: banner#1 = SATU LIMIT_HIT; repaint#2 DISUPPRESS (bukan LIMIT_HIT kedua). Tanpa grace:
+        // limitHits==2 & suppressed==0 (regresi tertangkap di sini).
+        expect(limitHits).toHaveLength(1);
+        expect(suppressed).toHaveLength(1);
+        expect(suppressed[0]?.payload.reason).toBe('post_unlatch_output_grace');
+      } finally {
+        adapters.claude.supervisorHooks = originalHooks;
+      }
+    },
+    15_000,
+  );
 });

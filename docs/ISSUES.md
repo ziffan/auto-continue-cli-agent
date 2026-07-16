@@ -118,8 +118,13 @@ PRIMER, I-23) yang **TAK** disuppress → tetap fire seketika; (b) **agy TAK ter
 ("Individual quota reached") tetap terdeteksi (immediate detect utuh); (c) genuine CC cycle-2 via output (fallback tanpa hook)
 selalu > window → tetap fire. Clock di-inject (deterministik test, purity engine utuh); wrapper feed `nowMs` + audit event
 (field terkontrol, firewall G-9 utuh). **+3 test** (repaint suppress + hook tak-disuppress + agy tak-disuppress) + **1 test R3
-di-update** (cycle-2 CC output kini setelah advance clock > grace — genuine cycle-2 selalu jauh kemudian). **Konfirmasi live
-sejati** (repaint tak lagi FP pada limit nyata) = opportunistik kelas I-15 (logika unit-verified pada nilai clock repro-live).
+di-update** (cycle-2 CC output kini setelah advance clock > grace — genuine cycle-2 selalu jauh kemudian).
+**+1 PTY-integration test (`run.integration.test.ts`, live TANPA limit):** replay byte banner limit CC nyata lewat **PTY nyata +
+wrapper PRODUKSI + control socket nyata** — child "CC palsu" cetak banner (→LIMIT_HIT#1) → **inject-continue via socket nyata**
+(idle-gating lulus) → `onInjected`→`markRunningAfterInject`+`unlatch` → child repaint banner → **`limit_suppressed` (BUKAN
+LIMIT_HIT#2)**. Menutup gap wiring yang di-stub unit test (`nowMs`→watcher · `onData`→`feedOutput` · socket-inject→`unlatch`).
+**Negative-control terbukti:** grace dimatikan → test GAGAL (2 LIMIT_HIT, 0 suppressed) → bukan lolos-vakum. Stabil 3× run (~1.6s).
+Yang tetap opportunistik (kelas I-15): repaint CC di limit **nyata** byte-identik replay — byte itu sudah dari capture live 16 Jul.
 **Sumber:** live-verify I-15 CC full-loop 16 Jul, G-37.
 
 <details><summary>Detail temuan asli</summary>
