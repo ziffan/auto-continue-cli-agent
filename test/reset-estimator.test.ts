@@ -70,6 +70,41 @@ describe('estimateReset — precedence: epochSeconds > isoTimestamp > relativeHo
     });
   });
 
+  describe('clockTime — I-30 recent-past guard (reset baru saja lewat → probe near-now, BUKAN +24 jam)', () => {
+    const RESET_JUST_ELAPSED_PROBE_DELAY_MS = MS_PER_MINUTE; // 60s (lihat reset-estimator.ts)
+
+    it('UTC: clock-time baru lewat 11 menit → heuristic now+60s (bukan wrap besok)', () => {
+      // Skenario live 16 Jul (I-30): banner "resets 10:20pm" di-parse pukul 22:31 → BUG lama jadwal BESOK
+      // 22:20 (+24 jam). Kini dinilai "baru saja reset" → probe near-now.
+      const now = Date.UTC(2026, 3, 10, 22, 31, 0);
+      const hint: ResetHint = { clockTime: '10:20pm', timezone: 'UTC' };
+      const result = estimateReset(hint, { now, detectedAt: now });
+      expect(result).toEqual({ resetAt: now + RESET_JUST_ELAPSED_PROBE_DELAY_MS, source: 'heuristic' });
+    });
+
+    it('UTC: lewat TEPAT di batas horizon (2 jam) → masih recent-past (near-now)', () => {
+      const now = Date.UTC(2026, 3, 10, 17, 0, 0); // target 3pm = 15:00Z, lewat 2 jam PAS
+      const hint: ResetHint = { clockTime: '3pm', timezone: 'UTC' };
+      const result = estimateReset(hint, { now, detectedAt: now });
+      expect(result).toEqual({ resetAt: now + RESET_JUST_ELAPSED_PROBE_DELAY_MS, source: 'heuristic' });
+    });
+
+    it('UTC: lewat LEBIH dari horizon (2j+1m) → wrap besok (occurrence sah, source exact)', () => {
+      const now = Date.UTC(2026, 3, 10, 17, 1, 0); // target 15:00Z, lewat 2j1m > horizon
+      const hint: ResetHint = { clockTime: '3pm', timezone: 'UTC' };
+      const result = estimateReset(hint, { now, detectedAt: now });
+      expect(result).toEqual({ resetAt: Date.UTC(2026, 3, 11, 15, 0, 0), source: 'exact' });
+    });
+
+    it('IANA: clock-time baru lewat 30 menit → heuristic near-now (bukan wrap besok)', () => {
+      // target 3pm America/New_York (EDT UTC-4) = 19:00Z; now = 19:30Z (30m lewat) → recent-past.
+      const now = Date.UTC(2026, 6, 15, 19, 30, 0);
+      const hint: ResetHint = { clockTime: '3pm', timezone: 'America/New_York' };
+      const result = estimateReset(hint, { now, detectedAt: now });
+      expect(result).toEqual({ resetAt: now + RESET_JUST_ELAPSED_PROBE_DELAY_MS, source: 'heuristic' });
+    });
+  });
+
   describe('clockTime — IANA timezone, DST-correct', () => {
     it('3pm America/New_York in summer (EDT, UTC-4)', () => {
       // Hand-verified via Intl formatToParts (independent of estimator code): 2026-07-15T19:00:00Z
@@ -106,20 +141,22 @@ describe('estimateReset — precedence: epochSeconds > isoTimestamp > relativeHo
     });
 
     it('wrap ke besok melintasi SPRING-FORWARD tetap 3pm wall-clock (I-4/G-13, DST-correct)', () => {
-      // DST New York mulai Min 8 Mar 2026 (02:00 EST→03:00 EDT; hari lokal = 23 jam). now = 3pm ET
-      // 7 Mar (EST) → target hari ini sudah lewat → next occurrence = 3pm ET 8 Mar (EDT, UTC-4 → 19:00Z).
+      // DST New York mulai Min 8 Mar 2026 (02:00 EST→03:00 EDT; hari lokal = 23 jam). target = 3pm ET
+      // 7 Mar (EST) = 20:00Z; now = 23:00Z (3 jam lewat, > horizon recent-past I-30 → tetap wrap besok) →
+      // next occurrence = 3pm ET 8 Mar (EDT, UTC-4 → 19:00Z).
       // Hand-verified via Intl. Menambah MS_PER_DAY mentah (bug lama) → 20:00Z = 16:00 EDT (salah 1 jam).
-      const now = Date.UTC(2026, 2, 7, 20, 0, 0);
+      const now = Date.UTC(2026, 2, 7, 23, 0, 0);
       const hint: ResetHint = { clockTime: '3pm', timezone: 'America/New_York' };
       const result = estimateReset(hint, { now, detectedAt: now });
       expect(result).toEqual({ resetAt: Date.UTC(2026, 2, 8, 19, 0, 0), source: 'exact' });
     });
 
     it('wrap ke besok melintasi FALL-BACK tetap 3pm wall-clock (I-4/G-13, DST-correct)', () => {
-      // DST New York selesai Min 1 Nov 2026 (02:00 EDT→01:00 EST; hari lokal = 25 jam). now = 3pm ET
-      // 31 Okt (EDT) → next occurrence = 3pm ET 1 Nov (EST, UTC-5 → 20:00Z). Hand-verified via Intl.
+      // DST New York selesai Min 1 Nov 2026 (02:00 EDT→01:00 EST; hari lokal = 25 jam). target = 3pm ET
+      // 31 Okt (EDT) = 19:00Z; now = 22:00Z (3 jam lewat, > horizon recent-past I-30 → tetap wrap besok) →
+      // next occurrence = 3pm ET 1 Nov (EST, UTC-5 → 20:00Z). Hand-verified via Intl.
       // Menambah MS_PER_DAY mentah (bug lama) → 19:00Z = 14:00 EST (salah 1 jam).
-      const now = Date.UTC(2026, 9, 31, 19, 0, 0);
+      const now = Date.UTC(2026, 9, 31, 22, 0, 0);
       const hint: ResetHint = { clockTime: '3pm', timezone: 'America/New_York' };
       const result = estimateReset(hint, { now, detectedAt: now });
       expect(result).toEqual({ resetAt: Date.UTC(2026, 10, 1, 20, 0, 0), source: 'exact' });

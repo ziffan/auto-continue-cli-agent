@@ -13,6 +13,17 @@ const MS_PER_DAY = 24 * MS_PER_HOUR;
 const FIVE_HOUR_WINDOW_MS = 5 * MS_PER_HOUR;
 const SEVEN_DAY_WINDOW_MS = 7 * 24 * MS_PER_HOUR;
 
+/**
+ * I-30 (live-verify 16 Jul): clock-time reset yang tampak SUDAH LEWAT sedikit = reset kemungkinan besar
+ * BARU SAJA terjadi (mis. banner "resets 10:20pm" di-parse pukul 22:31 — 11 menit lewat), BUKAN besok.
+ * Bila `now - candidate <= HORIZON` → jangan wrap +24 jam; jadwalkan probe near-now. `clockTime` (parseClockTime)
+ * hanya HH:MM am/pm tanpa hari → memang untuk reset window pendek (5-jam); horizon 2 jam konservatif
+ * membedakan "baru lewat / skew jam" dari occurrence besok yang sah (yang lewat jauh > horizon). Reversibel. */
+const RECENT_PAST_HORIZON_MS = 2 * MS_PER_HOUR;
+/** I-30: delay probe saat reset dinilai "baru saja lewat" — kuota semestinya sudah pulih; jeda kecil beri
+ *  ruang propagasi reset sebelum probe. */
+const RESET_JUST_ELAPSED_PROBE_DELAY_MS = 60 * MS_PER_SECOND;
+
 /** Backoff berjenjang (NFR): attempt 0→5m, 1→15m, 2→60m, ≥3→60m (cap — indeks terakhir diulang). */
 const BACKOFF_SCHEDULE_MS: readonly number[] = [5 * MS_PER_MINUTE, 15 * MS_PER_MINUTE, 60 * MS_PER_MINUTE];
 
@@ -113,8 +124,14 @@ function resolveWallClockToUtc(
 /**
  * Resolusi `clockTime` (+ `timezone` opsional) ke instant UTC berikutnya relatif `now`.
  * Return null bila format tak terparse / zona IANA tak valid → caller jatuh ke heuristik.
+ * `recentlyPast=true` (I-30): clock-time hari ini sudah lewat TAPI hanya baru saja (≤ HORIZON) →
+ * reset dinilai baru terjadi, caller jadwalkan probe near-now alih-alih memakai `instant` (yang di-wrap besok).
  */
-function resolveClockTime(clockTime: string, timezone: string | undefined, now: number): number | null {
+function resolveClockTime(
+  clockTime: string,
+  timezone: string | undefined,
+  now: number,
+): { instant: number; recentlyPast: boolean } | null {
   const parsed = parseClockTime(clockTime);
   if (parsed === null) return null;
 
@@ -123,23 +140,30 @@ function resolveClockTime(clockTime: string, timezone: string | undefined, now: 
 
   if (isUtc) {
     const nowDate = new Date(now);
-    let candidate = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), parsed.hour, parsed.minute, 0, 0);
-    // UTC tak ber-DST → "next occurrence" = tambah 24 jam mentah aman.
-    if (candidate <= now) candidate += MS_PER_DAY;
-    return candidate;
+    const today = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), parsed.hour, parsed.minute, 0, 0);
+    if (today <= now) {
+      // I-30: baru saja lewat → reset kemungkinan besar baru terjadi (bukan besok).
+      if (now - today <= RECENT_PAST_HORIZON_MS) return { instant: today, recentlyPast: true };
+      // Lewat jauh → "next occurrence". UTC tak ber-DST → tambah 24 jam mentah aman.
+      return { instant: today + MS_PER_DAY, recentlyPast: false };
+    }
+    return { instant: today, recentlyPast: false };
   }
 
   try {
     const today = getDatePartsInZone(now, tz);
-    let candidate = resolveWallClockToUtc(today.year, today.month, today.day, parsed.hour, parsed.minute, tz);
+    const candidate = resolveWallClockToUtc(today.year, today.month, today.day, parsed.hour, parsed.minute, tz);
     if (candidate <= now) {
+      // I-30: baru saja lewat → reset baru terjadi.
+      if (now - candidate <= RECENT_PAST_HORIZON_MS) return { instant: candidate, recentlyPast: true };
       // "Next occurrence" DST-correct (I-4/G-13): wall-clock SAMA di tanggal kalender berikutnya pada
       // zona, dengan offset dihitung ulang DI tanggal itu — BUKAN menambah MS_PER_DAY mentah (yang
       // meleset ±1 jam di hari transisi DST karena hari lokal = 23/25 jam, bukan tepat 24).
       const next = new Date(Date.UTC(today.year, today.month, today.day + 1));
-      candidate = resolveWallClockToUtc(next.getUTCFullYear(), next.getUTCMonth(), next.getUTCDate(), parsed.hour, parsed.minute, tz);
+      const tomorrow = resolveWallClockToUtc(next.getUTCFullYear(), next.getUTCMonth(), next.getUTCDate(), parsed.hour, parsed.minute, tz);
+      return { instant: tomorrow, recentlyPast: false };
     }
-    return candidate;
+    return { instant: candidate, recentlyPast: false };
   } catch {
     // RangeError: zona IANA tak dikenal Intl → tak bisa resolusi exact.
     return null;
@@ -163,7 +187,14 @@ export function estimateReset(hint: ResetHint | undefined, opts: EstimateOpts): 
 
   if (hint?.clockTime !== undefined) {
     const resolved = resolveClockTime(hint.clockTime, hint.timezone, opts.now);
-    if (resolved !== null) return { resetAt: resolved, source: 'exact' };
+    if (resolved !== null) {
+      // I-30: clock-time baru saja lewat → JANGAN pakai instant (yang di-wrap besok = +24 jam meleset);
+      // reset dinilai baru terjadi → probe near-now. Source 'heuristic' (bukan 'exact' yang menyesatkan).
+      if (resolved.recentlyPast) {
+        return { resetAt: opts.now + RESET_JUST_ELAPSED_PROBE_DELAY_MS, source: 'heuristic' };
+      }
+      return { resetAt: resolved.instant, source: 'exact' };
+    }
     // Tak terparse/zona invalid → jatuh ke heuristik/backoff di bawah.
   }
 

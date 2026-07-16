@@ -574,6 +574,11 @@ sesi CC (Terminal B) **jalan normal & menyelesaikan kerja** pasca-inject (owner 
 tanpa `\n`" GUGUR untuk CC. **Dampak:** `unlatch()` reset-buffer TAK cukup; sesi ter-tandai LIMIT_HIT palsu + probe
 +24 jam (via clock-wrap I-30). **Remedi → I-31** (grace-window pasca-unlatch / butuh baris output BARU non-banner /
 korelasi probe-usage). **Sumber:** live-verify I-15 CC full-loop 16 Jul (`docs/audit/LIVE-VERIFY-I15-CC-2026-07-16.md`).
+**✅ DITUTUP (16 Jul, I-31 — grace-window OUTPUT-CC):** `limit-watcher` mengabaikan sinyal limit dari OUTPUT untuk sesi CC
+dalam `POST_UNLATCH_OUTPUT_GRACE_MS` (5s) pasca-`unlatch()` (audit `limit_suppressed`, tak melatch). CC-only + OUTPUT-only:
+re-limit CC SAH via hook `feedSignal` (StopFailure PRIMER) tak disuppress; agy tak tersentuh (ADR-019 immediate detect utuh);
+genuine cycle-2 CC via output selalu > window → fire. Clock di-inject (purity engine utuh). Clock-wrap penyerta = I-30
+(guard estimator recent-past ≤2h → probe near-now, bukan +24 jam). Konfirmasi live sejati = opportunistik I-15.
 
 ---
 
@@ -582,7 +587,8 @@ korelasi probe-usage). **Sumber:** live-verify I-15 CC full-loop 16 Jul (`docs/a
 | Tanggal | Perubahan |
 |---|---|
 | 2026-07-16 (I-15 live-verify token, agy 1.1.3 + CC 2.1.211) | **G-40** baru (token inject-continue: kata "continue" telanjang TAK me-resume agy — ditafsir pesan NL baru "no context"/"more of same"; agy tak punya primitif resume-turn utk satu kata; instruksi eksplisit "lanjutkan pekerjaan yang terhenti" resume agy DAN CC di limit ASLI → ADR-020 ganti token; mekanisme inject `injected:true` benar; harness proxy butuh readiness-gate berbasis output bukan `isIdle()` default-true saat boot). **G-33 `esc to cancel` + G-36 resume-cmd `agy --conversation=` re-confirmed holds @agy 1.1.3.** Dari I-15 live-verify token 16 Jul (otorisasi user). |
-| 2026-07-13 (sesi RC, audit ketiga) | **G-39** baru (enqueue continue-job utk sesi hasil-resume kena FK `scheduled_jobs.session_id`; produksi `runSession` createSession dulu → aman, tapi stub test wajib seed baris; kegagalan enqueue JANGAN flip dispatch ke `'retry'` = loop re-spawn → best-effort try/catch). Dari RC-1 (C-1). |
+| 2026-07-16 (sesi Windows, I-31) | **G-37 ✅ DITUTUP** (I-31): grace-window OUTPUT-CC di `limit-watcher` (5s pasca-unlatch, audit `limit_suppressed`, tak melatch) → repaint banner limit lama CC tak lagi re-fire LIMIT_HIT palsu; hook `feedSignal` + agy tak disuppress. Clock-wrap penyerta ditutup **I-30** (guard estimator recent-past ≤2h → probe near-now). Dari live-verify I-15 CC 16 Jul. |
+| 2026-07-13 (sesi RC, audit ketiga) | **G-39** baru (enqueue continue-job utk sesi hasil-resume kena FK `scheduled_jobs.session_id`; produksi `runSession` createSession dulu → aman, tapi stub test wajib seed baris; kegagalan enqueue JANGAN flip dispatch ke `'retry'` = loop re-spawn → best-effort try/catch). Dari RC-1 (C-1). **16 Jul: guard spawn-loop pelengkap = F-1 (`resumed_from!=null && detected_at==null` → BLOCKED).** |
 | 2026-07-12 (autonomous-run, R3/I-21) | **G-37** baru (auto-continue multi-siklus: inject-continue → sesi kembali RUNNING bukan RESUMED-terminal, transisi+un-latch ditulis wrapper (ADR-017), notif "resumed" pindah ke `job_dispatch_done inject_continue`; RESIDUAL TUI-repaint bisa re-fire LIMIT_HIT palsu → live-verify I-15). Dari implementasi R3 (I-21 CLOSED). |
 | 2026-07-12 (autonomous-run, I-28) | **G-20 watch DITUTUP** (A-15): `stripAnsi` diperluas dari CSI-saja ke +OSC (judul window `\x1b]0;..\x07`, term BEL/ST) +designasi charset → teks di sekitar sekuens tak salah lolos ke detektor limit/idle-tracker. **G-6 diatasi** (A-12): `.gitattributes` `* text=auto eol=lf` → repo & working tree LF lintas-OS, stop warning CRLF. Dari housekeeping audit I-28. |
 | 2026-07-11 (I-15 live-verify, agy 1.1.1 Windows) | **G-35** (probe agy via sesi LS hidup = snapshot launch-time, STALE dalam-sesi → I-17 caveat + perkuat ADR-018 fresh-probe), **G-36** (cli_session_id agy = cmd resume yang agy CETAK saat exit `agy --conversation=<uuid>`; `.db` termuda racy; resume-load ✅). **G-17 diperluas** (exhaustion = `0` present ATAU absent), **G-19 re-verified** (pesan limit + detektor + limit≠exit ✅ di 1.1.1), **G-33 DIKOREKSI** (tak ada request-review mode; `--mode`=accept-edits/plan). Dari burn `3p-5h` ~11% ke limit (I-15, otorisasi user). |

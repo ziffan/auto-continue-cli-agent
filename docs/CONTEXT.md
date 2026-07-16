@@ -6,6 +6,16 @@
 
 ## Status saat ini
 
+- **Terakhir diupdate:** 2026-07-16 (sesi Windows, dgn user — slice I-30+I-31) — **SEMUA gate keluar M3e ✅ HIJAU** (F-1/F-2 + I-30/I-31 ditutup; 401 test). Berikutnya: **M-remote tier A / M5**.
+  Lanjutan sesi F-1/F-2. Owner pilih **I-31 = grace-window OUTPUT-CC** + **I-30 = guard estimator recent-past**. **Slice (Opus inline Tier-1, engine murni + firewall):**
+  **I-31 (`limit-watcher.ts`):** pasca `unlatch()`, sinyal limit dari OUTPUT untuk sesi CC dalam `POST_UNLATCH_OUTPUT_GRACE_MS` (5s) → diabaikan (audit `limit_suppressed`, tak melatch) → repaint banner limit lama CC
+  tak lagi re-fire LIMIT_HIT palsu (G-37 ditutup). CC-only + OUTPUT-only: hook `feedSignal` (StopFailure PRIMER) tak disuppress (re-limit CC sah fire); **agy tak tersentuh** (ADR-019 immediate detect utuh); genuine cycle-2 CC via
+  output selalu > window → fire. Clock di-inject (purity engine); wrapper feed `nowMs` + audit event (field terkontrol, G-9 utuh). **I-30 (`reset-estimator.ts`):** `resolveClockTime` → `{instant, recentlyPast}`; clock-time `<= now` tapi lewat
+  ≤ `RECENT_PAST_HORIZON_MS` (2 jam) → probe near-now (`now+60s`, source `heuristic`) bukan wrap +24 jam; lewat > horizon → tetap wrap besok (DST-correct, source `exact`). Menutup skenario live "resets 10:20pm" @22:31 → BESOK 22:20.
+  **Verifikasi (Opus sendiri):** `npm run check` typecheck+lint+**401 test** (+7: 3 I-31 watcher + 1 R3 di-update + 4 I-30 estimator + 2 DST-wrap `now`=target+3h; 2 skip POSIX). Tier-1 self-review PASS (grace CC-only tak sentuh
+  ADR-019 agy / hook CC; estimator honest source `heuristic`). **Konfirmasi live sejati I-31/I-30 = opportunistik kelas I-15** (logika unit-verified pada nilai clock repro-live). **Docs:** ISSUES (I-30/I-31 → Tertutup + gate header SEMUA
+  hijau), GOTCHAS (G-37 ✅ DITUTUP + Change Log + G-39 anotasi F-1), CONTEXT (ini), CLAUDE.md §2/README test count 394→401. **Next:** **M-remote tier A** (Notifier→Telegram) / **M5** daemon-as-service; F-3..F-6 + C-4..C-7 (P3) nebeng.
+
 - **Terakhir diupdate:** 2026-07-16 (sesi Windows, dgn user — slice F-1+F-2, Opsi B) — **gate REVIEW M3e ✅ HIJAU: F-1 (loop re-spawn) + F-2 (test) DITUTUP.** Sisa gate keluar M3e = HANYA I-30/I-31 (residual live).
   Owner pilih **Opsi B (guard tanpa migrasi)** untuk F-1. **Slice (Opus inline Tier-1, state-machine + firewall):** guard di cabang exited `supervisor.ts` (SEBELUM cwd/cli_session_id/resume-by-id):
   `if (session.resumed_from !== null && session.detected_at === null)` → `markBlocked` + event `continue_target_exited` + `return 'done'` (TAK re-spawn). Memutus loop RC-1 (continue-job mendarat di sesi hasil-resume

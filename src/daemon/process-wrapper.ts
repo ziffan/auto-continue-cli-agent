@@ -183,6 +183,17 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
   // SEBELUM control server supaya handler inject (`onInjected`) bisa memanggil `watcher.unlatch()` (R3).
   const watcher = createLimitWatcher({
     tool: spec.tool,
+    now: nowMs,
+    // I-31 (G-37): banner limit LAMA yang di-repaint CC pasca-inject ditolak grace-window OUTPUT-CC →
+    // audit-only (bukan LIMIT_HIT). Tak menurunkan aksi dari isi (firewall utuh). Membantu konfirmasi
+    // fix saat live-verify berikutnya (I-15).
+    onOutputSuppressed: (result) => {
+      deps.events.append({
+        session_id: id,
+        type: 'limit_suppressed',
+        payload: { reason: 'post_unlatch_output_grace', source: result.source, evidence: result.evidence?.slice(0, 200) },
+      });
+    },
     onLimit: (result) => {
       const at = nowMs();
       const transitioned = deps.sessions.markLimitHit(id, { source: result.source ?? 'output', detectedAt: at });

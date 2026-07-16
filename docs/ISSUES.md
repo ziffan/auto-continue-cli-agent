@@ -30,7 +30,8 @@
 > Agent CC independen (fresh, tanpa konteks penulisan) me-review batch RC (commit `49de523`) — **verifikasi Opus
 > orkestrator ke kode: F-1 CONFIRMED.** Verdict: **RC-1 CHANGES-REQUESTED · RC-2 APPROVE · RC-3 APPROVE-WITH-NITS.**
 > **F-1 + F-2 DITUTUP 16 Jul (Opsi B guard, keputusan owner)** → **gate review M3e ✅ HIJAU.** F-3..F-6 (P3) non-blocking.
-> **Sisa gate keluar M3e: HANYA I-30/I-31 (residual live I-15).**
+> **I-30 (guard estimator recent-past) + I-31 (grace-window OUTPUT-CC) DITUTUP 16 Jul** → **SEMUA gate keluar M3e ✅ HIJAU**
+> (401 test). Sisa opportunistik non-blocking: konfirmasi live sejati I-31/I-30 + I-15 agy literal English (kelas I-15, butuh limit+user).
 >
 > **Live-verify I-15 CC full-loop (16 Jul, `docs/audit/LIVE-VERIFY-I15-CC-2026-07-16.md`) — limit CC ASLI.**
 > **Deteksi PRIMER `StopFailure rate_limit` = ✅ LULUS** (paruh "tak bisa dipaksa") + **actuation inject-continue FIRE**
@@ -88,15 +89,41 @@ berlanjut) + event `resume_continue_enqueue_failed` ter-emit dgn `newSessionId`.
 - **F-6 (RC-3):** emit-on-change bisa `setCliSessionId`/`append` berkali-kali bila output banyak uuid distinct (spam log, bukan korektness).
 **Sumber:** review independen F-3..F-6.
 
-### I-30 — Reset clock-wrap: reset dari output-scrape yang sudah lewat di-wrap +24 jam, padahal probe tahu reset benar [P2, sebelum M-remote]
+### I-30 — Reset clock-wrap: reset dari output-scrape yang sudah lewat di-wrap +24 jam, padahal probe tahu reset benar [P2] ✅ (16 Jul, guard estimator recent-past)
+**RESOLVED (16 Jul, Opus inline Tier-1, keputusan owner = guard estimator recent-past, tanpa plumbing).**
+`reset-estimator.ts` `resolveClockTime` kini kembalikan `{instant, recentlyPast}`: clock-time hari ini yang `<= now`
+TAPI lewat ≤ `RECENT_PAST_HORIZON_MS` (**2 jam**, konservatif < window 5-jam) → `recentlyPast=true` → `estimateReset`
+jadwalkan probe **near-now** (`now + 60s`, source `heuristic`) alih-alih wrap +24 jam. Lewat > horizon → tetap wrap besok
+(DST-correct, occurrence sah, source `exact`). `clockTime` hanya HH:MM am/pm tanpa hari → memang untuk reset window pendek →
+banner tak mungkin cetak jam 2j-lewat untuk reset besok (implausible) → horizon aman. Self-correcting (probe +60s bounded).
+**+4 test** (UTC recent-past 11m; boundary 2j PAS = recent-past; 2j1m = wrap exact; IANA 30m recent-past) + **2 test DST-wrap
+di-update** `now`=target+3h (tetap validasi wrap DST-correct, di luar horizon). **Sumber:** live-verify I-15 CC full-loop 16 Jul.
+
+<details><summary>Detail temuan asli</summary>
+
 **Live-verify 16 Jul (T-4):** pasca re-LIMIT_HIT via output pada 22:31, `extractResetHint`/reset-estimator parse
 "resets 10:20pm" (10:20pm sudah lewat) → "next occurrence" = **BESOK 22:20** (`resetSource:"exact"`, G-13 class),
 padahal `usage_snapshot_claude.resetAt` acca = **22:20 malam ini** (benar). → auto-continue terjadwal **24 jam meleset**.
 **Remedi:** (a) prioritaskan `resetAt` absolut dari probe/snapshot atas clock-time output (unambiguous > ambigu-arah);
 (b) clock-time yang **sudah lewat** jangan otomatis wrap ke besok bila konteks (probe reset baru saja) menunjukkan reset
 tadi — anggap "baru saja reset". **Sumber:** live-verify I-15 CC full-loop 16 Jul.
+</details>
 
-### I-31 — G-37 terkonfirmasi live: repaint baris limit lama pasca-inject re-fire LIMIT_HIT palsu [P2, sebelum M-remote]
+### I-31 — G-37 terkonfirmasi live: repaint baris limit lama pasca-inject re-fire LIMIT_HIT palsu [P2] ✅ (16 Jul, grace-window OUTPUT-CC)
+**RESOLVED (16 Jul, Opus inline Tier-1, keputusan owner = CC-only grace).** `limit-watcher.ts`: pasca `unlatch()`,
+sinyal limit dari **OUTPUT** untuk sesi **CC** dalam `POST_UNLATCH_OUTPUT_GRACE_MS` (**5s**) → **diabaikan** (audit-only
+`limit_suppressed`, TAK melatch → sinyal SAH setelah window tetap fire). Repaint banner limit LAMA CC (ber-`\n`) pasca-inject
+= FP yang disuppress. **Kunci CC-only + OUTPUT-only:** (a) re-limit CC SAH datang via `feedSignal` (hook StopFailure = deteksi
+PRIMER, I-23) yang **TAK** disuppress → tetap fire seketika; (b) **agy TAK tersentuh** → re-limit langsung ADR-019 optimistic
+("Individual quota reached") tetap terdeteksi (immediate detect utuh); (c) genuine CC cycle-2 via output (fallback tanpa hook)
+selalu > window → tetap fire. Clock di-inject (deterministik test, purity engine utuh); wrapper feed `nowMs` + audit event
+(field terkontrol, firewall G-9 utuh). **+3 test** (repaint suppress + hook tak-disuppress + agy tak-disuppress) + **1 test R3
+di-update** (cycle-2 CC output kini setelah advance clock > grace — genuine cycle-2 selalu jauh kemudian). **Konfirmasi live
+sejati** (repaint tak lagi FP pada limit nyata) = opportunistik kelas I-15 (logika unit-verified pada nilai clock repro-live).
+**Sumber:** live-verify I-15 CC full-loop 16 Jul, G-37.
+
+<details><summary>Detail temuan asli</summary>
+
 **Live-verify 16 Jul (T-3):** detik yang sama dengan inject-continue (`unlatch` R3), `LIMIT_HIT {source:"output",
 evidence:"hit your session limit"}` muncul — indikasi kuat **repaint banner limit LAMA** di TUI CC mengalir lewat
 `onData` ber-newline → limit-watcher (baru di-unlatch) klasifikasi ulang sbg limit BARU. Residual G-37/R3-I-21 yang
@@ -107,6 +134,7 @@ resume-by-id tak diinginkan (keluarga F-1). **Remedi (kandidat):**
 (a) grace-window pasca-unlatch (abaikan match limit untuk N ms/baris setelah inject); (b) require ≥1 baris output BARU
 non-banner sebelum re-latch; (c) korelasi dgn probe (bila probe baru saja usage_available, tolak re-LIMIT_HIT output
 dalam window pendek). **Sumber:** live-verify I-15 CC full-loop 16 Jul, G-37.
+</details>
 
 
 ### I-20 — Capture `cli_session_id` (R2b, penangkap id CLI untuk resume-by-id) [P1, blocker M-remote] — ✅ agy + CC TUNTAS (12 Jul)
