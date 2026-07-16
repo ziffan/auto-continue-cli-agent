@@ -12,15 +12,31 @@
   4 P1 di jalur resume/continue lolos 308 test (seam actuation di-stub). **Ditutup:** A-2 (daemon crash saat spawn gagal, R1) +
   A-1 paruh korektness (resume pakai `cli_session_id`, absen→BLOCKED, R2a) + **R3 (I-21) siklus-limit-2 (12 Jul)** +
   **R4 (I-22 agy-exited) ✅ PENUH via ADR-019 (12 Jul, pivot dari ADR-018 — optimistic resume + detect)** +
-  **R6 (I-23) ✅** + I-20 (agy+CC) ✅ + **R7 (I-25 per-adapter gate) ✅ (12 Jul)**. **Gate keluar sebelum M-remote:**
-  R1–R4 ✅ + R6 ✅ + **HANYA I-15 live-verify actuation tersisa** (LULUS CLI nyata; HARD-STOP unattended — butuh user hadir).
+  **R6 (I-23) ✅** + I-20 (agy+CC) ✅ + **R7 (I-25 per-adapter gate) ✅** + **ADR-020 token (16 Jul: inject `"continue"`
+  telanjang tak resume agy → token = instruksi NL eksplisit; mekanisme inject terbukti `injected:true`) ✅**. **Gate keluar
+  sebelum M-remote:** R1–R7 ✅ + **HANYA live-verify literal English pasca-reset agy NYATA tersisa** (konsep terbukti limit asli
+  owner via frasa Indonesia; HARD-STOP unattended — butuh user hadir + limit; proxy Esc-cancel tak andal).
   Sisanya di bawah masih akurat. M3d tertutup penuh. M3a/b/c ✅. M3d.8/1/2 ✅. M3d.6/7 ✅. I-13/I-5 ✅. **I-14 ✅ + I-10 ✅ (7 Jul, Windows)** —
   `runSession` direlokasi ke `daemon/process-wrapper.ts` (layer inversion ditutup) + resume-chain link;
   daemon hidup kini re-arm job lintas-proses via IPC `rearm`. Lihat entri teratas. Sisa follow-up (bukan
   blocker loop): I-15 live-verify limit ASLI + keystroke agy + foreground Windows (opportunistik). **Residual I-10
   (konsolidasi sole-writer `scheduled_jobs`) → RESOLVED by-design 11 Jul (ADR-017)** — daemon = sole coordinator, bukan
   sole writer; wrapper = penulis sah lifecycle sesinya. **Gate baru:** `npm run typecheck`/`npm run check` (I-19).
-  **Audit KETIGA (13 Jul, PR #1) → C-1 P1 (resume-load≠continue) masuk gate; DITUTUP sesi ini (RC-1) + C-2/C-3 eras kanal data.**
+  **Audit KETIGA (13 Jul, PR #1) → C-1 P1 (resume-load≠continue) masuk gate; DITUTUP (RC-1) + C-2/C-3 eras kanal data; + ADR-020 token inject eksplisit (16 Jul).**
+- **Terakhir diupdate:** 2026-07-16 (sesi Windows, dgn user — `/session-start` + I-15 live-verify actuation token → **ADR-020** + rekonsiliasi divergensi origin) — **temuan token: kata "continue" telanjang TAK me-resume agy; token diganti instruksi NL eksplisit.**
+  Sesi buka `/session-start` (proof lengkap) → challenge gate (M5/tier-A tak perlu tunggu I-15) → user pilih **I-15** (gate M3e terakhir), otorisasi pakai limit agy.
+  **Live-verify actuation (agy 1.1.3 + CC 2.1.211, otorisasi user, harness node-pty terkontrol):** (1) **delta versi** dari pin docs (agy 1.1.1→**1.1.3**, CC 2.1.207→**2.1.211** — patch; **G-33 `esc to cancel` + G-36 resume-cmd re-confirmed holds @1.1.3**).
+  (2) **Mekanisme inject LULUS:** jalur PRODUKSI `requestInject`→wrapper→gating→PTY write (harness `inject-now.mjs`, fungsi produksi persis) → `injected:true`, keystroke sampai ke agy nyata. (3) **TEMUAN MATERIAL:** `CONTINUE_TOKEN='continue\r'` **TAK me-resume agy** — agy menafsirnya **pesan NL baru**
+  ("I do not have context…"/"more of same"), bukan resume turn (tak punya primitif resume-turn utk satu kata; beda CC). **Bukti penentu (limit ASLI owner, sesi sama):** kalimat eksplisit "lanjutkan pekerjaan, tadi terhenti karena limit" → **agy DAN CC langsung melanjutkan pekerjaan terhenti**. (Komplementer C-1/RC-1
+  origin: "load ≠ continue" di jalur EXITED; token-ku fix jalur ALIVE → RC-1 yang inject `continue` ke sesi hasil-resume pakai token yang sama → fix ini membuat RC-1 benar-benar me-resume agy.)
+  **Slice (Opus inline Tier-1, token = actuation/injection firewall; via skill `adr`):** **ADR-020** meng-**AMANDEMEN** token ADR-014 §1 (bukan supersede — strategi alive-inject/gating/fallback tetap) → `CONTINUE_TOKEN` = **`"continue the work that was interrupted by the usage limit\r"`** (English, owner). **Firewall UTUH** (literal tetap hardcoded wrapper,
+  IPC `inject` tanpa payload — hanya isi kalimat berubah); satu token bersama agy+CC. **+1 test guard regresi** (token ≠ `"continue\r"`, `/interrupted/`, akhiri `\r`).
+  **Verifikasi (Opus sendiri):** `npm run check` typecheck+lint+**392 test** (2 skip POSIX; gabung audit-ketiga origin + guard ADR-020). Tier-1 self-review PASS. **Proxy Esc-cancel (`esc-cancel-test.mjs`) GAGAL sbg proxy:** prompt esai scripted tak submit di TUI agy (FASE-3 timeout 2×, walau readiness-gate diperbaiki) → verifikasi resume-nyata = **limit asli** (opportunistik).
+  **Rekonsiliasi divergensi (saat push):** `origin/main` ternyata sudah maju **5 commit** (audit KETIGA + RC-1..RC-3, sesi Ubuntu 13 Jul) → **rebase** 2 commit lokal ke atas origin (BUKAN force-push; C-1↔ADR-020 komplementer, nol konflik kode). Konflik docs di-resolve integratif; **kolisi nomor gotcha: G-39 dipakai origin (FK continue-enqueue) → punyaku direname G-40** (token). Test count current = 392 (Windows).
+  **Skill session-start:** ditambah **Step 0 WAJIB `git fetch` + cek divergensi `origin`** (cegah divergensi seperti ini terulang — permintaan user Ziffan 16 Jul).
+  **Docs:** DECISIONS (ADR-020 + anotasi ADR-014 §1 & catatan agy + header + Change Log), GOTCHAS **G-40**, ISSUES I-15, CLAUDE.md §2/§7 + README (test→392 + ADR-020; staleness sweep root .md — COWORK-TOOLING-NOTES bersih; AGENTS.md=symlink CLAUDE.md), CONTEXT (ini), `.claude/skills/session-start`.
+  **Commit:** token fix (`inject-continue.ts`+test+DECISIONS/GOTCHAS/ISSUES) + session-end docs, **di-rebase ke atas origin `dc8e95d`** → **push ke `origin/main`**. Harness di scratchpad (luar repo, PII-firewalled). README di-reformat user (whitespace/tabel-align, nol perubahan konten).
+  **Next konkret:** (1) tangkap **I-15 literal English** saat limit agy asli (inject continue eksplisit pasca-reset → agy melanjutkan pekerjaan NYATA) = **gate M3e TERAKHIR** — bareng **review independen RC-1..RC-4** yang origin minta (`git show 49de523`, agent terpisah); (2) C-4/RC-4 + C-5/C-6/C-7 (P3); (3) gate hijau → **M-remote tier A** / **M5**.
 - **Terakhir diupdate:** 2026-07-13 (sesi Ubuntu, dgn user — `/session-start` + RC-1/RC-2/RC-3 dari audit ketiga) — **C-1 P1 (resume-load ≠ continue) DITUTUP (masuk gate) + C-2/C-3 eras kanal data. Gate keluar M3e kembali = HANYA I-15 live-verify actuation.**
   Sesi buka: pull `origin/main` (fast-forward 32 commit; **koreksi drift C-8** — lokal kini SINKRON penuh origin di `393de50`,
   merge PR #1 audit-remediation) → `/session-start` (proof lengkap) → baca **audit menyeluruh KETIGA**

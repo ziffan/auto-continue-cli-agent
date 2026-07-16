@@ -10,8 +10,10 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 > via ADR-019 optimistic resume, pivot dari ADR-018 setelah live-verify buktikan probe OAuth baca pool kuota salah**;
 > R7/I-25 [gate resume per-adapter] + idle-tracker-agy ✅. **Audit menyeluruh ketiga (13 Jul) menemukan P1 C-1
 > [resume-by-id memuat percakapan tapi tak melanjutkan kerja] → DITUTUP (RC-1: inject continue ke sesi hasil-resume)
-> + C-2/C-3 pengeras kanal data; sisa gate = HANYA live-verify actuation inject/resume**).
-> 393 test hijau (2 skip POSIX-only
+> + C-2/C-3 pengeras kanal data.** Live-verify token (16 Jul, ADR-020: kata `"continue"` telanjang tak me-resume agy →
+> token = instruksi NL eksplisit, terbukti resume agy+CC di limit asli) ✅ — **sisa gate = HANYA live-verify literal
+> English pasca-reset agy nyata, opportunistik**).
+> 392 test hijau (2 skip POSIX-only
 > di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan; M-remote (kontrol Telegram) & M5 (deploy sebagai
 > service) menyusul setelah gate M3e hijau. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
@@ -41,12 +43,12 @@ Detail (untuk siapa, biaya masalah terukur, batasan) → [`docs/PROJECT.md`](doc
 
 Jalankan dari source (`npm install && npm run build`; belum ada paket/installer rilis). Cross-OS (Linux + Windows).
 
-| Perintah | Fungsi |
-|---|---|
-| `acca run -- <claude\|agy> [args…]` | Jalankan CLI target di bawah supervisor (PTY wrapper); catat sesi + deteksi limit. |
-| `acca daemon` | Supervisor daemon: rekonsiliasi orphan, scheduler resume, monitor usage periodik, IPC. |
-| `acca status` | Sesi termonitor + usage best-effort (bar per window, indikator "perkiraan"). |
-| `acca log [sessionId]` | Riwayat event / audit trail (terbaru dulu). |
+| Perintah                            | Fungsi                                                                                 |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
+| `acca run -- <claude\|agy> [args…]` | Jalankan CLI target di bawah supervisor (PTY wrapper); catat sesi + deteksi limit.     |
+| `acca daemon`                       | Supervisor daemon: rekonsiliasi orphan, scheduler resume, monitor usage periodik, IPC. |
+| `acca status`                       | Sesi termonitor + usage best-effort (bar per window, indikator "perkiraan").           |
+| `acca log [sessionId]`              | Riwayat event / audit trail (terbaru dulu).                                            |
 
 Belum ada: kontrol Telegram (M-remote) & `resume-now`/`cancel` via remote, deploy sebagai service (M5).
 
@@ -64,12 +66,9 @@ Belum ada: kontrol Telegram (M-remote) & `resume-now`/`cancel` via remote, deplo
 ## Prior art & posisi
 
 - [CodexBar](https://github.com/steipete/CodexBar) — monitor usage 56+ provider (menu bar **macOS-only**,
-  Swift), **monitor-only tanpa auto-resume**. Kini sudah mendukung Antigravity (isu #1178 ditutup via
-  PR #1341) — mekanismenya (probe language-server lokal + endpoint OAuth `retrieveUserQuota`)
-  justru jadi referensi implementasi untuk probe kita.
+  Swift), **monitor-only tanpa auto-resume**. Kini sudah mendukung Antigravity (isu #1178 ditutup via PR #1341) — mekanismenya (probe language-server lokal + endpoint OAuth `retrieveUserQuota`) justru jadi referensi implementasi untuk probe kita.
 - [claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) — auto-continue Claude Code
-  via tmux (deteksi pesan limit → tunggu reset → kirim "continue"). **Claude Code-only, butuh tmux,
-  tanpa native Windows**, tanpa monitor usage, dan hanya menangani sesi yang masih hidup di pane.
+  via tmux (deteksi pesan limit → tunggu reset → kirim "continue"). **Claude Code-only, butuh tmux, tanpa native Windows**, tanpa monitor usage, dan hanya menangani sesi yang masih hidup di pane.
 
 Diferensiasi kita: **monitor + auto-continue sesi hidup (PTY sendiri, tanpa tmux) + resume sesi yang
 sudah mati** (claude-auto-retry hanya menangani pane hidup), **cross-OS native** (Linux + Windows tanpa
@@ -79,18 +78,18 @@ demand naik — banyak isu duplikat, belum ada implementasi native di changelog)
 
 ## Dokumentasi
 
-| Dokumen | Isi |
-|---|---|
-| [`docs/PROJECT.md`](docs/PROJECT.md) | Problem statement, persona, user story, flow, wireframe, acceptance criteria |
-| [`docs/RESEARCH.md`](docs/RESEARCH.md) | Fakta usage-limit & mekanisme resume kedua CLI + sumber |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | C4, container map, tech stack |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | ADR (locked / pending) |
-| [`docs/NFR.md`](docs/NFR.md) | Target non-fungsional terukur |
-| [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Threat model remote (Telegram) — gate keamanan M-remote |
-| [`docs/MILESTONES.md`](docs/MILESTONES.md) | Rencana milestone + progres |
-| [`docs/GOTCHAS.md`](docs/GOTCHAS.md) | Jebakan teknis yang sudah dibayar (agy/CC/PTY/store) |
-| [`docs/CONTEXT.md`](docs/CONTEXT.md) | Status proyek (update tiap sesi) |
-| [`docs/ISSUES.md`](docs/ISSUES.md) | Issue terbuka/tertutup + prioritas |
+| Dokumen                                        | Isi                                                                          |
+| ---------------------------------------------- | ---------------------------------------------------------------------------- |
+| [`docs/PROJECT.md`](docs/PROJECT.md)           | Problem statement, persona, user story, flow, wireframe, acceptance criteria |
+| [`docs/RESEARCH.md`](docs/RESEARCH.md)         | Fakta usage-limit & mekanisme resume kedua CLI + sumber                      |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | C4, container map, tech stack                                                |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md)       | ADR (locked / pending)                                                       |
+| [`docs/NFR.md`](docs/NFR.md)                   | Target non-fungsional terukur                                                |
+| [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Threat model remote (Telegram) — gate keamanan M-remote                      |
+| [`docs/MILESTONES.md`](docs/MILESTONES.md)     | Rencana milestone + progres                                                  |
+| [`docs/GOTCHAS.md`](docs/GOTCHAS.md)           | Jebakan teknis yang sudah dibayar (agy/CC/PTY/store)                         |
+| [`docs/CONTEXT.md`](docs/CONTEXT.md)           | Status proyek (update tiap sesi)                                             |
+| [`docs/ISSUES.md`](docs/ISSUES.md)             | Issue terbuka/tertutup + prioritas                                           |
 
 ## Konteks agent
 
