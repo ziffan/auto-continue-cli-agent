@@ -36,10 +36,16 @@ agy G-36 + CC hook `SessionStart`) · R3/I-21 (multi-siklus sesi hidup) · **R4/
 inject `continue` ke sesi hasil-resume — dulu cuma me-load lalu diam) + RC-2/RC-3 (eras kanal data hook/capturer)** ·
 **ADR-020 (token inject = instruksi NL eksplisit; live-verify 16 Jul agy 1.1.3 + CC 2.1.211 buktikan kata "continue"
 telanjang TAK me-resume agy → `CONTINUE_TOKEN` diganti, firewall utuh, G-40).**
-**Sisa gate keluar M3e = HANYA I-15 live-verify actuation** (inject/resume asli + kalibrasi delay + **live-verify literal
-English token pasca-reset agy nyata** — konsep terbukti limit asli owner via frasa Indonesia; butuh limit+user, HARD-STOP
-unattended). Terbuka non-gate: **C-4/RC-4** (proc_state basi retry-senyap, sebelum M5), C-5/C-6/C-7 (P3).
-**Berikutnya:** I-15 (opportunistik) → **M-remote & M5 DITUNDA** sampai gate keluar hijau.
+**16 Jul (sesi ini):** **review independen RC-1..RC-3** (agent CC fresh, syarat gate) + **live-verify I-15 CC full-loop pada
+limit CC ASLI** (beban review = bahan-bakar burn). **Paruh CC I-15 = ✅ LULUS** — deteksi PRIMER `StopFailure rate_limit`
+fire + **inject-continue OTOMATIS end-to-end melanjutkan kerja CC** (konfirmasi owner). **TAPI gate M3e BELUM hijau:**
+review temukan **F-1 (P2, BLOCKING)** — RC-1 buka loop re-spawn (continue-job landing di sesi hasil-resume yg exit cepat;
+verifikasi Opus CONFIRMED `supervisor.ts:286–398`) + **F-2** (gap test FK). Live-verify singkap 2 residual: **I-31**
+(G-37 repaint re-fire LIMIT_HIT palsu, terkonfirmasi) + **I-30** (reset clock-wrap → jadwal +24 jam).
+**Sisa gate keluar M3e:** (a) **F-1+F-2** (slice Tier-1; remedi konvergen = `kind:'continue'` distinct / Opsi B guard no-migrasi,
+keputusan owner) · (b) **I-30/I-31** (residual live) · (c) **I-15 agy literal English pasca-reset** (opportunistik, butuh
+limit+user). Terbuka non-gate: **C-4/RC-4** (sebelum M5), C-5/C-6/C-7 + F-3..F-6 (P3).
+**Berikutnya:** slice F-1+F-2+I-30/I-31 → gate hijau → **M-remote & M5 DITUNDA** sampai itu. Artefak: `docs/audit/AUDIT-RC-1-3-INDEPENDENT-2026-07-16.md` + `LIVE-VERIFY-I15-CC-2026-07-16.md`.
 Status terkini tiap sesi → **`docs/CONTEXT.md`**. Jangan asumsikan; baca file itu dulu.
 
 ## 3. Peta dokumen (sumber kebenaran)
