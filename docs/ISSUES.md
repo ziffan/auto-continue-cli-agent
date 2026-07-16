@@ -29,7 +29,8 @@
 > **Review independen RC-1..RC-3 (16 Jul, `docs/audit/AUDIT-RC-1-3-INDEPENDENT-2026-07-16.md`) → F-1..F-6.**
 > Agent CC independen (fresh, tanpa konteks penulisan) me-review batch RC (commit `49de523`) — **verifikasi Opus
 > orkestrator ke kode: F-1 CONFIRMED.** Verdict: **RC-1 CHANGES-REQUESTED · RC-2 APPROVE · RC-3 APPROVE-WITH-NITS.**
-> **Gate M3e BELUM hijau:** F-1 (P2, blocking) + F-2 (P2 test) harus ditutup. F-3..F-6 (P3) non-blocking.
+> **F-1 + F-2 DITUTUP 16 Jul (Opsi B guard, keputusan owner)** → **gate review M3e ✅ HIJAU.** F-3..F-6 (P3) non-blocking.
+> **Sisa gate keluar M3e: HANYA I-30/I-31 (residual live I-15).**
 >
 > **Live-verify I-15 CC full-loop (16 Jul, `docs/audit/LIVE-VERIFY-I15-CC-2026-07-16.md`) — limit CC ASLI.**
 > **Deteksi PRIMER `StopFailure rate_limit` = ✅ LULUS** (paruh "tak bisa dipaksa") + **actuation inject-continue FIRE**
@@ -37,7 +38,22 @@
 > re-fire LIMIT_HIT palsu → I-31) + **reset clock-wrap** (output "resets 10:20pm" di-parse setelah lewat → jadwal +24 jam,
 > padahal probe tahu reset benar → I-30). Sisa I-15 CC = tutup I-30/I-31 lalu re-verify inject benar-benar melanjutkan turn.
 
-### F-1 — RC-1 memperkenalkan loop re-spawn (continue-job landing di sesi hasil-resume yang exit cepat) [P2, BLOCKING gate M3e]
+### F-1 — RC-1 memperkenalkan loop re-spawn (continue-job landing di sesi hasil-resume yang exit cepat) [P2] ✅ (16 Jul, Opsi B guard)
+**RESOLVED (16 Jul, Opus inline Tier-1, keputusan owner = Opsi B tanpa migrasi).** Guard di cabang exited
+`supervisor.ts` (SEBELUM cwd/cli_session_id/resume-by-id): `if (session.resumed_from !== null && session.detected_at === null)`
+→ `markBlocked` + event `job_dispatch_error {action:'continue_target_exited', reason:'resume_target_exited_before_continue',
+status:'BLOCKED'}` + `return 'done'` (TAK re-spawn). **Semantik dua kolom yang menjamin guard tak menyasar siklus SEHAT:**
+`markLimitHit` MENGISI `detected_at` (episode limit nyata); `markRunningAfterInject` me-NULL-kannya HANYA di jalur alive
+(`proc_state` tetap 'alive' → tak pernah capai cabang exited) → sesi rantai-resume yang benar kena limit lalu exit punya
+`detected_at` terisi → lolos guard → resume-by-id sah. Sesi asal biasa (`resumed_from === null`, `acca run`) tak tersentuh.
+**Loop-sever tak bergantung `markBlocked`** (bila status sudah EXITED terminal → no-op, tapi `spawnResume` tetap tak dipanggil
++ `return 'done'` → rantai putus; event tetap meng-audit). Firewall utuh (field terkontrol). **+1 test** (F-1: continue-target
+`resumed_from` set + `detected_at` null + EXITED → spawnResume NOT called + BLOCKED + no pending job). Tier-1 self-review PASS
+(blind-spot penulis=reviewer di-flag: guard implisit, dimitigasi komentar + test yang mengunci semantik). **Detail historis di bawah.**
+**Sumber:** review independen F-1.
+
+<details><summary>Detail temuan asli (CONFIRMED)</summary>
+
 **CONFIRMED (verifikasi Opus ke `supervisor.ts:286–398`, 16 Jul).** RC-1 enqueue job continue (`kind:'resume'`, +15s)
 untuk sesi hasil-resume. Bila sesi itu **exit <15s** (paling mudah CC — hook `SessionStart` mengisi `cli_session_id`
 di startup) → job continue fire → `proc_state==='exited'` → masuk lagi cabang resume-by-id (cwd ada + cli_session_id
@@ -52,14 +68,16 @@ continue supaya `MAX_DISPATCH_ATTEMPTS` mengikat rantai. **Sumber:** review inde
 migrasi rebuild `scheduled_jobs` widen CHECK + handler dispatch `continue`: alive→`injectAlive` helper, exited→`continue_target_exited`
 warn TANPA re-resume; loop mustahil by-construction). **Opsi B (tanpa migrasi, ~6 baris):** guard cabang exited
 `if (resumed_from !== null && detected_at === null)` → BLOCKED (`detected_at` null = crash vs terisi = siklus-limit sehat;
-`markRunningAfterInject` NULL-kan `detected_at` hanya di jalur alive → tak pernah capai cabang exited → guard sahih). **Keputusan
-owner A-vs-B saat implementasi slice.**
+`markRunningAfterInject` NULL-kan `detected_at` hanya di jalur alive → tak pernah capai cabang exited → guard sahih). **Owner
+memilih Opsi B (16 Jul).**
+</details>
 
-### F-2 — Gap test: cabang best-effort FK RC-1 (`resume_continue_enqueue_failed`) tak diuji [P2, gate M3e]
-Properti anti-loop inti RC-1 — "enqueue gagal JANGAN flip dispatch ke `'retry'`" (G-39, alasan seluruh try/catch ada) —
-**tak punya test regresi** (`grep test/` = nol referensi `resume_continue_enqueue_failed`). Happy-path teruji jujur;
-guard-nya tidak. **Remedi:** stub `spawnResume` yang balikan `sessionId` **tanpa** buat baris → FK throw → assert dispatch
-tetap `'done'` + `markResumed` tetap + event `resume_continue_enqueue_failed` ter-emit. **Sumber:** review independen F-2.
+### F-2 — Gap test: cabang best-effort FK RC-1 (`resume_continue_enqueue_failed`) tak diuji [P2] ✅ (16 Jul)
+**RESOLVED (16 Jul, bareng F-1).** Properti anti-loop inti RC-1 — "enqueue gagal JANGAN flip dispatch ke `'retry'`" (G-39,
+alasan seluruh try/catch ada) — kini punya test regresi. **+1 test** (F-2/G-39): `spawnResume` stub balikan `sessionId`
+**tanpa** membuat baris → FK (`scheduled_jobs.session_id→sessions.id`, `foreign_keys=ON`) throw di RC-1 enqueue → assert
+dispatch tetap `'done'` + sesi lama `RESUMED` (`markResumed` jalan sebelum enqueue gagal) + tak ada job retry (loop tak
+berlanjut) + event `resume_continue_enqueue_failed` ter-emit dgn `newSessionId`. **Sumber:** review independen F-2.
 
 ### F-3..F-6 — nits RC-2/RC-3 [P3, non-blocking]
 - **F-3 (RC-2):** validasi UUID di jalur TULIS (hook), tak di jalur PAKAI (resume dispatch `if (!cli_session_id)`,

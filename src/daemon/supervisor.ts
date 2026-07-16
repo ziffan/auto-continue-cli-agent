@@ -284,6 +284,36 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       }
 
       // session.proc_state === 'exited' → resume-by-id (M3d.6).
+
+      // F-1 (review independen RC-1, 16 Jul — Opsi B, guard tanpa migrasi): PUTUS loop re-spawn.
+      // RC-1 (di bawah, pasca `resume_spawned`) menjadwalkan continue-job (`kind:'resume'`, +15s) untuk
+      // sesi HASIL-resume supaya jalur alive meng-inject "continue". Bila sesi itu justru EXIT sebelum
+      // job fire (paling mudah CC: hook `SessionStart` mengisi `cli_session_id` di startup, lalu proses
+      // mati cepat), continue-job mendarat di cabang exited INI → resume-by-id spawn sesi BARU → RC-1
+      // enqueue continue lagi → loop ~tiap 15s TAK TERBATAS (`MAX_DISPATCH_ATTEMPTS` hanya menjaga jalur
+      // `spawnFailed`, bukan spawn-sukses-lalu-crash — tiap iterasi sesi+job baru `attempts=0`).
+      // Guard: sesi yang MERUPAKAN hasil resume (`resumed_from !== null`) DAN belum pernah kena limit
+      // (`detected_at === null`) = continue-target yang mati sebelum sempat kerja → BLOCKED (surface
+      // manual), JANGAN re-resume. Semantik dua kolom yang menjamin guard ini TAK menyasar siklus SEHAT:
+      // `markLimitHit` MENGISI `detected_at` saat episode limit nyata; `markRunningAfterInject`
+      // me-NULL-kannya HANYA di jalur alive (proc_state tetap 'alive' → tak pernah mencapai cabang exited
+      // ini). Jadi sesi rantai-resume yang BENAR kena limit lalu exit punya `detected_at` terisi → lolos
+      // guard → resume-by-id sah. Sesi asal biasa (`resumed_from === null`, mis. `acca run`) tak tersentuh.
+      if (session.resumed_from !== null && session.detected_at === null) {
+        sessions.markBlocked(job.session_id);
+        events.append({
+          session_id: job.session_id,
+          type: 'job_dispatch_error',
+          payload: {
+            jobId: job.id,
+            action: 'continue_target_exited',
+            reason: 'resume_target_exited_before_continue',
+            status: 'BLOCKED',
+          },
+        });
+        return 'done';
+      }
+
       if (!existsSync(session.cwd)) {
         // AC-8: cwd asli sesi hilang — tak ada tempat aman untuk melanjutkan. Terminal, jangan retry.
         // I-28 (A-14): tulis status BLOCKED supaya `acca status` menampilkan sesi butuh-manual ini.

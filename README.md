@@ -13,7 +13,7 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 > + C-2/C-3 pengeras kanal data.** Live-verify token (16 Jul, ADR-020: kata `"continue"` telanjang tak me-resume agy →
 > token = instruksi NL eksplisit, terbukti resume agy+CC di limit asli) ✅ — **sisa gate = HANYA live-verify literal
 > English pasca-reset agy nyata, opportunistik**).
-> 392 test hijau (2 skip POSIX-only
+> 394 test hijau (2 skip POSIX-only
 > di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan; M-remote (kontrol Telegram) & M5 (deploy sebagai
 > service) menyusul setelah gate M3e hijau. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
