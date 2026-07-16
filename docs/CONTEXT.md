@@ -6,6 +6,14 @@
 
 ## Status saat ini
 
+- **Terakhir diupdate:** 2026-07-16 (sesi Windows, dgn user — slice C-4/RC-4) — **C-4 (proc_state basi retry-senyap) DITUTUP** (keluarga terakhir retry-senyap tertutup; hardening pra-M5). **406 test.**
+  Owner pilih C-4/RC-4 (P2, sebelum M5) atas sisa budget 5-jam. **Slice (Opus inline Tier-1, state-machine):** **(1) reconcile liveness di awal dispatch** (`reconcileDispatchLiveness`, kedua cabang probe+resume):
+  `alive && pid && !isProcessAlive(pid)` → `markOrphanExited` (proc_state→exited, LIMIT_HIT dipertahankan) + event `orphan_reconciled_at_dispatch` → cabang exited (agy optimistic / CC resume-by-id) → auto-recovery (bukan
+  `discoverLocalPorts(pid mati)` throw → retry-senyap; bukan inject ke wrapper mati). Menutup celah `reconcileOrphans` hanya di `start()`. **(2) attempts-cap catch generik (RC-4):** error tak-terduga di batas
+  `MAX_DISPATCH_ATTEMPTS` → `markBlocked`+`dispatch_gave_up`+done; di bawah → retry. Reconcile=primer, attempts-cap=backstop (defense-in-depth). **Verifikasi (Opus sendiri):** `npm run check` typecheck+lint+**406 test**
+  (+4: reconcile agy-probe→optimistic + CC-resume→resume-by-id [requestInject TAK dipanggil] + attempts-cap batas→BLOCKED + di-bawah→retry; harness `beforeFire` set pid mati SETELAH start → uji reconcile DISPATCH bukan `start()`).
+  Tier-1 self-review PASS. **Docs:** ISSUES (C-4 → Tertutup), CONTEXT (ini), CLAUDE.md §2/README 402→406. **Next:** **M-remote tier A / M5** (semua gate M3e + C-4 hijau); sisa P3 nebeng: C-5/C-6/C-7, F-3..F-6, B-3.
+
 - **Terakhir diupdate:** 2026-07-16 (sesi Windows, dgn user — slice I-30+I-31 + PTY-integration test I-31) — **SEMUA gate keluar M3e ✅ HIJAU** (F-1/F-2 + I-30/I-31 ditutup; **402 test**). Berikutnya: **M-remote tier A / M5**.
   **+PTY-integration test I-31 (live TANPA limit, permintaan user):** replay byte banner limit CC nyata lewat PTY nyata + wrapper PRODUKSI + control socket nyata → child cetak banner (LIMIT_HIT#1) → inject-continue via socket nyata → unlatch →
   child repaint → **`limit_suppressed` (bukan LIMIT_HIT#2)**. Menutup gap wiring yang di-stub unit test (nowMs/onData→feedOutput/socket-inject→unlatch). **Negative-control terbukti** (grace dimatikan → test gagal 2 LIMIT_HIT). Stabil 3×. Nol kuota terbakar.

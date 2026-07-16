@@ -300,7 +300,21 @@ pendek pasca-spawn (exit <3s + code≠0 → perlakukan `resume_spawn_failed`) AT
 pertama sesi baru mengalir. **Putuskan bentuknya saat live-verify** — jangan spekulasi penanda sebelum ada data
 nyata (pola G-33/idle-agy). **Sumber:** audit followup B-3.
 
-### C-4 — `proc_state` basi ('alive' padahal wrapper mati keras) menghidupkan lagi retry-senyap A-4/B-1 [P2, sebelum M5] → RC-4
+### C-4 — `proc_state` basi ('alive' padahal wrapper mati keras) menghidupkan lagi retry-senyap A-4/B-1 [P2] ✅ (16 Jul, RC-4)
+**RESOLVED (16 Jul, Opus inline Tier-1).** Dua bagian: **(1) reconcile liveness DI AWAL dispatch** (`reconcileDispatchLiveness`,
+dipakai di kedua cabang probe+resume): `proc_state==='alive' && pid && !isProcessAlive(pid)` → `markOrphanExited`
+(proc_state→'exited', status LIMIT_HIT DIPERTAHANKAN) + event `job_dispatch_reconcile{action:'orphan_reconciled_at_dispatch'}`
+→ cabang exited menangani: **agy** → `optimistic_resume_agy_exited` (ADR-019, tak lagi `discoverLocalPorts(pid mati)` throw);
+**CC** → resume-by-id (bukan inject ke wrapper mati → auto-recovery, bukan buntu manual). Menutup celah bahwa `reconcileOrphans`
+hanya jalan di `start()` (wrapper mati SETELAH start tak ter-cek). **(2) attempts-cap pada catch generik** (RC-4): error
+tak-terduga dulu SELALU `'retry'` tanpa baca `job.attempts` → backoff 60m selamanya senyap; kini di batas
+`MAX_DISPATCH_ATTEMPTS` → `markBlocked` + `dispatch_gave_up{status:BLOCKED}` + `done`; di bawah batas → retry (transien).
+Reconcile = fix primer (agy), attempts-cap = backstop (defense-in-depth). Residual pid-recycle = sama I-1 (diterima).
+**+4 test** (reconcile agy-probe→optimistic + CC-resume→resume-by-id [requestInject TAK dipanggil] + attempts-cap batas→BLOCKED +
+di-bawah-batas→retry; harness `beforeFire` set pid mati SETELAH start supaya reconcile DISPATCH yang diuji, bukan `start()`).
+**Sumber:** audit ketiga C-4.
+
+<details><summary>Detail temuan asli</summary>
 `reconcileOrphans` hanya dipanggil di `supervisor.start()` — daemon long-running TAK re-cek liveness; wrapper
 yang mati keras SETELAH start meninggalkan `proc_state='alive'` + job pending. **agy:** probe sesi "alive" palsu
 → `discoverLocalPorts(pid mati)` throw → **catch generik → `'retry'` TANPA attempts-cap & TANPA notif** (payload
@@ -309,6 +323,7 @@ cabang spesifik). **CC:** probe sukses → inject wrapper unreachable → `injec
 manual padahal auto-recovery bisa (pid mati + cli_session_id ada → resume-by-id). **Remedi (RC-4, sedang):** di awal
 dispatch cek `proc_state==='alive' && pid && !isProcessAlive(pid)` → `markOrphanExited` → jalur `exited`; + attempts-cap
 pada catch generik (tutup KELUARGA retry-senyap). **Sumber:** audit ketiga C-4. **Rekomendasi:** sebelum M5 (daemon jalan berhari-hari).
+</details>
 
 ### C-5 — Probe LS agy sesi ALIVE = snapshot launch-time beku (G-35) → gate `still_limited`/`usage_available` agy-alive berbasis data basi [P3] → RC-5
 ADR-019 menutup agy-**exited** (optimistic); agy-**alive** masih pura-pura probe-nya bermakna (self-correcting via

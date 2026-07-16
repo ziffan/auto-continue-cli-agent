@@ -143,14 +143,35 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       return { sessionId: newId, spawnFailed };
     });
 
+  // C-4/RC-4 (audit ketiga): reconcile liveness DI AWAL tiap dispatch. `reconcileOrphans` hanya dipanggil
+  // sekali di `supervisor.start()` → daemon long-running TAK re-cek liveness; wrapper yang mati keras
+  // SETELAH start meninggalkan `proc_state='alive'` BASI. Tanpa cek ini: (agy) probe sesi "alive" palsu →
+  // `discoverLocalPorts(pid mati)` throw → catch generik → 'retry' TANPA attempts-cap → backoff 60m
+  // selamanya SENYAP (pola A-4/B-1 lewat pintu lain); (CC) probe HTTP sukses → inject wrapper unreachable →
+  // buntu manual padahal auto-recovery mungkin. Fix: `alive` tapi PID mati → `markOrphanExited`
+  // (proc_state→'exited', status LIMIT_HIT DIPERTAHANKAN, tak clobber) → cabang exited (resume-by-id /
+  // optimistic agy) menangani → auto-recovery. Residual pid-recycle = sama seperti I-1 (diterima).
+  const reconcileDispatchLiveness = (session: Session): Session => {
+    if (session.proc_state === 'alive' && session.pid !== null && !isProcessAlive(session.pid)) {
+      sessions.markOrphanExited(session.id);
+      events.append({
+        session_id: session.id,
+        type: 'job_dispatch_reconcile',
+        payload: { action: 'orphan_reconciled_at_dispatch', pid: session.pid },
+      });
+      return sessions.getById(session.id) ?? session;
+    }
+    return session;
+  };
+
   // Dispatch nyata (M3d.5 probe + M3d.6 resume-by-id + M3d.7 inject-continue gating). Setiap
   // cabang menulis event audit (pola sudah ada di reconcile.ts/limit-watcher.ts); error tak
-  // terduga dibungkus try/catch → event + 'retry' (job dipertahankan, dijadwal ulang via backoff).
+  // terduga dibungkus try/catch → event + attempts-cap (RC-4) → 'retry'/BLOCKED.
   const realDispatch: JobDispatch = async (job): Promise<JobResult> => {
     try {
       if (job.kind === 'probe') {
-        const session = sessions.getById(job.session_id);
-        if (!session) {
+        const rawSession = sessions.getById(job.session_id);
+        if (!rawSession) {
           events.append({
             session_id: job.session_id,
             type: 'job_dispatch_done',
@@ -158,6 +179,8 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
           });
           return 'done';
         }
+        // C-4/RC-4: alive-tapi-PID-mati → exited (auto-recovery), sebelum branching proc_state.
+        const session = reconcileDispatchLiveness(rawSession);
 
         // ADR-019 (men-supersede ADR-018): probe usage agy butuh sesi HIDUP ber-PTY — Language Server
         // hanya bind saat ber-PTY (G-3) & port-nya terikat PID sesi itu; sesi agy `exited` = PID mati =
@@ -243,8 +266,8 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       }
 
       // job.kind === 'resume'
-      const session = sessions.getById(job.session_id);
-      if (!session) {
+      const rawSession = sessions.getById(job.session_id);
+      if (!rawSession) {
         events.append({
           session_id: job.session_id,
           type: 'job_dispatch_done',
@@ -252,6 +275,8 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         });
         return 'done';
       }
+      // C-4/RC-4: alive-tapi-PID-mati → exited → resume-by-id (auto-recovery), bukan inject ke wrapper mati.
+      const session = reconcileDispatchLiveness(rawSession);
 
       if (session.proc_state === 'alive') {
         // Jalur preferred ADR-014: sesi masih hidup di PTY → inject "continue", bukan kill+respawn.
@@ -428,10 +453,24 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       }
       return 'done';
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // RC-4: error tak-terduga (mis. `discoverLocalPorts` throw pada pid basi yang lolos reconcile, atau
+      // glitch transien) dulu SELALU 'retry' tanpa membaca `job.attempts` → backoff 60m selamanya SENYAP
+      // bila persisten (keluarga A-4/B-1 lewat catch generik). Batasi: di batas attempts → BLOCKED + surface
+      // (level error via mapping notifier generik), bukan spin tanpa akhir. Di bawah batas → retry (transien).
+      if (job.attempts + 1 >= MAX_DISPATCH_ATTEMPTS) {
+        sessions.markBlocked(job.session_id);
+        events.append({
+          session_id: job.session_id,
+          type: 'job_dispatch_error',
+          payload: { jobId: job.id, kind: job.kind, action: 'dispatch_gave_up', error: message, attempts: job.attempts + 1, status: 'BLOCKED' },
+        });
+        return 'done';
+      }
       events.append({
         session_id: job.session_id,
         type: 'job_dispatch_error',
-        payload: { jobId: job.id, kind: job.kind, error: err instanceof Error ? err.message : String(err) },
+        payload: { jobId: job.id, kind: job.kind, error: message, attempts: job.attempts + 1 },
       });
       return 'retry';
     }
