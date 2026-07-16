@@ -30,6 +30,14 @@ describe('createInjectHandler (wrapper side)', () => {
     expect(writes).toEqual([CONTINUE_TOKEN]);
   });
 
+  it('ADR-020: token = instruksi NL eksplisit (bukan "continue" telanjang) + diakhiri Enter', () => {
+    // Regresi: live-verify 16 Jul buktikan kata "continue" telanjang tak me-resume agy (G-39). Token
+    // WAJIB kalimat instruksi eksplisit yang menyebut "interrupted", bukan sekadar "continue\r".
+    expect(CONTINUE_TOKEN).not.toBe('continue\r');
+    expect(CONTINUE_TOKEN).toMatch(/interrupted/i);
+    expect(CONTINUE_TOKEN.endsWith('\r')).toBe(true);
+  });
+
   it('does NOT write and returns proc_not_alive when the process is not alive', () => {
     const write = vi.fn();
     const handler = createInjectHandler({ isAlive: () => false, write });

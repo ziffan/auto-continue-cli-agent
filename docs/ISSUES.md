@@ -114,6 +114,23 @@ startup → jalur resume-by-id lebih mulus di 2.1.207.
   opportunistik (belum). **Efek:** gate keluar I-15 untuk **deteksi+resume-load agy** = LULUS; sisa = actuation inject
   pasca-reset (agy+CC). **Sumber:** I-15 live-verify 11 Jul (scratchpad `agy-*.mjs`).
 
+**✅ TEMUAN TOKEN (16 Jul, agy 1.1.3 + CC 2.1.211, otorisasi user → ADR-020 + G-40):** live-verify actuation inject
+membuka temuan material tentang **poin (a)** di atas. Mekanisme inject **terbukti benar** (`injected:true`, keystroke sampai
+ke agy via jalur produksi `requestInject`→wrapper→gating→PTY). **TAPI token `'continue\r'` TAK me-resume agy** — agy
+menafsirnya pesan NL baru ("I do not have context…"/"more of same"), bukan resume turn (tak punya primitif resume-turn utk
+satu kata). **Bukti penentu (limit ASLI owner, sesi sama):** kalimat eksplisit "lanjutkan pekerjaan, tadi terhenti karena
+limit" → **agy DAN CC langsung melanjutkan pekerjaan terhenti**. → **`CONTINUE_TOKEN` diganti** ke instruksi NL eksplisit
+`'continue the work that was interrupted by the usage limit\r'` (ADR-020, English, owner; literal-tetap → injection firewall
+utuh; +1 test guard regresi). **Delta versi tercatat:** agy 1.1.1→1.1.3, CC 2.1.207→2.1.211 (patch; **G-33 `esc to cancel` +
+G-36 resume-cmd re-confirmed holds @1.1.3**). **SISA I-15 (opportunistik, reversible):** live-verify literal **English**
+pasca-reset agy nyata benar me-resume (yang terbukti owner = frasa Indonesia; English = variasi risiko-rendah) + CC limit
+asli. **Sinyal positif English (16 Jul):** inject token English → agy balas *"**Resuming Our Work**. I do not have the
+context from your previous session. Please explain… the work that was interrupted so we can continue."* → agy **mengenali
+instruksi sebagai resume** (mencari konteks-terputus) — beda dari "continue" telanjang yang dulu → "more of same". Konsisten
+pengalaman limit-nyata owner. **Proxy Esc-cancel GAGAL menyediakan konteks-terputus:** prompt esai scripted tak submit di TUI
+agy (FASE-3 `esc to cancel` timeout 2× walau readiness-gate sudah diperbaiki) → tak ada turn terputus saat inject → end-to-end
+"token me-resume pekerjaan NYATA" = **tetap butuh limit asli** (opportunistik). **Sumber:** I-15 live-verify token 16 Jul (`esc-cancel.log`).
+
 ### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13] — ENGINE READY (10 Jul), wiring→I-17
 Claude Code menampilkan warning ~90% (window 5-jam) & ~75% (mingguan) di terminal, tapi itu **UI-only,
 tak di-persist** (G-15) → jangan scrape. Sinyalnya sudah tersedia via usage-probe: `usedFraction` (parser
