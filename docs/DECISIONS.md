@@ -2,8 +2,12 @@
 
 > Format Nygard. ADR *Accepted* immutable — revisi = ADR baru yang men-supersede.
 > Status per ADR: **Proposed** (masih bisa berubah) / Accepted / Deprecated / Superseded.
-> Status per 2026-07-16: **ADR-001…017 + ADR-019 + ADR-020 Accepted (locked); ADR-018 Superseded by ADR-019** (12 Jul —
+> Status per 2026-07-17: **ADR-001…017 + ADR-019…023 Accepted (locked); ADR-018 Superseded by ADR-019** (12 Jul —
 > premis probe OAuth standalone terbukti baca pool kuota salah saat live-verify → optimistic resume + detect).
+> (**ADR-021/022/023, 17 Jul — spec M5:** ADR-021 deployment Windows = Windows Service, men-**supersede sebagian** klausa
+> Task Scheduler ADR-007 (systemd/Linux tetap); ADR-022 backup/DR minimal (WAL checkpoint + file copy + retensi); ADR-023
+> IPC named pipe Windows DACL terbuka DITERIMA sbg residual risk + hardening lapisan-app (I-26), men-**scope-ulang** klausa
+> keamanan ADR-015 yang keliru — transport ADR-015 tetap.)
 > (ADR-020, 16 Jul: **amandemen token** ADR-014 §1 — live-verify agy 1.1.3 + CC 2.1.211 buktikan kata "continue" telanjang
 > tak andal untuk agy; token diganti instruksi NL eksplisit. Meng-amandemen, TIDAK men-supersede ADR-014 — strategi lain tetap.)
 > (ADR-017, 11 Jul: wrapper=penulis-sah lifecycle-sesinya + daemon=sole-coordinator-bukan-sole-writer → menutup residual
@@ -114,10 +118,10 @@ janji "tinggal extend".
 **Alternatives Rejected:** Multi-tenant dari day-1 (anti-pattern user: single-tenant dengan janji extend).
 
 ## ADR-007: Deployment sebagai service OS
-**Status:** **Accepted** (locked 2026-07-03) — *immutable; revisi = ADR baru yang men-supersede.*
+**Status:** **Accepted** (locked 2026-07-03) — *klausa Windows di-**SUPERSEDE SEBAGIAN oleh ADR-021** (17 Jul: Task Scheduler → Windows Service; klausa systemd/Linux TETAP berlaku). Isi di bawah tak diedit (immutable); baca bersama ADR-021.*
 **Context:** Auto-resume butuh host **always-on** (kalau mesin tidur/mati, resume tak jalan — batasan PROJECT.md §1).
 **Decision:** Daemon dijalankan sebagai systemd unit (Linux) / Task Scheduler (Windows); cocok untuk node
-headless 24/7 di LAN (lihat HARDWARE.md — ROG Phone 6 / VPS).
+headless 24/7 di LAN (lihat HARDWARE.md — ROG Phone 6 / VPS). *(Windows: Task Scheduler → **Windows Service**, ADR-021.)*
 **Consequences:** (+) resume tengah malam tetap jalan di node always-on. (−) di laptop yang tidur, resume
 tertunda sampai bangun — dokumentasikan sebagai batasan.
 **Alternatives Rejected:** Hanya proses foreground (mati saat terminal ditutup).
@@ -333,7 +337,7 @@ lebih lambat (re-load transcript + startup baru), dan mubazir untuk sesi yang ma
 (ala tmux-blind) — ditolak: bisa mengetik "continue" ke shell atau di tengah generate (persis yang dicegah claude-auto-retry).
 
 ## ADR-015: IPC CLI ↔ daemon = Node `net` socket (Unix domain socket / Windows named pipe), NDJSON
-**Status:** **Accepted** (locked 2026-07-03 malam) — *immutable; revisi = ADR baru yang men-supersede.*
+**Status:** **Accepted** (locked 2026-07-03 malam) — *transport immutable & berlaku; **klausa keamanan "ACL default owner di Windows" DI-SCOPE-ULANG oleh ADR-023** (17 Jul: klaim itu keliru — DACL named pipe Node terbuka by design; ditangani sbg residual risk + hardening lapisan-app). Baca bersama ADR-023.*
 **Context:** Monolith daemon (ADR-002) tapi `acca` CLI = proses terpisah yang mengirim perintah (`run`,
 `resume-now`, `cancel`) + baca status ke/dari daemon yang hidup. Constraint keras: jalan di **Ubuntu + Windows**
 (ADR-003/CLAUDE.md §6). Butuh transport lokal-saja tanpa buka port jaringan (sejalan egress whitelist NFR — tak
@@ -538,6 +542,112 @@ Elemen ADR-014 lain tak berubah.
 - **Token Bahasa Indonesia** (frasa yang terbukti owner) — tak dipilih (owner preferensi English utk netralitas
   workspace); tetap kandidat cadangan bila English gagal live-verify.
 
+## ADR-021: Deployment Windows = Windows Service (bukan Task Scheduler) — men-supersede sebagian ADR-007
+**Status:** **Accepted** (locked 2026-07-17) — *immutable; revisi = ADR baru yang men-supersede.*
+**Men-supersede sebagian ADR-007** (hanya klausa "Task Scheduler (Windows)"; klausa systemd/Linux ADR-007 TETAP berlaku).
+**Context:** ADR-007 (3 Jul) memilih "systemd (Linux) / Task Scheduler (Windows)" tanpa membandingkan Task Scheduler
+dengan Windows Service secara serius. Verifikasi 17 Jul (web, sumber primer + praktisi) menemukan Task Scheduler ONSTART
+**rapuh untuk daemon selalu-nyala**:
+- Task Scheduler ONSTART bisa **gagal senyap** saat boot (aplikasi tak start dengan benar, tanpa error terlihat).
+- **Tidak ada auto-restart on crash** bawaan — kalau daemon crash jam 02:00, ia mati sampai user login & urus manual.
+- Justru skenario "daemon mati tengah malam" = persis yang produk ini ada untuk mencegah (PROJECT §1). Task Scheduler
+  membuat produk rentan pada mode kegagalan yang jadi alasan keberadaannya.
+Windows Service (via Service Control Manager) sebaliknya: jalan independen dari sesi login, survive logout+reboot,
+dan **auto-restart on crash** (configurable delay) — properti yang wajib untuk daemon always-on.
+**Decision:** Deployment Windows = **daftarkan daemon sebagai Windows Service**, dengan **auto-restart on failure**.
+Registrasi via **template konfigurasi + skrip install manual** (bukan dependency npm runtime) — simetris dengan jalur
+Linux (unit `.service` + `enable-linger`). Tool wrapper service = **WinSW** (single-exe wrapper, XML config, vendored
+terpisah/tepercaya) sebagai primary; **`sc.exe`** (built-in Windows) didokumentasikan sebagai fallback nol-tool.
+**Nol dependency npm runtime baru** (konsisten bias minimal-dep + install-via-template ADR-004/DEPENDENCY-POLICY).
+Pemilihan WinSW vs sc.exe final + pin versi/hash WinSW = **gate DEPENDENCY-POLICY saat slice service (M5).**
+**Consequences:**
+- (+) Daemon survive reboot + **auto-restart on crash** → auto-resume tengah-malam benar-benar terjamin (menutup mode
+  kegagalan Task Scheduler). (+) Nol dep npm runtime; install = template + skrip (simetris Linux). (+) Windows Service
+  jalan tanpa sesi interaktif (node headless 24/7, ADR-007 use-case).
+- (−) WinSW = binary eksternal (di-vendor terpisah, bukan npm) → butuh verifikasi sumber + pin hash (gate DEPENDENCY-POLICY);
+  `sc.exe` fallback menghindari ini tapi kurang fitur (tanpa log-rotation/restart-policy WinSW).
+- (−) Windows Service butuh privilege admin saat **install** (satu kali) — dokumentasikan di quick-start. Daemon **runtime**
+  tetap least-privilege (tak perlu admin untuk jalan).
+- (−) DACL named pipe TETAP terbuka (I-26/ADR-023) — Windows Service tak mengubah itu; ditangani terpisah ADR-023.
+**Alternatives Rejected:**
+- **Task Scheduler (ADR-007 asli)** — ditolak: gagal-senyap + tanpa auto-restart (di atas).
+- **node-windows (npm dep)** — ditolak: menambah dep runtime `1.0.0-beta` yang cuma dipakai sekali saat install; melawan
+  bias minimal-dep; daftar-service-via-kode = permukaan lebih besar dari template.
+- **NSSM** — ditolak: stable resmi mangkrak sejak 2014 (2.24), fork komunitas fragmented → supply-chain concern lebih
+  besar dari WinSW; tak sepadan.
+- **Native Windows Service via node langsung** (SCM API) — ditolak: node bukan native service host; butuh wrapper apa pun.
+
+## ADR-022: Backup/DR state = WAL checkpoint + file copy + retensi (minimal, bukan DR penuh)
+**Status:** **Accepted** (locked 2026-07-17) — *immutable; revisi = ADR baru yang men-supersede.*
+**Context:** State daemon (`sessions`/`events`/`scheduled_jobs`) tinggal di SQLite `acca.db` (ADR-004, WAL mode).
+Preferensi user eksplisit **anti "skip backup/DR untuk production"**. Tanpa strategi backup, korupsi `acca.db`
+(crash saat write, disk error) = kehilangan seluruh riwayat sesi + job terjadwal (sesi LIMIT_HIT pending → resume
+tak jalan). Tapi ini **single-user lokal** — DR penuh (replikasi, failover, PITR) = over-engineering.
+**Decision:** Backup/DR **minimal** untuk MVP: (1) **WAL checkpoint** (`PRAGMA wal_checkpoint(TRUNCATE)`) sebelum
+snapshot supaya `.db` konsisten; (2) **salin file** `acca.db` (+ sidecar `-wal`/`-shm` bila ada) ke lokasi backup
+ber-timestamp; (3) **retensi** N snapshot terakhir (default terkonfigurasi, bukan hardcode — konsisten
+config-over-hardcoding). Mekanisme = **skrip + dokumentasi** (cron/systemd-timer Linux, Task Scheduler/skrip Windows),
+**bukan** fitur daemon in-process di MVP. Restore = dokumentasikan langkah (stop service → ganti file → start).
+Konsisten no-hard-delete (ADR-004): backup = salinan, arsip tak di-purge.
+**Consequences:**
+- (+) Jalur pulih ada bila `acca.db` korup (RPO = interval snapshot terakhir). (+) Sederhana, nol dep, lintas-OS
+  via skrip. (+) WAL checkpoint jamin snapshot konsisten (tak setengah-transaksi).
+- (−) RPO = interval snapshot (bukan continuous) → job/event antara snapshot terakhir & korupsi bisa hilang. Diterima
+  untuk single-user (kehilangan ≤1 interval; sesi LIMIT_HIT bisa di-recover manual dari CLI agent asli).
+- (−) Backup manual/terjadwal, bukan otomatis-in-daemon → user harus set up (dokumentasikan di quick-start). Kandidat
+  fitur `acca backup` in-daemon = backlog post-MVP bila diperlukan.
+**Alternatives Rejected:**
+- **DR penuh (replikasi/failover/PITR)** — ditolak: over-engineering untuk single-user lokal offline-first.
+- **Nol backup ("state ephemeral")** — ditolak: melanggar preferensi user anti-skip-backup + korupsi = kehilangan job
+  terjadwal (resume tak jalan).
+- **Backup via `.dump` SQL text** — tak dipilih (kandidat cadangan): file copy pasca-checkpoint lebih cepat + byte-exact;
+  `.dump` berguna bila butuh portabilitas lintas-versi SQLite (belum diperlukan).
+- **Fitur backup in-daemon di MVP** — ditunda: menambah permukaan daemon; skrip+doc cukup untuk MVP.
+
+## ADR-023: IPC named pipe Windows — DACL terbuka DITERIMA sebagai residual risk + hardening lapisan aplikasi (I-26); men-scope-ulang klaim keamanan ADR-015
+**Status:** **Accepted** (locked 2026-07-17) — *immutable; revisi = ADR baru yang men-supersede.*
+**Men-scope-ulang** klausa keamanan ADR-015 ("named pipe pakai ACL default owner di Windows") yang **terbukti keliru**;
+tidak men-supersede transport ADR-015 (Node `net` socket/pipe + NDJSON tetap).
+**Context:** ADR-015 (3 Jul) mengklaim named pipe Windows "pakai ACL default owner" (owner-only, analog chmod 0600 Linux).
+Verifikasi 17 Jul (web, sumber primer nodejs/node issues #47086/#30823/#17743 + Microsoft Learn) **membantah klaim itu**:
+- Node.js/libuv membuat named pipe dengan **DACL default Windows** → **Everybody + Anonymous Logon** dapat generic read;
+  user non-elevated saat ini dapat read+write. **Bukan** owner-only.
+- Node **tidak menyediakan API** untuk set permission named pipe (issue terbuka bertahun-tahun, per 2026 belum ada).
+  Mengubah DACL dari Node **mustahil tanpa native addon** (`CreateNamedPipe` + SDDL, bypass libuv).
+- Kandidat mitigasi yang dulu dicatat di I-26 — "**cek PID client same-session-user**" — terbukti **tidak aman**:
+  Google Project Zero mendokumentasikan PID client named pipe **bisa di-spoof** (CVE-2018-0749 kelas); Microsoft
+  sendiri menyarankan **jangan** pakai PID sebagai enforcement keamanan. Kandidat itu **gugur**.
+Dampak nyata (single-user desktop = risiko rendah; node headless multi-akun = relevan, ADR-007): user lokal lain bisa
+(a) **connect+read** pipe → `status` bocorkan daftar cwd; (b) **memicu** perintah, dibatasi: `inject` = token literal
+hardcoded wrapper **tanpa payload** (injection firewall ADR-013/014 utuh) → tak bisa suntik teks arbitrer; `resume-now`/
+`cancel` = whitelist terbatas.
+**Decision:** DACL terbuka **DITERIMA sebagai residual risk yang diketahui + terdokumentasi** (THREAT-MODEL.md), dengan
+**hardening di lapisan aplikasi** yang bisa kita kontrol (native addon set-DACL **DITOLAK** — over-engineering solo-user):
+1. **Minimalkan data sensitif lewat pipe** — respons `status` via IPC tak dump path/cwd penuh yang tak perlu (evaluasi
+   per-field saat slice; read-only `status` boleh baca store langsung per ADR-015, tak selalu lewat pipe).
+2. **Hanya daemon yang mutasi state** (sudah, ADR-017) — pihak yang connect pipe tak bisa menulis `sessions`/`jobs`
+   langsung; hanya kirim perintah whitelist.
+3. **Injection firewall tetap struktural** — `inject` tanpa payload (token literal wrapper, ADR-014/020) → connect pipe
+   tak bisa menyuntik instruksi arbitrer; isi output = data, bukan perintah.
+4. **Audit** — perintah via IPC ter-`events` (append-only) → jejak bila ada penyalahgunaan lokal.
+Verifikasi DACL nyata (empiris Windows) = **decision point tertutup by-design** (kita sudah tahu terbuka); yang
+diverifikasi live di M5 = perilaku hardening (mis. `status` tak bocor cwd tak perlu), bukan lagi "apakah terbuka".
+**Consequences:**
+- (+) Jujur: klaim ADR-015 dikoreksi, bukan dibiarkan salah. (+) Hardening di lapisan yang benar-benar bisa dikontrol
+  (Node tak bisa set DACL). (+) Nol native addon / build lintas-OS tambahan. (+) Injection firewall sudah menutup vektor
+  paling berbahaya (inject teks arbitrer) secara struktural.
+- (−) Pipe tetap connect-able user lokal lain by Node design → residual risk `status` read (cwd leak) di host multi-akun.
+  Diterima untuk single-user desktop; node headless multi-akun = catat di THREAT-MODEL + pertimbangan deploy (akun khusus).
+- (−) Hardening lapisan-app = mitigasi, bukan eliminasi; DACL owner-only sejati butuh native addon (ditolak).
+**Alternatives Rejected:**
+- **Native C++ addon set DACL owner-only (SDDL)** — ditolak: over-engineering solo-user; native build lintas-OS +
+  maintenance; risiko/nilai buruk untuk desktop single-user. Revisit hanya bila kebutuhan multi-akun host konkret.
+- **Cek PID client same-user** — ditolak: PID named pipe spoofable (Project Zero/CVE-2018-0749); Microsoft menyarankan
+  jangan pakai PID sbg enforcement → mitigasi palsu (rasa aman tanpa keamanan).
+- **Pindah IPC ke TCP+auth-token** — ditolak: membuka port (ADR-015 Alternatives Rejected — exposure lebih besar,
+  firewall Windows), tak menyelesaikan (token bocor = sama).
+- **Biarkan klaim ADR-015 apa adanya** — ditolak: klaim terbukti keliru; membiarkan = decision discipline rusak.
+
 ## Pending decisions (belum diputuskan)
 
 | Keputusan | Owner | Target |
@@ -547,6 +657,8 @@ Elemen ADR-014 lain tak berubah.
 | ~~TUI library final (Ink vs blessed) untuk `acca status`~~ → **diputuskan 11 Jul (Ziffan): TANPA TUI lib — plain ANSI render.** `acca status` = snapshot sekali-cetak (extend `status.ts` yg ada + karakter bar `▓▓░` + warna ANSI), `watch acca status` utk refresh; footer aksi = command terpisah (`resume-now`/`cancel`/`log`). Nol dependency baru (paling selaras DEPENDENCY-POLICY + cross-platform). Ink/blessed ditolak: dep berat/tua vs kebutuhan monitor sederhana. Live-refresh TUI = backlog bila kelak perlu. | — | ✅ selesai |
 | ~~**Kebijakan resume agy sesi MATI** (I-22/A-4)~~ → 11 Jul (Ziffan): ADR-018 (opsi #3 OAuth). **→ REVISI 12 Jul: ADR-018 di-SUPERSEDE ADR-019** — opsi #3 terbukti baca pool kuota SALAH (gemini-cli harian ≠ grup agy weekly+5h; live-verify) → **optimistic resume + detect**; `oauth2.googleapis.com` dibatalkan. | — | ✅ selesai (ADR-019) |
 | Lisensi repo (MIT vs proprietary) — terkait rencana komersialisasi | Ziffan | sebelum publik |
+| **Pin WinSW vs `sc.exe` final + versi/hash WinSW** (ADR-021) — gate DEPENDENCY-POLICY | Ziffan | saat slice service M5 |
+| **Interval + lokasi + jumlah-retensi backup `acca.db`** (ADR-022) — nilai konfigurasi, bukan engine | Ziffan | saat slice backup M5 |
 | ~~Mekanisme probe usage Antigravity~~ → **ADR-010 (hybrid) LOCKED 3 Jul malam** (opsi #2 terbukti; residual #3/#1 = impl-tuning M3) | — | ✅ selesai |
 | ~~**Strategi continue sesi interaktif yang masih hidup** (inject "continue" ke PTY vs kill→resume-by-id; kebijakan default + gating)~~ → **diputuskan: ADR-014** (inject-ke-PTY preferred + gating ketat; fallback resume-by-id; gating-gagal = manual) | — | ✅ selesai (3 Jul malam) |
 | ~~**THREAT-MODEL.md** (ingress remote + egress sensitif + injection→aksi) — gate wajib tier C (ADR-013 §5)~~ → **dibuat 3 Jul (sore)**, di-review; **ADR-011/012/013 di-LOCK 3 Jul malam** | — | ✅ selesai |
@@ -557,6 +669,7 @@ Elemen ADR-014 lain tak berubah.
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-17 (sesi, spec M5 doc-first — **ADR-021/022/023 baru**) | **Tiga ADR baru + di-LOCK (Accepted, owner Ziffan) untuk fase perencanaan M5.** Diputuskan pasca-verifikasi web (sumber primer). **ADR-021 (deployment Windows):** Task Scheduler ONSTART terbukti rapuh untuk daemon (gagal-senyap + tanpa auto-restart on-crash — persis mode kegagalan yang produk cegah) → **Windows Service** (auto-restart on failure), registrasi via **template + skrip manual** (WinSW primary / `sc.exe` fallback, **nol dep npm baru** — simetris systemd Linux). **Men-supersede SEBAGIAN klausa Task Scheduler ADR-007** (systemd/Linux tetap). Pin WinSW/sc.exe + hash = Pending (gate DEPENDENCY-POLICY, slice service). **ADR-022 (backup/DR):** minimal — **WAL checkpoint (TRUNCATE) + file copy `acca.db`+sidecar + retensi N** via skrip+doc (bukan fitur daemon MVP); RPO=interval snapshot (diterima single-user); DR penuh/nol-backup ditolak. Interval/lokasi/retensi = Pending (nilai config, slice backup). **ADR-023 (IPC DACL / I-26):** verifikasi web membantah klaim ADR-015 "ACL default owner Windows" — Node/libuv named pipe **terbuka by design** (Everybody+Anonymous read; Node tak punya API set-DACL; issues #47086/#30823/#17743) + kandidat "cek PID client" **gugur** (PID spoofable — Project Zero/CVE-2018-0749, Microsoft anti-PID-enforcement). **Keputusan:** terima DACL terbuka sbg **residual risk terdokumentasi + hardening lapisan-app** (minimalkan data sensitif lewat pipe, hanya daemon mutasi state, injection firewall `inject`-tanpa-payload utuh, audit events); **native addon set-DACL DITOLAK** (over-engineering solo-user). **Men-scope-ulang klausa keamanan ADR-015** (transport tetap). **Disiplin supersede:** status ADR-007 & ADR-015 dianotasi (isi immutable tak diedit) + pointer ke ADR baru; header status + Pending diperbarui. Belum ada kode (fase spec). Dampak docs lanjut (sesi ini): PRD/TRD M5 di MILESTONES + NFR (availability service + backup RPO) + THREAT-MODEL (permukaan service + DACL) + FAILURE-MODES (baru) + vertical slices + SPEC LOCK. |
 | 2026-07-16 (sesi Windows, gate M3e + C-4) | **Keputusan MINOR reversible (bukan ADR)** — tutup gate keluar M3e + hardening pra-M5. **F-1 (Opsi B, keputusan owner):** guard `resumed_from!=null && detected_at==null` → BLOCKED di cabang exited `supervisor.ts` (tanpa migrasi) memutus loop re-spawn RC-1 (continue-job landing di sesi hasil-resume yang exit cepat); semantik dua kolom (`markLimitHit` isi `detected_at` vs `markRunningAfterInject` NULL-kan hanya di jalur alive) menjamin siklus SEHAT lolos. **I-31 (CC-only, owner):** grace-window OUTPUT-CC 5s pasca-`unlatch()` di `limit-watcher` → repaint banner limit lama CC tak re-fire LIMIT_HIT palsu (G-37 ditutup); hook `feedSignal` + agy tak disuppress (ADR-019 immediate detect utuh). **I-30 (guard estimator, owner):** `resolveClockTime` recent-past ≤2h → probe near-now (`heuristic`), bukan wrap +24 jam. **C-4/RC-4:** `reconcileDispatchLiveness` di awal dispatch (alive+pid-mati → `markOrphanExited` → cabang exited auto-recovery) + attempts-cap catch generik → tutup keluarga terakhir retry-senyap. Semua dalam ADR-013/014/017/019 (bukan ADR baru); reversible. Opus inline Tier-1 self-review PASS. **+PTY-integration test I-31 (live TANPA limit, negative-control terbukti).** **406 test** (392→406). Dampak docs: ISSUES (F-1/F-2/I-30/I-31/C-4 Tertutup + gate header hijau), GOTCHAS (G-37 ditutup, G-39 anotasi), CONTEXT, CLAUDE.md §2/README test count. |
 | 2026-07-16 (sesi Windows, I-15 live-verify token → **ADR-020**) | **ADR-020 baru + di-LOCK (amandemen token ADR-014 §1, owner Ziffan).** Live-verify agy **1.1.3** + CC **2.1.211** (otorisasi user) mengisi "keystroke agy = TBD" ADR-014: kata **`"continue"` telanjang tak andal utk agy** — agy menafsirnya pesan NL baru ("I do not have context…"/"more of same"), bukan resume turn. **Bukti penentu (limit ASLI, sesi sama, owner):** kalimat eksplisit "lanjutkan pekerjaan, tadi terhenti karena limit" → **agy DAN CC langsung melanjutkan pekerjaan terhenti**. Mekanisme inject terbukti benar (`injected:true`). **Keputusan:** `CONTINUE_TOKEN` `"continue\r"` → **`"continue the work that was interrupted by the usage limit\r"`** (English, owner). Literal-tetap-hardcoded-wrapper → **injection firewall utuh** (hanya isi kalimat berubah); bersama agy+CC; nol dep/egress. **Amandemen (bukan supersede)** — strategi ADR-014 lain tetap; pola ADR-017. **Sisa:** live-verify literal English pasca-reset agy (kelas I-15, reversible). Delta versi tercatat: agy 1.1.1→1.1.3, CC 2.1.207→2.1.211 (patch; G-33 `esc to cancel` + G-36 resume-cmd re-confirmed holds @1.1.3). Dampak docs: DECISIONS (ADR-020 + anotasi ADR-014 §1 & catatan agy + header), GOTCHAS G-40 baru, ISSUES I-15, CONTEXT, CLAUDE.md §7/README. |
 | 2026-07-13 (sesi RC, audit ketiga C-1..C-3) | **Keputusan MINOR reversible (bukan ADR)** — realisasi remedi audit menyeluruh ketiga (`docs/audit/AUDIT-2026-07-12-MENYELURUH.md`, merged PR #1). **RC-1 (C-1, P1, masuk gate):** resume-by-id hanya MEMUAT percakapan → tak melanjutkan kerja; kini `supervisor.ts` pasca `resume_spawned` **enqueue job `resume` untuk sesi BARU** (RUNNING+alive → jalur alive yang ada meng-inject `continue`; nol kanal baru, firewall ADR-013 utuh; masih-limit → detect ADR-019 seperti didesain). Enqueue best-effort (try/catch, cegah re-spawn loop, G-39). `RESUME_CONTINUE_DELAY_MS=15s` (kalibrasi=I-15). **RC-2 (C-2):** `isCanonicalUuid` (`shared/ids.ts`) gate `ccSessionId` hook sebelum jadi argv `--resume`. **RC-3 (C-3):** capturer id agy latch-first → **last-match-wins** (id exit-printed G-36 menang atas isi transcript tak tepercaya). Semua dalam ADR-014/019/013 (bukan ADR baru); reversible. Opus inline Tier-1 self-review APPROVE-WITH-NITS, **393 test**. Dampak docs: ISSUES (C-1/C-2/C-3 Tertutup, C-4..C-7 Terbuka), GOTCHAS G-39, CONTEXT, CLAUDE.md §2/README test count 386→393. |

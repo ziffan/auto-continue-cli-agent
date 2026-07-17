@@ -269,9 +269,172 @@ di-LOCK** (3 Jul malam); butuh Notifier (M4). Sisa yang di-tune saat M-remote: r
 **Catatan:** ini milestone paling sensitif — tak dimulai sebelum tier prasyaratnya hijau dan gate terpenuhi.
 
 ## M5 — Hardening + Deploy sebagai service
-**Slice:** jalankan daemon sebagai systemd (Linux) / Task Scheduler (Windows); security pass
-(least-privilege whitelist, audit events); dokumentasi user + install.
-**Selesai bila:** daemon survive reboot host; security review lolos; README/quick-start user siap.
+
+> **PRD+TRD di-lock 2026-07-17** (doc-first, skill `docs-first-spec` mode modul). ADR pengikat: **ADR-021**
+> (Windows Service), **ADR-022** (backup/DR minimal), **ADR-023** (IPC DACL residual + hardening I-26), di atas
+> ADR-007/015/017 yang sudah ada. Slice formal (vertical) ada di sub-bagian "Vertical slices M5" bawah.
+
+### PRD — apa & untuk siapa
+**Tujuan M5:** jadikan daemon dari "jalan saat user buka terminal" menjadi **layanan OS selalu-nyala** yang survive
+reboot + auto-restart on-crash, lalu **audit keamanan fondasi** sebelum M-remote memperluas permukaan, plus **jalur
+backup/restore** state. Ini yang membuat JTBD inti (auto-resume tengah-malam saat user jauh/tidur) **benar-benar
+terjamin** — bukan bergantung terminal terbuka.
+**Untuk:** Solo Orchestrator (PROJECT §2) di host always-on (laptop Ubuntu daily, PC Windows weekend, node headless 24/7).
+**Batasan M5 (DILARANG scope-creep):** BUKAN dashboard web (US-10, Later); BUKAN multi-user (US-12); BUKAN fitur `acca
+backup` in-daemon (skrip+doc cukup MVP, ADR-022); BUKAN native addon DACL (ADR-023 tolak). Install = **template + skrip
+manual**, DILARANG menambah dependency npm runtime baru (ADR-021).
+
+### TRD — bagaimana (kontrak teknis)
+
+**A. Service lifecycle lintas-OS (ADR-007 + ADR-021).**
+- **Linux — systemd `--user` service + lingering.** HARUS: sediakan template unit `acca-daemon.service` (`ExecStart`
+  = `node <path>/dist/cli/index.js daemon`, `Restart=on-failure`, `RestartSec`) + skrip install yang `systemctl --user
+  enable --now acca-daemon` **dan** `loginctl enable-linger $USER` (WAJIB — tanpa linger, service mati saat user logout;
+  verified 17 Jul via ArchWiki/systemd docs). Daemon runtime DILARANG butuh root.
+- **Windows — Windows Service (ADR-021, bukan Task Scheduler).** HARUS: template config **WinSW XML** (primary) yang
+  membungkus `node <path>\dist\cli\index.js daemon` dengan **auto-restart on failure** + log redirect; dokumentasikan
+  jalur **`sc.exe`** (built-in) sebagai fallback nol-tool. Install butuh admin **sekali** (registrasi); daemon runtime
+  least-privilege. DILARANG dep npm runtime baru; WinSW = binary vendored terpisah (pin versi+hash, gate DEPENDENCY-POLICY).
+- **Recovery state lintas-restart** (sudah ada, AC-7): service yang restart HARUS memanggil `supervisor.start()` yang
+  recover `scheduled_jobs` pending → job LIMIT_HIT yang jatuh tempo saat daemon mati tetap dijalankan. Slice service
+  HARUS memverifikasi ini end-to-end (bukan asumsi): reboot host saat ada job pending → job tetap fire pasca-boot.
+
+**B. Security pass menyeluruh-terfokus (persona security-review, skill `tier-review` tier 4).**
+Audit 5 permukaan fondasi; tiap temuan → tutup atau catat residual di THREAT-MODEL.md:
+1. **IPC / named pipe DACL (I-26, ADR-023).** HARUS: dokumentasikan DACL terbuka sbg residual risk + terapkan hardening
+   lapisan-app (minimalkan data sensitif lewat pipe; hanya daemon mutasi state — verifikasi; `inject` tanpa payload —
+   verifikasi firewall struktural utuh). DILARANG native addon / cek-PID (spoofable, ADR-023).
+2. **Egress whitelist (NFR §Security).** HARUS: verifikasi kode hanya egress ke host allowlist (`api.anthropic.com`,
+   localhost loopback agy LS, `api.telegram.org` bila M-remote nanti) via `guardEgress`/`ALLOWED_HOSTS`; tak ada jalur
+   lolos. Test: egress ke host non-allowlist → `EgressBlockedError`.
+3. **Credential-read at rest (ADR-005/010).** HARUS: verifikasi `oauth_creds.json`/`.credentials.json` hanya **dibaca**,
+   tak disalin/di-log; tak ada secret di `events.payload`/log. Test: grep jalur log/DB untuk kebocoran token.
+4. **Inject firewall (ADR-008/013/014/020).** HARUS: verifikasi token inject = literal hardcoded wrapper, IPC `inject`
+   tanpa payload; tak ada aksi diturunkan dari isi output. Test regresi sudah ada (ADR-020 guard) — konfirmasi cakupan.
+5. **Retensi state (ADR-004).** HARUS: verifikasi no-hard-delete (arsip `archived_at`, tak ada DELETE); `events`
+   append-only. Test: coba path yang menghapus → tak ada.
+
+**C. Backup/DR minimal (ADR-022).**
+- HARUS: skrip backup lintas-OS — `PRAGMA wal_checkpoint(TRUNCATE)` → salin `acca.db`(+`-wal`/`-shm`) ke lokasi backup
+  ber-timestamp → pangkas ke N snapshot terakhir (N + lokasi + interval = **konfigurasi**, bukan hardcode).
+- HARUS: dokumentasikan restore (stop service → ganti file → start) di quick-start.
+- DILARANG: fitur backup in-daemon di MVP; DR penuh (replikasi/PITR).
+
+**D. Dokumentasi user + install (docs + template + skrip).**
+- HARUS: `README`/quick-start berisi — instalasi service per-OS (langkah admin sekali), konfigurasi (path, backup,
+  `chat_id` bila M-remote), backup/restore, uninstall. HARUS: template unit/XML + skrip di `scripts/` (atau folder
+  `deploy/`). DILARANG: dokumentasi yang mengklaim "service hijau" tanpa bukti verifikasi live di mesin asli.
+
+### Acceptance criteria M5 (checklist test milestone)
+- [ ] **AC-M5-1** Service Linux (systemd --user + linger) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Ubuntu)*
+- [ ] **AC-M5-2** Service Windows (WinSW/sc.exe) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Windows)*
+- [ ] **AC-M5-3** Reboot host saat ada job LIMIT_HIT pending → job tetap fire pasca-boot (recovery AC-7 end-to-end). *(live-verify)*
+- [ ] **AC-M5-4** Security pass 5-permukaan selesai; tiap temuan ditutup atau tercatat residual di THREAT-MODEL.md.
+- [ ] **AC-M5-5** Egress ke host non-allowlist → `EgressBlockedError` (test); credential-read tak bocor ke log/DB (test/grep).
+- [ ] **AC-M5-6** Backup: `wal_checkpoint`+copy hasilkan `.db` konsisten yang bisa di-restore & daemon start bersih. *(sandbox-testable + 1 live)*
+- [ ] **AC-M5-7** Retensi backup pangkas ke N (config), tak hapus di luar N; no-hard-delete state terverifikasi.
+- [ ] **AC-M5-8** Quick-start install/backup/restore/uninstall lengkap per-OS; template unit/XML + skrip ada.
+- [ ] **AC-M5-9** Security-review gate (persona, skill `milestone-wrapup`) lolos untuk keseluruhan M5.
+
+### Pembagian verifikasi (COWORK-TOOLING-NOTES — build/service = mesin asli)
+- **Sandbox-testable** (unit/integration, tak butuh mesin asli): logika backup (checkpoint+copy+prune) atas DB fixture,
+  egress guard, credential-read firewall, retensi/no-delete, generator template unit/XML (string-render).
+- **WAJIB live-verify di mesin asli** (DILARANG klaim hijau tanpa output nyata dari user): registrasi service per-OS,
+  survive logout/reboot, auto-restart on-crash, recovery job pasca-boot, DACL hardening behavior. Orkestrator siapkan
+  skrip + perintah; **user jalankan di terminal disk asli** + setor bukti (output service status, log pasca-reboot).
+
+**Selesai bila:** AC-M5-1..9 lulus (yang live-verify dengan bukti dari mesin asli) + security-review gate lolos +
+quick-start siap. Backlog M5 (post-MVP): `acca backup`/`acca install` in-CLI, native DACL (bila multi-akun host nyata).
+
+### Vertical slices M5
+
+> Di-generate 2026-07-17 (skill `vertical-slice`). Urutan = dependency: backup (pure, fondasi) → security-audit
+> (pure/review) → service per-OS (template+live) → integration+gate. Tiap slice tandai **[SANDBOX]** (testable tanpa
+> mesin asli) atau **[LIVE]** (WAJIB verifikasi mesin asli, user setor bukti — COWORK-TOOLING-NOTES). Slice security &
+> service = **Tier 1** (security-sensitive: IPC, egress, credential, service privilege). Backup = Tier 1 (state/DB).
+
+#### M5.1 — Engine backup state (checkpoint + copy + prune) **[SANDBOX]**
+**Slice**: Fungsi murni yang meng-checkpoint WAL `acca.db`, menyalin file (+sidecar) ke lokasi backup ber-timestamp,
+lalu memangkas ke N snapshot terakhir — di-test end-to-end atas DB fixture (bukan CLI nyata).
+**Scope file**: `src/store/backup.ts` (baru), `src/shared/paths.ts` (helper lokasi backup bila perlu), `test/backup.test.ts` (baru).
+**Di luar scope**: `daemon/`, `cli/`, service template. DILARANG fitur backup in-daemon (skrip = M5.2).
+**Kriteria selesai (testable)**:
+- Given `acca.db` WAL aktif dengan data, When `backupDatabase(cfg)`, Then `PRAGMA wal_checkpoint(TRUNCATE)` dijalankan → file `.db` yang disalin **konsisten** (integrity_check OK, tak ada `-wal` sisa transaksi di salinan).
+- Given N+2 snapshot ada, When backup ke-(N+3), Then retensi pangkas ke **N** terakhir; snapshot di luar N **tak** dihapus di luar aturan (no-hard-delete state asli — ini salinan).
+- Config (lokasi, N, interval) dibaca dari **konfigurasi**, bukan hardcode (ADR-022).
+- Edge: DB tak ada → error jelas; lokasi backup tak bisa ditulis → error jelas (tak silent).
+**Bukti verifikasi**: paste output `test/backup.test.ts` hijau + integrity_check pasca-restore atas fixture.
+**Tier review**: **1** (menyentuh DB/state + jalur restore — korupsi = kehilangan data).
+
+#### M5.2 — Skrip backup + restore lintas-OS + dokumentasi **[SANDBOX render + LIVE 1×]**
+**Slice**: Skrip backup (memanggil engine M5.1) + langkah restore, dengan template penjadwalan (cron/systemd-timer Linux,
+Task Scheduler/skrip Windows), didokumentasikan di quick-start.
+**Scope file**: `scripts/backup.mjs` (baru), `deploy/backup/*` (template timer/task), `README`/`docs` bagian backup.
+**Di luar scope**: engine (M5.1), service unit daemon (M5.4/M5.5).
+**Kriteria selesai (testable)**:
+- Skrip render/exec atas engine M5.1 → hasil backup valid (sandbox: jalankan skrip atas DB fixture).
+- Restore terdokumentasi: stop service → ganti file → start; **1× LIVE**: user backup→restore→daemon start bersih.
+- Template penjadwalan per-OS ada + dokumentasi interval config.
+**Bukti verifikasi**: output skrip atas fixture (sandbox) + **[LIVE]** bukti user: backup→restore→`acca status` daemon hidup.
+**Tier review**: **1** (jalur restore state).
+
+#### M5.3 — Security pass audit 5-permukaan + hardening + THREAT-MODEL close-out **[SANDBOX test + REVIEW]**
+**Slice**: Audit + hardening 5 permukaan fondasi (IPC/DACL, egress, credential-read, inject firewall, retensi); tiap
+temuan ditutup (kode/test) atau tercatat residual di THREAT-MODEL §8; verifikasi via test + persona security-review.
+**Scope file**: `src/shared/http.ts` (egress guard test), `src/daemon/ipc-*.ts` (hardening `status` data-minimize),
+`src/shared/credentials.ts` (audit), `test/security-*.test.ts` (baru), `docs/THREAT-MODEL.md` (close-out T-L1..T-L8).
+**Di luar scope**: service registration (M5.4/5), backup (M5.1/2). DILARANG native addon DACL (ADR-023).
+**Kriteria selesai (testable)**:
+- Egress: request ke host non-allowlist → `EgressBlockedError` (test). Loopback agy LS tetap lolos guard (test).
+- Credential: grep/test — `oauth_creds.json`/token tak muncul di `events.payload`/log; hanya dibaca.
+- Inject firewall: konfirmasi `inject` IPC tanpa payload (test regresi cakup); token literal wrapper.
+- IPC DACL hardening: `status` via IPC tak dump cwd tak perlu (data-minimize); residual R-5 tercatat.
+- Retensi: no-hard-delete state (`events` append-only) terverifikasi (test/review).
+- Tiap dari T-L1..T-L8 (THREAT-MODEL §8) → status "tutup" atau "residual + alasan".
+**Bukti verifikasi**: paste `test/security-*.test.ts` hijau + ringkasan audit per-permukaan (persona security-review) + THREAT-MODEL §8 ter-update.
+**Tier review**: **1** (auth/IPC/egress/credential — inti keamanan; persona security-review skill `tier-review` tier 4).
+
+#### M5.4 — Service Linux (systemd --user + lingering) template + skrip + LIVE **[SANDBOX render + LIVE]**
+**Slice**: Template unit `acca-daemon.service` + skrip install (`systemctl --user enable --now` + `loginctl enable-linger`),
+di-verify survive logout+reboot+auto-restart di Ubuntu asli.
+**Scope file**: `deploy/linux/acca-daemon.service` (template), `scripts/install-linux.sh` (baru), `docs` bagian install Linux.
+**Di luar scope**: Windows (M5.5), backup (M5.2). Generator template = string-render (testable); registrasi = LIVE.
+**Kriteria selesai (testable)**:
+- Template render dengan path `dist/cli/index.js daemon`, `Restart=on-failure`, `RestartSec` (sandbox: assert isi unit).
+- **[LIVE Ubuntu]** install → `systemctl --user status` active; logout→login → masih hidup (linger); **reboot** → auto-start; kill daemon → auto-restart <30s. (AC-M5-1)
+- **[LIVE]** reboot saat job LIMIT_HIT pending → job fire pasca-boot (AC-M5-3 paruh Linux).
+**Bukti verifikasi**: assert render (sandbox) + **[LIVE]** paste `systemctl --user status` pasca-reboot + log recovery job.
+**Tier review**: **1** (service privilege + lifecycle; least-privilege runtime).
+
+#### M5.5 — Service Windows (Windows Service via WinSW/sc.exe) template + skrip + LIVE **[SANDBOX render + LIVE]**
+**Slice**: Template WinSW XML (primary) + dokumentasi `sc.exe` (fallback) + skrip install, di-verify survive
+logout+reboot+auto-restart di Windows asli. Pin WinSW versi/hash (gate DEPENDENCY-POLICY).
+**Scope file**: `deploy/windows/acca-daemon.xml` (WinSW template), `scripts/install-windows.ps1` (baru), `docs/DEPENDENCY-POLICY.md` (entri WinSW), `docs` bagian install Windows.
+**Di luar scope**: Linux (M5.4), backup. DILARANG dep npm baru (WinSW = binary vendored, ADR-021).
+**Kriteria selesai (testable)**:
+- Template WinSW XML render dengan path `node ...\dist\cli\index.js daemon`, auto-restart, log redirect (sandbox: assert isi XML).
+- Pin WinSW versi+hash di DEPENDENCY-POLICY (gate: verifikasi sumber+hash).
+- **[LIVE Windows]** install (admin sekali) → service running; logout→login → hidup; **reboot** → auto-start; kill → auto-restart <30s. (AC-M5-2)
+- **[LIVE]** reboot saat job pending → fire pasca-boot (AC-M5-3 paruh Windows).
+**Bukti verifikasi**: assert render (sandbox) + entri DEPENDENCY-POLICY + **[LIVE]** paste `sc query`/WinSW status pasca-reboot + log recovery.
+**Tier review**: **1** (service privilege + supply-chain WinSW).
+
+#### M5.6 — Quick-start install/uninstall + integration + milestone-wrapup gate **[SANDBOX + LIVE + GATE]**
+**Slice**: Quick-start lengkap (install/backup/restore/uninstall per-OS) + integration test M5 + security-review gate
+menyeluruh (skill `milestone-wrapup`), menutup M5.
+**Scope file**: `README`/`docs/QUICKSTART.md`, `docs/CONTEXT.md`, `CHANGELOG`; agregasi (tak sentuh src slice lain).
+**Di luar scope**: implementasi slice (sudah di M5.1–5.5).
+**Kriteria selesai (testable)**:
+- Quick-start: install service, konfigurasi, backup/restore, uninstall — lengkap per-OS, langkah admin ditandai.
+- Integration test M5 (agregasi) hijau; AC-M5-1..9 tercentang (yang LIVE dengan bukti user).
+- **Security-review gate** (persona, `milestone-wrapup`): T-L1..T-L8 tertutup/residual; egress/credential/inject/retensi checklist lolos.
+**Bukti verifikasi**: quick-start lengkap + integration test hijau + laporan gate security-review (paste).
+**Tier review**: **1** (gate keamanan menyeluruh — persona security-review).
+
+**Ringkasan M5:** 6 slice. **Semua Tier 1** (state/keamanan/service-privilege). Dependency: M5.1→M5.2 (engine→skrip);
+M5.3 independen (bisa paralel M5.1/2 — scope file tak tumpang-tindih); M5.4/M5.5 paralel (OS beda, file beda) tapi
+keduanya butuh **1 pemegang mesin per-OS** untuk LIVE; M5.6 terakhir (agregasi + gate). Slice **[LIVE]** (M5.2 sebagian,
+M5.4, M5.5, M5.6) WAJIB bukti dari mesin asli — DILARANG klaim hijau tanpa output user (COWORK-TOOLING-NOTES insiden 5).
 
 ---
 

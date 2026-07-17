@@ -17,6 +17,19 @@
 
 - Target **99% uptime daemon** di host always-on (≈ realistis untuk solo ops; jangan 99,9%).
 - Auto-resume hanya terjamin saat host hidup. Di laptop tidur → resume tertunda sampai bangun (batasan terdokumentasi).
+- **Service lifecycle (M5, ADR-007/021).** Daemon HARUS jalan sebagai service OS (systemd `--user`+linger Linux /
+  Windows Service Windows) yang: (a) **survive reboot host** (start otomatis saat boot), (b) **survive logout** (Linux:
+  `enable-linger`; Windows Service: independen sesi login), (c) **auto-restart on-crash** (`Restart=on-failure` / WinSW
+  restart policy). Target waktu daemon kembali hidup pasca-crash < 30 detik.
+- **Recovery state pasca-restart** (AC-7): job `scheduled_jobs` pending yang jatuh tempo saat daemon mati HARUS tetap
+  dijalankan setelah service restart/boot (recovery-saat-`start()`).
+
+## Backup / DR (M5, ADR-022)
+
+- **RPO** = interval snapshot backup (bukan continuous). Default interval terkonfigurasi; kehilangan maksimum = 1 interval.
+- Backup HARUS konsisten: `PRAGMA wal_checkpoint(TRUNCATE)` sebelum salin file (`acca.db`+`-wal`/`-shm`).
+- **Retensi** N snapshot terakhir (konfigurasi, bukan hardcode). No-hard-delete (arsip, tak purge — ADR-004).
+- Restore terdokumentasi (stop service → ganti file → start). DR penuh (replikasi/PITR) = **di luar scope MVP**.
 
 ## Reliability / Correctness
 

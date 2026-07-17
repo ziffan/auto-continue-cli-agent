@@ -142,8 +142,45 @@ Sebelum menulis kode tier B/C (M-remote):
 
 ---
 
+## 8. Permukaan lokal fondasi — M5 security pass (bukan remote)
+
+> Ditambahkan 2026-07-17 (spec M5). §1–§7 menutup permukaan **remote Telegram**. Bagian ini menutup permukaan
+> **lokal fondasi** yang diaudit di M5 security pass (persona security-review) **sebelum** M-remote memperluasnya.
+> Pengikat: **ADR-023** (IPC DACL), ADR-005/010 (credential), ADR-004 (retensi), ADR-021 (service).
+
+### 8.1 Ancaman lokal → mitigasi → jejak
+
+| ID | Ancaman | Mitigasi | Kontrol | AC |
+|---|---|---|---|---|
+| T-L1 | **DACL named pipe Windows terbuka** (I-26) — user lokal lain connect+read pipe → `status` bocorkan daftar cwd | **DITERIMA sbg residual risk (R-5)** + hardening lapisan-app: minimalkan data sensitif lewat pipe (`status` tak dump cwd tak perlu); Node tak punya API set-DACL (verified web); native addon ditolak | ADR-023 | AC-M5-4 |
+| T-L2 | User lokal lain **memicu** perintah via pipe (`inject`/`resume-now`/`cancel`) | **Injection firewall struktural:** `inject` = token literal hardcoded wrapper **tanpa payload** → tak bisa suntik teks arbitrer; `resume-now`/`cancel` = whitelist terbatas; **hanya daemon mutasi state** (ADR-017); audit `events` | ADR-014/020/017/023 | AC-M5-4 |
+| T-L3 | **Cek PID client sbg mitigasi** (kandidat lama I-26) ternyata palsu — PID spoofable | **Kandidat DITOLAK** (ADR-023): PID named pipe spoofable (Project Zero/CVE-2018-0749); Microsoft anti-PID-enforcement → tak dipakai (hindari rasa-aman-palsu) | ADR-023 | AC-M5-4 |
+| T-L4 | **Kredensial upstream bocor** — `oauth_creds.json`/`.credentials.json` tersalin/ter-log | Kredensial **hanya dibaca**, tak disalin/di-log (ADR-005/010); tak masuk `events.payload`/log; redaksi bila muncul di jalur egress | ADR-005/010 | AC-M5-5 |
+| T-L5 | **Egress nyasar** ke host non-allowlist (exfil / dep jahat) | **Whitelist egress** `guardEgress`/`ALLOWED_HOSTS` — hanya host NFR; non-allowlist → `EgressBlockedError` (test) | ADR-001/010/019/NFR | AC-M5-5 |
+| T-L6 | **State korup/hilang** (`acca.db`) — crash saat write / disk error | **Backup/DR minimal** (ADR-022): WAL checkpoint + file copy + retensi; restore terdokumentasi; no-hard-delete (arsip) | ADR-022/004 | AC-M5-6/7 |
+| T-L7 | **Service dijalankan dengan privilege berlebih** | Daemon **runtime least-privilege** (tak butuh root/admin); admin hanya saat **install** service (sekali) | ADR-021 | AC-M5-4 |
+| T-L8 | **Tampering audit log** (`events`) menghapus jejak | `events` **append-only** (tak ada UPDATE/DELETE); verifikasi di security pass | ADR-004/NFR | AC-M5-4 |
+
+### 8.2 Residual risk lokal (tambahan §6)
+
+- **R-5 (diterima, terdokumentasi — single-user desktop).** DACL named pipe Windows terbuka by Node design (Everybody+
+  Anonymous read; Node tak punya API set-DACL — issues nodejs/node #47086/#30823/#17743). User lokal lain bisa connect+read
+  pipe (`status` cwd leak) + memicu perintah whitelist (dibatasi injection firewall — tak bisa suntik teks arbitrer).
+  **Diterima** untuk single-user desktop. **Node headless multi-akun (ADR-007):** relevan → mitigasi deploy = akun OS khusus
+  daemon (isolasi user-level), bukan native addon. Revisit ADR-023 hanya bila kebutuhan multi-akun host konkret.
+- **R-6 (diterima).** Backup RPO = interval snapshot (bukan continuous, ADR-022) → job/event antara snapshot terakhir &
+  korupsi bisa hilang. Diterima single-user (kehilangan ≤1 interval; sesi LIMIT_HIT recover manual dari CLI agent asli).
+
+### 8.3 Gate M5 security pass
+
+Security-review gate M5 (skill `milestone-wrapup`, persona security-review) HARUS memverifikasi T-L1..T-L8 tertutup atau
+tercatat residual (R-5/R-6) **sebelum** M5 dinyatakan selesai — dan **sebelum** M-remote menambah permukaan §1–§7 di atas fondasi ini.
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan | Oleh |
 |---|---|---|
 | 2026-07-03 | Draft awal — aset, trust boundary, STRIDE 4 vektor (spoof/authz, egress, injection→aksi, DoS/repudiation), matriks kontrol→AC, residual risk, gate. Gate ADR-013 §5 untuk implementasi tier B/C. | Ziffan × Claude |
+| 2026-07-17 | **§8 baru — permukaan lokal fondasi (M5 security pass).** T-L1..T-L8 (DACL named pipe I-26/ADR-023, credential-read, egress whitelist, state korup, service privilege, audit tampering) + residual R-5 (DACL terbuka diterima single-user) / R-6 (backup RPO). Gate security-review M5 sebelum M-remote. Basis: verifikasi web DACL (Node tak bisa set-DACL; PID spoofable) → ADR-023. | Ziffan × Claude |

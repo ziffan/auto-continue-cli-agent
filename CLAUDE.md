@@ -24,8 +24,16 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 
 ## 2. Status
 
-Fase: **Implementasi — M3e KOREKSI LOOP** (dari tiga audit menyeluruh, `docs/audit/AUDIT-2026-07-11.md` + `-12-FOLLOWUP` +
-`-12-MENYELURUH`). **M1–M3d + M4 inti bertes** (412 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset →
+Fase: **M5 — Hardening + Deploy sebagai service (SPEC LOCKED 17 Jul, belum ada kode).** Semua gate M3e ✅ hijau (412 test).
+Urutan roadmap: **M5 → M-remote (Telegram)** (keputusan owner 17 Jul — daemon wajib nyala 24/7 sbg service dulu sebelum
+Telegram). **Spec M5 doc-first:** ADR-021 (Windows Service, supersede sebagian ADR-007), ADR-022 (backup/DR minimal),
+ADR-023 (IPC DACL terbuka = residual R-5 + hardening lapisan-app, scope-ulang ADR-015; native addon & PID-check ditolak,
+G-41). 6 vertical slice (M5.1 backup / M5.2 skrip+restore / M5.3 security-audit / M5.4 systemd / M5.5 Windows Service /
+M5.6 quickstart+gate) — semua Tier 1, LIVE-vs-SANDBOX ditandai. Pending: pin WinSW/`sc.exe` + backup config (owner Ziffan,
+saat slice). **Next:** slice **M5.1 (engine backup, [SANDBOX])** atau M5.3 (security-audit, paralel). Detail: `docs/MILESTONES.md` M5.
+
+**M3e (fase sebelumnya, ✅ selesai):** dari tiga audit menyeluruh, `docs/audit/AUDIT-2026-07-11.md` + `-12-FOLLOWUP` +
+`-12-MENYELURUH`. **M1–M3d + M4 inti bertes** (412 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset →
 probe usage → inject-continue sesi hidup / resume-by-id sesi mati + Notifier + proximity + usage-monitor + `acca status`
 usage-view + `acca log`. Perintah: `acca run/daemon/status/log`.
 **KOREKSI (audit):** klaim "loop auto-continue penuh selesai" dulu **overstated** — audit menemukan P1 di jalur resume/continue

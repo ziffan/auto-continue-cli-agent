@@ -200,11 +200,22 @@ memilih probe standalone OAuth `retrieveUserQuota` (+refresh `oauth2.googleapis.
   A-4, ADR-018→ADR-019, G-38. **✅ Cleanup dilakukan (12 Jul, `a82a372`):** mapping `PROBE_IMPOSSIBLE` + union member +
   test tak-terjangkau **DIHAPUS** (dead-code — supervisor emit `optimistic_resume_agy_exited`, nol pemanggil `probe_impossible`).
 
-### I-26 — ACL named pipe Windows belum diverifikasi (ADR-015 "owner-only") [P2, verifikasi di M5]
+### I-26 — DACL named pipe Windows terbuka (ADR-015 "owner-only" KELIRU) [P2] → KEPUTUSAN via ADR-023 (17 Jul); verifikasi hardening di M5.3/M5.5
 Named pipe Node/libuv default **bisa di-connect user lain** di mesin sama (DACL bukan owner-only spt chmod 0600).
 `status` bocorkan daftar cwd; `inject` bisa dipicu pihak lokal (dibatasi: token literal tanpa payload). Single-user
-desktop = risiko rendah; node headless multi-akun (ADR-007) = relevan. **Remedi:** verifikasi DACL nyata di M5 security
-pass → bila terbuka, catat residual risk THREAT-MODEL atau cek PID same-session-user. **Sumber:** audit A-8.
+desktop = risiko rendah; node headless multi-akun (ADR-007) = relevan.
+- **✅ VERIFIKASI WEB 17 Jul (spec M5, sumber primer) — pertanyaan "apakah terbuka" TERTUTUP: PASTI terbuka by Node design.**
+  Node/libuv named pipe = DACL default Windows (**Everybody + Anonymous Logon** generic read; user non-elevated saat ini
+  read+write) + **Node tak punya API set-DACL** (issues nodejs/node #47086/#30823/#17743, terbuka bertahun — mengubah DACL
+  mustahil tanpa native addon). Kandidat lama **"cek PID same-session-user" GUGUR** — PID named pipe **spoofable** (Google
+  Project Zero, CVE-2018-0749 kelas; Microsoft menyarankan JANGAN pakai PID sbg enforcement) → mitigasi palsu (G-41).
+- **✅ KEPUTUSAN (ADR-023, owner Ziffan 17 Jul):** DACL terbuka **DITERIMA sbg residual risk (R-5, THREAT-MODEL §8)** +
+  **hardening lapisan-app** (minimalkan data sensitif lewat pipe; hanya daemon mutasi state ADR-017; injection firewall
+  `inject`-tanpa-payload utuh; audit `events`). **Native addon set-DACL DITOLAK** (over-engineering solo-user). Klaim
+  keamanan ADR-015 di-scope-ulang.
+- **Sisa (verifikasi di M5):** bukan lagi "apakah terbuka" (sudah tahu) tapi **perilaku hardening** — M5.3 (`status`
+  data-minimize + firewall test), M5.5 (service). Node headless multi-akun → mitigasi deploy = akun OS khusus daemon (R-5).
+**Sumber:** audit A-8 + verifikasi web spec M5 (17 Jul), ADR-023, G-41.
 
 ### I-15 — Live-verify actuation dgn kondisi ASLI belum dilakukan (opportunistik) [P2, target saat limit asli]
 Kedua actuation seam LIVE-VERIFIED di Windows tapi dengan **proses proxy** (node-pty child echo / stub
