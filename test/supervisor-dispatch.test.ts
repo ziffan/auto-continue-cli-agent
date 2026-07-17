@@ -247,6 +247,37 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(remaining[0]?.kind).toBe('probe');
   });
 
+  it('probe: sesi TAK LAGI LIMIT_HIT saat job fire (mis. resume manual/race) → skip stale, TAK panggil probeUsage (I-35 residual)', async () => {
+    const probeUsage = vi.fn((): Promise<UsageSnapshot> => Promise.reject(new Error('probeUsage TAK BOLEH dipanggil untuk job stale')));
+    adapters.claude.probeUsage = probeUsage;
+
+    const { db: database } = await setupAndFire({
+      sessionId: 's-probe-stale',
+      procState: 'alive',
+      cwd: process.cwd(),
+      jobKind: 'probe',
+      // Simulasi status berubah SETELAH job dijadwalkan (resume-now manual / race) — SEBELUM job fire.
+      beforeFire: (db2) => db2.prepare("UPDATE sessions SET status = 'RUNNING' WHERE id = @id").run({ id: 's-probe-stale' }),
+    });
+
+    expect(probeUsage).not.toHaveBeenCalled();
+
+    // Job stale dibuang (done), TANPA enqueue job resume baru.
+    const remaining = pendingJobs(database, 's-probe-stale');
+    expect(remaining).toHaveLength(0);
+
+    // Status TAK disentuh dispatch (sudah RUNNING dari luar; guard hanya no-op, bukan menulis status).
+    const session = createSessionsRepo(database).getById('s-probe-stale');
+    expect(session?.status).toBe('RUNNING');
+
+    const events = eventsFor(database, 's-probe-stale');
+    const done = events.find((e) => e.type === 'job_dispatch_done');
+    expect(done).toBeDefined();
+    expect((done?.payload as { action: string; status: string }).action).toBe('skipped:probe_stale_status');
+    expect((done?.payload as { action: string; status: string }).status).toBe('RUNNING');
+    expect(events.find((e) => e.type === 'job_dispatch_error')).toBeUndefined();
+  });
+
   it('probe: adapter.probeUsage throws → error event + retry', async () => {
     adapters.claude.probeUsage = vi.fn((): Promise<UsageSnapshot> => Promise.reject(new Error('network boom')));
 

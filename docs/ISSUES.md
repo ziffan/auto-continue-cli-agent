@@ -90,21 +90,34 @@ dan G-35 (snapshot LS stale in-sesi) bikin korroborasi agy tak andal.
 - Wiring **kedua** pemanggil produksi: `cli/commands/run.ts` + `supervisor.ts` (sesi hasil-resume juga di-supervise).
 - **+23 test.** **Negative control TERBUKTI:** ambang→0 ⇒ tepat 2 test merah (suppress + jaring FN), 22 lain tetap hijau.
 
-**⚠ MASIH TERBUKA — jaring FN eksplisit (probe verifikasi) TIDAK dibangun.** Owner menyetujui "suppress + probe
-verifikasi"; yang terkirim baru **suppress**. Alasan (ditemukan saat implementasi, framing awal Opus KELIRU):
-1. **Probe verifikasi TAK bisa menunggangi job `probe` yang ada.** Cabang `probe` (`supervisor.ts:248-259`) tak pernah
-   menanyakan apakah sesinya limit — ia hanya bertanya "kuota tersedia?" → ya → `enqueue resume` → **inject**. Persis
-   bahaya yang mau dicegah. Butuh **guard status** di cabang itu (`session.status !== 'LIMIT_HIT'` ⇒ semantik verifikasi:
-   kuota habis → latch; tersedia → FP terkonfirmasi, **jangan** resume). Guard itu **perbaikan korektness berdiri sendiri**
-   — job `probe` yang menyala pada sesi RUNNING hari ini akan meng-inject tanpa alasan (keluarga F-1).
-2. **Jaring FN sebagian sudah GRATIS:** suppress **tak membuang** sinyal — baris limit berikutnya tetap diklasifikasi, jadi
+**⚠ MASIH TERBUKA (sebagian) — jaring FN eksplisit (probe verifikasi) belum dibangun; guard-status DITUTUP.** Owner
+menyetujui "suppress + probe verifikasi"; yang terkirim baru **suppress**. Alasan (ditemukan saat implementasi, framing
+awal Opus KELIRU):
+1. **✅ DITUTUP 17 Jul (Opus inline, Tier-1, 475 test) — guard status cabang `probe`.** Sebelum fix: cabang `probe`
+   (`supervisor.ts`) tak pernah menanyakan apakah sesinya **masih** LIMIT_HIT — ia langsung `probeUsage` → "kuota
+   tersedia?" → ya → `enqueue resume` → **inject**. Job `probe` stale yang fire pada sesi yang sudah **RUNNING**
+   (resume manual, race, atau kelak verifikasi FP dari jalur lain) akan meng-inject sesi yang tak pernah dikonfirmasi
+   limit — persis bahaya yang I-35 coba cegah (keluarga F-1). **Fix:** guard `session.status !== 'LIMIT_HIT'` tepat
+   sesudah `reconcileDispatchLiveness`, SEBELUM cabang agy-optimistic maupun `adapter.probeUsage` — job stale → audit
+   `job_dispatch_done {action:'skipped:probe_stale_status', status}` + `'done'` (no-op, bukan probe/inject). **+1 test**
+   (`beforeFire` set status→RUNNING pasca-`start()`, sebelum fire → assert `probeUsage` TAK terpanggil). **Negative
+   control TERBUKTI:** guard dihapus sementara → test gagal (`probeUsage` terpanggil 1×) → dikembalikan, 475 hijau.
+   Ini **perbaikan korektness berdiri sendiri** (melindungi SEMUA job `probe` stale, bukan cuma yang dari I-35) —
+   **bukan** implementasi "probe verifikasi eksplisit" (poin 2 di bawah, masih butuh keputusan desain terpisah).
+2. **⚠ MASIH TERBUKA — "probe verifikasi eksplisit" (enqueue dari `onUsageContradiction`) BELUM dibangun.** Guard di
+   atas hanya membuat job `probe` **stale** jadi no-op; ia **tidak** menambahkan mekanisme baru yang secara AKTIF
+   men-verifikasi FP (mis. men-jadwalkan probe susulan begitu korroborasi mendeteksi kontradiksi, lalu memutuskan
+   "kuota habis → latch (limit asli); tersedia → FP terkonfirmasi, jangan resume"). Itu butuh **keputusan desain**:
+   overload semantik job `probe` yang ada (kini sudah tervalidasi status — bisa dipakai kalau job itu ditulis dengan
+   status tetap LIMIT_HIT) vs job `kind:'verify'` baru (= migrasi `scheduled_jobs`, skema lebih jelas). **Belum
+   diputuskan owner** — guard status hari ini adalah *prasyarat* aman untuk opsi mana pun, bukan penggantinya.
+3. **Jaring FN sebagian sudah GRATIS:** suppress **tak membuang** sinyal — baris limit berikutnya tetap diklasifikasi, jadi
    saat snapshot menyusul (~2 menit) repaint banner CC melatch. Ada test-nya.
    **TAPI — asumsi yang belum dibuktikan:** bukti repaint (G-37) berasal dari skenario **pasca-inject**, BUKAN dari sesi
    yang limit-asli-dan-diam. Kalau CC mencetak banner **sekali** lalu bungkam, dan snapshot kebetulan basi <0.85, sesi
    menggantung SENYAP. **Residual ini nyata, kecil, dan belum tertutup.**
-**Next:** guard status cabang probe + enqueue verifikasi dari `onUsageContradiction` (Tier-1, butuh keputusan: overload
-semantik `probe` vs job kind `verify` baru [= migrasi]). Atau: buktikan perilaku repaint CC saat limit-asli-dan-diam →
-kalau repaint terkonfirmasi, residual ini gugur tanpa kode.
+**Next:** keputusan owner (overload `probe` vs job `verify` baru) untuk membangun poin 2. Atau: buktikan perilaku
+repaint CC saat limit-asli-dan-diam → kalau repaint terkonfirmasi, residual poin 3 gugur tanpa kode.
 
 ### I-36 — Repo ini sendiri = korpus yang memicu detektornya sendiri; `/session-start` = ranjau di bawah acca [P2, higiene dev — TIDAK menggantikan I-35]
 **Terukur 17 Jul: 103 literal yang cocok pola detektor, tersebar di 20 file.** Yang gawat — **5 di antaranya adalah file
