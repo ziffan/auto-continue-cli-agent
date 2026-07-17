@@ -26,6 +26,22 @@ export interface LimitWatcherDeps {
   /** I-31: audit opsional saat sinyal limit dari OUTPUT ditolak grace-window pasca-unlatch (repaint banner
    *  lama CC). Engine tetap murni — hanya callback; pemanggil (wrapper) yang menulis event. */
   onOutputSuppressed?: (result: DetectionResult) => void;
+  /** I-35: snapshot usage terakhir yang diketahui, untuk korroborasi sinyal limit dari OUTPUT.
+   *  Engine TETAP murni — ia tak membaca store sendiri; pemanggil (wrapper) yang menyuntik pembacanya.
+   *  `null` = tak ada/tak terbaca/skema tak dikenal → **jangan suppress** (perilaku pra-I-35). */
+  usageSnapshot?: () => UsageCorroboration | null;
+  /** I-35: audit opsional saat sinyal limit dari OUTPUT ditolak karena dibantah snapshot usage.
+   *  Wrapper menulis event `limit_suppressed` (reason `usage_contradicts`). */
+  onUsageContradiction?: (result: DetectionResult, corroboration: UsageCorroboration) => void;
+}
+
+/** I-35: potret usage minimal yang dibutuhkan korroborasi. Sengaja BUKAN `UsageSnapshot` penuh —
+ *  engine tak perlu (dan tak boleh) tahu bentuk per-adapter; pemanggil yang memampatkannya. */
+export interface UsageCorroboration {
+  /** epoch ms saat snapshot diambil (`capturedAt`) — dipakai menilai kesegaran. */
+  capturedAt: number;
+  /** fraksi terpakai TERTINGGI di antara window mengikat (`claudeMaxBindingUsedFraction`, I-25/I-35). */
+  maxBindingUsedFraction: number;
 }
 
 export interface LimitWatcher {
@@ -57,6 +73,24 @@ const BUFFER_TAIL_LEN = 4096;
  * di detik yang sama dgn inject); reversibel. */
 const POST_UNLATCH_OUTPUT_GRACE_MS = 5_000;
 
+/**
+ * I-35 (insiden live 17 Jul): ambang "kuota jelas longgar". Sinyal limit dari OUTPUT **CC** yang datang
+ * saat window mengikat masih di bawah ini = hampir pasti **prosa yang mengutip pesan kanonik**
+ * (dokumentasi, komentar kode, notifikasi acca sendiri, paste user) — bukan keadaan sesi. Data yang
+ * mengkalibrasi: FP nyata terukur pada **0.55**; limit ASLI terukur **≥0.94** (T-6, live-verify 16 Jul —
+ * probe tertinggal ~2 menit dari kebenaran upstream). 0.85 duduk di tengah jurang itu: ~30 poin bantalan
+ * ke sisi FP, ~9 poin ke sisi false-negative. Keputusan owner Ziffan 17 Jul.
+ */
+const USAGE_CONTRADICTION_THRESHOLD = 0.85;
+
+/**
+ * I-35: snapshot yang lebih tua dari ini TAK boleh membantah output — ia tak lagi bercerita tentang
+ * "sekarang". Usage-monitor (I-17) me-refresh ~2 menit → 5 menit ≈ 2,5 siklus (toleran satu siklus
+ * terlewat) tapi masih cukup baru untuk bermakna. Konsekuensi penting & disengaja: **daemon mati =
+ * snapshot menua = korroborasi mati sendiri** → perilaku pra-I-35 (latch). Gagal ke sisi aman.
+ */
+const USAGE_SNAPSHOT_MAX_AGE_MS = 5 * 60_000;
+
 export function createLimitWatcher(deps: LimitWatcherDeps): LimitWatcher {
   const now = deps.now ?? ((): number => Date.now());
   let buffer = '';
@@ -74,6 +108,23 @@ export function createLimitWatcher(deps: LimitWatcherDeps): LimitWatcher {
       if (deps.tool === 'claude' && unlatchedAt !== null && now() - unlatchedAt < POST_UNLATCH_OUTPUT_GRACE_MS) {
         deps.onOutputSuppressed?.(result);
         return;
+      }
+      // I-35: korroborasi. Sinyal limit dari OUTPUT CC yang DIBANTAH snapshot usage segar → jangan
+      // latch. TAK melatch = tak membuang apa pun: baris limit berikutnya tetap diklasifikasi, jadi
+      // bila ini ternyata limit ASLI (snapshot tertinggal), repaint banner CC berikutnya (G-37 —
+      // terbukti live, dasar keberadaan I-31) dievaluasi ulang begitu snapshot menyusul → latch.
+      // Itu jaring false-negative-nya, dan ia gratis. Hook StopFailure lewat `feedSignal` = PRIMER
+      // (ADR-001) → TAK pernah lewat sini → tak pernah disuppress.
+      if (deps.tool === 'claude') {
+        const corroboration = deps.usageSnapshot?.() ?? null;
+        if (
+          corroboration !== null &&
+          now() - corroboration.capturedAt <= USAGE_SNAPSHOT_MAX_AGE_MS &&
+          corroboration.maxBindingUsedFraction < USAGE_CONTRADICTION_THRESHOLD
+        ) {
+          deps.onUsageContradiction?.(result, corroboration);
+          return;
+        }
       }
       latched = true;
       deps.onLimit(result);

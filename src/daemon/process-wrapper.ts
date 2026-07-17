@@ -2,12 +2,14 @@ import { writeFileSync, unlinkSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import * as pty from 'node-pty';
 import { adapters } from '../adapters/index.js';
+import { claudeMaxBindingUsedFraction } from '../adapters/usage.js';
 import { createHookHandler } from './hook-relay.js';
 import { createInjectHandler } from './inject-continue.js';
 import { createSessionIdCapturer } from './session-id-capture.js';
 import { sendCommand } from './ipc-client.js';
 import { createIpcServer } from './ipc-server.js';
 import { createLimitWatcher } from './limit-watcher.js';
+import type { UsageCorroboration } from './limit-watcher.js';
 import { scheduleProbeForLimit } from './schedule-reset.js';
 import { foregroundIsAgent } from '../shared/foreground.js';
 import { genUniqueSessionId } from '../shared/ids.js';
@@ -15,7 +17,7 @@ import { createIdleTracker } from '../shared/idle-tracker.js';
 import { runtimeSocketPath, sessionControlSocketPath, sessionHookSettingsPath } from '../shared/paths.js';
 import { nowMs } from '../shared/time.js';
 import { which } from '../shared/which.js';
-import type { Tool } from '../shared/types.js';
+import type { Tool, UsageLimit } from '../shared/types.js';
 import type { EventsRepo } from '../store/repositories/events.js';
 import type { ScheduledJobsRepo } from '../store/repositories/scheduled-jobs.js';
 import type { SessionsRepo } from '../store/repositories/sessions.js';
@@ -35,12 +37,75 @@ export interface RunSessionDeps {
   sessions: SessionsRepo;
   events: EventsRepo;
   jobs: ScheduledJobsRepo;
+  /** I-35: pembaca JSON snapshot usage terakhir (`meta.usage_snapshot_<tool>`), untuk korroborasi
+   *  sinyal limit dari OUTPUT. Disuntik (bukan `meta` repo utuh) supaya wrapper tetap sempit &
+   *  teruji tanpa store. **Opsional:** absen/undefined/JSON rusak → korroborasi mati → perilaku
+   *  pra-I-35 (latch). Wajib di-wire di kedua pemanggil produksi (`cli/commands/run.ts` +
+   *  `daemon/supervisor.ts`) — kalau lupa, fitur mati SENYAP ke sisi aman, bukan ke sisi salah. */
+  usageSnapshotJson?: (tool: Tool) => string | undefined;
 }
 
 export interface RunSessionResult {
   sessionId: string;
   /** Resolve dengan exit code CLI target saat proses (bungkusan PTY) selesai. */
   waitForExit: Promise<number>;
+}
+
+/**
+ * I-35: baca snapshot usage terakhir dari store lalu mampatkan jadi `UsageCorroboration` untuk engine.
+ * **Setiap** jalur gagal — dep tak di-wire, snapshot belum pernah ditulis, JSON rusak, skema tak dikenal,
+ * `limits` kosong — mengembalikan `null` yang engine artikan "tak tahu" → TAK men-suppress → latch
+ * (perilaku pra-I-35). Ragu tak pernah boleh jatuh ke "berarti tak limit": false-negative = sesi limit
+ * asli menggantung selamanya tanpa error, jauh lebih mahal daripada false-positive yang berisik.
+ * JSON di sini tulisan kita sendiri (`saveSnapshot`), tapi tetap divalidasi — ia melewati disk & bisa
+ * berasal dari versi skema lain (G-42: DB dibaca lintas-proses).
+ */
+export function readUsageCorroboration(
+  tool: Tool,
+  usageSnapshotJson: ((tool: Tool) => string | undefined) | undefined,
+): UsageCorroboration | null {
+  // CC-only, STRUKTURAL (bukan sekadar mengandalkan guard di limit-watcher): `claudeMaxBindingUsedFraction`
+  // memakai definisi window-mengikat CC (global + scoped-aktif, I-25). agy BEDA — dual-limit per grup,
+  // SEMUA bucket mengikat (G-31) — jadi angka itu akan salah arti untuk agy. Guard di sini menutup jalur
+  // itu andai guard engine kelak dilonggarkan.
+  if (tool !== 'claude') return null;
+  const raw = usageSnapshotJson?.(tool);
+  if (raw === undefined) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+
+  const record = parsed as Record<string, unknown>;
+  const capturedAt = record['capturedAt'];
+  const limitsRaw = record['limits'];
+  if (typeof capturedAt !== 'number' || !Number.isFinite(capturedAt)) return null;
+  if (!Array.isArray(limitsRaw)) return null;
+
+  const limits: UsageLimit[] = [];
+  for (const entry of limitsRaw) {
+    if (typeof entry !== 'object' || entry === null) return null;
+    const e = entry as Record<string, unknown>;
+    const usedFraction = e['usedFraction'];
+    const kind = e['kind'];
+    if (typeof usedFraction !== 'number' || !Number.isFinite(usedFraction)) return null;
+    if (typeof kind !== 'string') return null;
+    limits.push({
+      kind,
+      usedFraction,
+      resetAt: null, // korroborasi tak memakai resetAt — jangan pura-pura mem-parse-nya.
+      ...(typeof e['scope'] === 'string' ? { scope: e['scope'] } : {}),
+      ...(typeof e['isActive'] === 'boolean' ? { isActive: e['isActive'] } : {}),
+    });
+  }
+
+  const maxBindingUsedFraction = claudeMaxBindingUsedFraction({ tool, limits, capturedAt });
+  if (maxBindingUsedFraction === null) return null;
+  return { capturedAt, maxBindingUsedFraction };
 }
 
 /**
@@ -192,6 +257,22 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
         session_id: id,
         type: 'limit_suppressed',
         payload: { reason: 'post_unlatch_output_grace', source: result.source, evidence: result.evidence?.slice(0, 200) },
+      });
+    },
+    // I-35: korroborasi — engine bertanya "berapa usage terakhir yang diketahui?", wrapper yang
+    // membacanya dari store. Engine tetap murni (tak menyentuh store/IPC, ADR-008/013).
+    usageSnapshot: () => readUsageCorroboration(spec.tool, deps.usageSnapshotJson),
+    onUsageContradiction: (result, corroboration) => {
+      deps.events.append({
+        session_id: id,
+        type: 'limit_suppressed',
+        payload: {
+          reason: 'usage_contradicts',
+          source: result.source,
+          evidence: result.evidence?.slice(0, 200),
+          maxBindingUsedFraction: corroboration.maxBindingUsedFraction,
+          snapshotAgeMs: nowMs() - corroboration.capturedAt,
+        },
       });
     },
     onLimit: (result) => {

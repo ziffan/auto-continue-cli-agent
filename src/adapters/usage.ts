@@ -94,10 +94,34 @@ export function parseClaudeOAuthUsage(raw: unknown, now: number): UsageSnapshot 
  * ini: dual-limit per grup → SEMUA bucket mengikat (G-31) → default supervisor `every(<1)` sudah benar.
  */
 export function claudeUsageAvailable(snapshot: UsageSnapshot): boolean {
+  const effective = bindingLimits(snapshot);
+  return effective.every((l) => l.usedFraction < 1);
+}
+
+/** Window yang benar-benar MENGIKAT sesi CC (definisi di doc `claudeUsageAvailable`): global +
+ *  scoped-aktif; bila tak ada yang teridentifikasi → SEMUA limit (sisi aman). Satu definisi dipakai
+ *  bersama `claudeUsageAvailable` (I-25) & `claudeMaxBindingUsedFraction` (I-35) supaya keduanya tak
+ *  pernah menyimpang soal "window mana yang dihitung". */
+function bindingLimits(snapshot: UsageSnapshot): UsageLimit[] {
   const isGating = (l: UsageLimit): boolean => l.scope === undefined || l.isActive === true;
   const gating = snapshot.limits.filter(isGating);
-  const effective = gating.length > 0 ? gating : snapshot.limits;
-  return effective.every((l) => l.usedFraction < 1);
+  return gating.length > 0 ? gating : snapshot.limits;
+}
+
+/**
+ * I-35: fraksi terpakai TERTINGGI di antara window mengikat CC. Dipakai untuk **korroborasi** sinyal
+ * limit yang datang dari OUTPUT: bila kuota nyata masih jauh di bawah ambang, output yang mengklaim
+ * limit hampir pasti **prosa** (dokumentasi, komentar kode, notifikasi acca sendiri, paste user) —
+ * bukan keadaan sesi. Insiden live 17 Jul: 2 FP dalam 1 sesi saat window mengikat baru 0.55.
+ *
+ * Return `null` bila snapshot tak punya limit sama sekali → pemanggil **tak boleh menyimpulkan apa pun**
+ * dan WAJIB jatuh ke perilaku pra-I-35 (latch). Ragu = jangan suppress: false-negative (limit asli tak
+ * pernah di-resume) jauh lebih mahal daripada false-positive.
+ */
+export function claudeMaxBindingUsedFraction(snapshot: UsageSnapshot): number | null {
+  const effective = bindingLimits(snapshot);
+  if (effective.length === 0) return null;
+  return Math.max(...effective.map((l) => l.usedFraction));
 }
 
 /** Kedua bucket statusLine (RESEARCH §2 poin 1). `resets_at` = **Unix epoch SECONDS** (G-4) —
