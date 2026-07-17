@@ -1,0 +1,24 @@
+# deploy/linux/acca-daemon.service - unit systemd --user untuk daemon acca (M5.4, ADR-021/007).
+# Ini service utama (long-running supervisor), BEDA dari acca-backup.service (one-shot, M5.2).
+#
+# JANGAN pasang manual: placeholder path node + entrypoint di [Service] disubstitusi jadi path
+# absolut oleh scripts/install-linux.sh, supaya tak bergantung PATH minimal systemd --user (G-12).
+#   sh scripts/install-linux.sh
+# Cek: systemctl --user status acca-daemon ; journalctl --user -u acca-daemon -f
+#
+# systemd --user + `loginctl enable-linger` (dilakukan install script) = daemon jalan tanpa sesi
+# login aktif: survive logout, auto-start saat boot (ADR-007 always-on). Tak kena I-33 (Windows-only:
+# service = user yang sama, $HOME & kredensial CC/agy sama).
+
+[Unit]
+Description=acca - supervisor daemon (auto-continue CLI agent)
+
+[Service]
+Type=simple
+ExecStart=<NODE> <ENTRYPOINT> daemon
+Restart=on-failure
+RestartSec=5
+# stdout/stderr -> journald otomatis (journalctl --user -u acca-daemon).
+
+[Install]
+WantedBy=default.target

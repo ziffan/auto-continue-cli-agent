@@ -161,7 +161,7 @@ menggantikan I-35 — user lain punya repo & paste-an mereka sendiri.
 **Sumber:** insiden live 17 Jul (lihat I-35).
 </details>
 
-### I-34 — Artefak shippable tanpa gate yang MENGEKSEKUSINYA = titik buta review [P2, `.ps1` ✅ ditutup 17 Jul; `.service`/`.sh`/XML MASIH TERBUKA → gate sebelum M5.4/M5.5 render]
+### I-34 — Artefak shippable tanpa gate yang MENGEKSEKUSINYA = titik buta review [P2, `.ps1` + `.service`/`.sh` ✅ ditutup 17 Jul; XML (M5.5) MASIH TERBUKA — tapi M5.5 sendiri ditunda/I-33]
 **Kelas cacat (bukan bug tunggal), ditemukan 17 Jul lewat DUA korban nyata dalam satu sesi:**
 1. **`register-backup-task.ps1`** (M5.2 `85be83c`) — **ter-commit, ditandai selesai, LOLOS tier-review Opus**, padahal
    **tak bisa di-parse PowerShell 5.1** (em-dash dalam string, **G-44**) → backup terjadwal Windows tak pernah jalan.
@@ -175,13 +175,20 @@ Membaca ≠ menjalankan — dan kelas ini lolos justru karena slice-nya ditandai
 **root cause (byte)** bukan gejala (parse): parser PowerShell butuh Windows → test bakal **skip di Ubuntu** (mesin harian)
 = gate bocor di tempat kerja paling sering. **Negative control terbukti.** README diperbaiki + **diverifikasi dengan
 benar-benar dijalankan** (`npm link` → `acca --version` → `0.1.0` → `acca status` render nyata).
-**MASIH TERBUKA — jangan ulangi pola ini:** **M5.4** akan mengirim `deploy/linux/acca-daemon.service` +
-`scripts/install-linux.sh`; **M5.5** (bila dibuka) akan mengirim `deploy/windows/acca-daemon.xml` +
-`install-windows.ps1`. **Kelas artefak yang PERSIS sama, dan `.service`/`.sh`/XML belum punya gate apa pun.**
-**DoD slice M5.4/M5.5: tiap artefak shippable WAJIB punya ≥1 gate yang memvalidasinya** — mis. `.service` = parse
-key=value + assert `Restart=on-failure`/`ExecStart` terisi + tak ada placeholder `<…>` tertinggal; `.sh` = `sh -n`
-(syntax check, lintas-OS via `sh`) atau minimal shellcheck bila ada; XML = well-formed + assert `<onfailure>`. Gate
-harus **lintas-OS** (jangan yang skip di Ubuntu). **Sumber:** M5.5 17 Jul (G-44, commit `d080f70`/`13da025`).
+**✅ DITUTUP untuk `.service`/`.sh` (M5.4, 17 Jul, Opus inline Tier-1):** DoD ditegakkan — gate DIDESAIN DULU sebelum
+render (bukan sesudah). `test/systemd-unit.test.ts`: struktur unit (tiap baris komentar/section/key=value), + untuk
+template daemon **render** (substitusi `<NODE>`/`<ENTRYPOINT>` dgn nilai contoh) → assert `<…>` nol tersisa +
+`Restart=on-failure` + `RestartSec` numerik + `Type=simple` + `WantedBy=default.target`, **+ setiap placeholder wajib
+disubstitusi oleh `scripts/install-linux.sh`** (ini menutup celah I-34 yang SEBENARNYA: template dikirim, hubungan
+template↔substitusi tak pernah di-gate — bukan sekadar "file bisa di-parse"). `test/shell-script.test.ts`: floor
+lintas-OS (LF-only [CRLF=`bad interpreter`], shebang, no-BOM) + `sh -n` depth (skip HANYA di Windows-tanpa-sh; Ubuntu
+daily selalu punya → tak bocor di daily driver). **Pelajaran tambahan:** assertion "no em-dash" (kelas G-44) TIDAK
+disalin ke gate ini — systemd & POSIX-sh baca UTF-8 native, em-dash di komentar tak merusak parser (beda dari .ps1/
+CP1252). Menyalin gate lintas-format tanpa mekanisme yang membenarkannya = false-premise. **3 negative control terbukti
+konkret** (CRLF, `sh -n` sintaks, baris-tanpa-`=`, placeholder bocor, Restart salah). **585 test.**
+**MASIH TERBUKA — XML (M5.5):** `deploy/windows/acca-daemon.xml` + `install-windows.ps1` belum ada gate — tapi **M5.5
+sendiri DITUNDA (I-33)**, jadi bukan hutang aktif. Saat M5.5 dibuka: XML = well-formed + assert `<onfailure action=
+"restart">` + placeholder tersubstitusi (pola sama). Gate harus lintas-OS. **Sumber:** M5.4 17 Jul (kelas dari G-44, `d080f70`/`13da025`).
 
 ### I-33 — Windows Service ≠ sesi user: daemon-as-service pakai DB & kredensial BERBEDA → produk mati SENYAP [P1, BLOCKER M5.5 — premis ADR-021 bentrok ADR-005]
 **Ditemukan 17 Jul (slice M5.5, probe empiris di Win 11 owner) — SEBELUM kode ditulis.** ADR-021 menetapkan deployment
