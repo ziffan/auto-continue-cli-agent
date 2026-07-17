@@ -14,17 +14,29 @@ export class BackupError extends Error {
   }
 }
 
+/** Retensi tiered GFS-lite (ADR-024): `hourly` snapshot terbaru + 1 representatif per
+ * hari-kalender lokal untuk `daily` hari terakhir yang punya snapshot. */
+export interface BackupRetention {
+  /** Jumlah snapshot terbaru yang DIPERTAHANKAN tanpa syarat (>=1 — selalu simpan snapshot terbaru). */
+  hourly: number;
+  /** Jumlah hari-kalender lokal terakhir yang dipertahankan 1 representatif (snapshot terbaru hari itu, >=0). */
+  daily: number;
+}
+
 export interface BackupConfig {
   /** Path DB sumber. Default: `dbPath()`. */
   dbPath: string;
   /** Direktori tujuan snapshot. Default: `backupDir()`. */
   backupDir: string;
-  /** Jumlah snapshot yang DIPERTAHANKAN setelah prune (>=1). */
-  retention: number;
+  /** Retensi tiered (ADR-024) — union hourly-terbaru + representatif-per-hari. */
+  retention: BackupRetention;
   /** Interval penjadwalan — dibaca untuk scheduler M5.2. Engine M5.1 TIDAK memakainya sendiri. */
   intervalMs?: number;
   /** Sumber waktu epoch ms — injektable agar test deterministik. Default `Date.now`. */
   clock?: () => number;
+  /** Fungsi hari-kalender dari epoch ms — injektable agar test deterministik. Default = hari
+   * LOKAL host (konsisten `status.ts`), lihat `defaultDayKeyOf`. */
+  dayKeyOf?: (epochMs: number) => string;
 }
 
 export interface BackupResult {
@@ -48,15 +60,26 @@ function parseIntEnvOptional(raw: string | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-/** Bangun `BackupConfig` dari `overrides` + env + default (ADR-022 — config over hardcode).
+/** Hari-kalender LOKAL host dari epoch ms (default `dayKeyOf` — konsisten `status.ts` yang
+ * render waktu lokal). Bukan hari-UTC — lihat ADR-024 Consequences soal DST. */
+function defaultDayKeyOf(epochMs: number): string {
+  const d = new Date(epochMs);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/** Bangun `BackupConfig` dari `overrides` + env + default (ADR-022/024 — config over hardcode).
  * Prioritas tiap field: `overrides` eksplisit → env (bila relevan) → default. */
 export function resolveBackupConfig(overrides?: Partial<BackupConfig>): BackupConfig {
   return {
     dbPath: overrides?.dbPath ?? defaultDbPath(),
     backupDir: overrides?.backupDir ?? defaultBackupDir(),
-    retention: overrides?.retention ?? parseIntEnv(process.env.ACCA_BACKUP_RETENTION, 7),
+    retention: overrides?.retention ?? {
+      hourly: parseIntEnv(process.env.ACCA_BACKUP_RETENTION_HOURLY, 24),
+      daily: parseIntEnv(process.env.ACCA_BACKUP_RETENTION_DAILY, 30),
+    },
     intervalMs: overrides?.intervalMs ?? parseIntEnvOptional(process.env.ACCA_BACKUP_INTERVAL_MS),
     clock: overrides?.clock ?? Date.now,
+    dayKeyOf: overrides?.dayKeyOf ?? defaultDayKeyOf,
   };
 }
 
@@ -73,8 +96,11 @@ export function backupDatabase(cfg?: Partial<BackupConfig>): BackupResult {
   const resolved = resolveBackupConfig(cfg);
   const { dbPath, retention } = resolved;
 
-  if (!Number.isInteger(retention) || retention < 1) {
-    throw new BackupError(`retention harus bilangan bulat >= 1, dapat: ${String(retention)}`);
+  if (!Number.isInteger(retention.hourly) || retention.hourly < 1) {
+    throw new BackupError(`retention.hourly harus bilangan bulat >= 1, dapat: ${String(retention.hourly)}`);
+  }
+  if (!Number.isInteger(retention.daily) || retention.daily < 0) {
+    throw new BackupError(`retention.daily harus bilangan bulat >= 0, dapat: ${String(retention.daily)}`);
   }
 
   if (!existsSync(dbPath)) {
@@ -128,15 +154,21 @@ export function backupDatabase(cfg?: Partial<BackupConfig>): BackupResult {
     throw err instanceof BackupError ? err : new BackupError('kegagalan tak terduga saat backup', { cause: err });
   }
 
-  const pruned = pruneSnapshots(targetDir, retention);
+  const pruned = pruneSnapshots(targetDir, retention, resolved.dayKeyOf ?? defaultDayKeyOf);
 
   return { path: destPath, pruned };
 }
 
-/** Pangkas snapshot lama di `dir` ke `retention` terbaru (urut epoch dari nama file, DESC).
+/** Pangkas snapshot lama di `dir` ke retensi **tiered GFS-lite** (ADR-024): union dari
+ * (a) `retention.hourly` snapshot terbaru, dan (b) 1 representatif (epoch terbesar) per
+ * hari-kalender (`dayKeyOf`) untuk `retention.daily` hari terakhir yang punya snapshot.
  * HANYA menyentuh file yang cocok pola `acca-backup-<epochMs>.db` — file asing di direktori
  * yang sama TAK PERNAH dihapus (no-hard-delete atas berkas di luar kendali engine ini). */
-function pruneSnapshots(dir: string, retention: number): string[] {
+export function pruneSnapshots(
+  dir: string,
+  retention: BackupRetention,
+  dayKeyOf: (epochMs: number) => string,
+): string[] {
   let entries: string[];
   try {
     entries = readdirSync(dir);
@@ -150,9 +182,29 @@ function pruneSnapshots(dir: string, retention: number): string[] {
     .map((e) => ({ name: e.name, epoch: Number.parseInt(e.match[1] ?? '0', 10) }))
     .sort((a, b) => b.epoch - a.epoch);
 
-  const toPrune = snapshots.slice(retention);
+  const keep = new Set<string>();
+
+  // Tier hourly: N snapshot terbaru (union — mungkin overlap dengan representatif harian).
+  for (const snap of snapshots.slice(0, retention.hourly)) {
+    keep.add(snap.name);
+  }
+
+  // Tier daily: 1 representatif (terbaru) per hari-kalender, untuk `daily` hari terakhir
+  // yang punya snapshot (gap hari tanpa snapshot tak menghabiskan budget).
+  const seenDays = new Map<string, string>();
+  for (const snap of snapshots) {
+    const key = dayKeyOf(snap.epoch);
+    if (!seenDays.has(key)) {
+      seenDays.set(key, snap.name);
+    }
+  }
+  for (const name of [...seenDays.values()].slice(0, retention.daily)) {
+    keep.add(name);
+  }
+
   const pruned: string[] = [];
-  for (const snap of toPrune) {
+  for (const snap of snapshots) {
+    if (keep.has(snap.name)) continue;
     const fullPath = join(dir, snap.name);
     try {
       unlinkSync(fullPath);

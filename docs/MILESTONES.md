@@ -361,8 +361,8 @@ ber-timestamp, lalu memangkas ke N snapshot terakhir — di-test end-to-end atas
 **Di luar scope**: `daemon/`, `cli/`, service template. DILARANG fitur backup in-daemon (skrip = M5.2).
 **Kriteria selesai (testable)**:
 - Given `acca.db` WAL aktif dengan data, When `backupDatabase(cfg)`, Then `PRAGMA wal_checkpoint(TRUNCATE)` dijalankan → file `.db` yang disalin **konsisten** (integrity_check OK, tak ada `-wal` sisa transaksi di salinan).
-- Given N+2 snapshot ada, When backup ke-(N+3), Then retensi pangkas ke **N** terakhir; snapshot di luar N **tak** dihapus di luar aturan (no-hard-delete state asli — ini salinan).
-- Config (lokasi, N, interval) dibaca dari **konfigurasi**, bukan hardcode (ADR-022).
+- **Retensi tiered (ADR-024, amandemen 17 Jul):** pertahankan `hourly` snapshot terbaru (default 24) + 1 representatif per hari-kalender lokal (epoch terbesar hari itu) untuk `daily` hari terakhir (default 30); prune sisanya. Snapshot yang di-keep **tak** dihapus (no-hard-delete state asli — ini salinan). *(Kriteria lama "pangkas ke N terakhir" di-amandemen ADR-024; engine `retention:number` → `{hourly,daily}`.)*
+- Config (lokasi, hourly, daily, interval) dibaca dari **konfigurasi** (env `ACCA_BACKUP_*`), bukan hardcode (ADR-022/024).
 - Edge: DB tak ada → error jelas; lokasi backup tak bisa ditulis → error jelas (tak silent).
 **Bukti verifikasi**: paste output `test/backup.test.ts` hijau + integrity_check pasca-restore atas fixture.
 **Tier review**: **1** (menyentuh DB/state + jalur restore — korupsi = kehilangan data).
@@ -370,10 +370,11 @@ ber-timestamp, lalu memangkas ke N snapshot terakhir — di-test end-to-end atas
 #### M5.2 — Skrip backup + restore lintas-OS + dokumentasi **[SANDBOX render + LIVE 1×]**
 **Slice**: Skrip backup (memanggil engine M5.1) + langkah restore, dengan template penjadwalan (cron/systemd-timer Linux,
 Task Scheduler/skrip Windows), didokumentasikan di quick-start.
-**Scope file**: `scripts/backup.mjs` (baru), `deploy/backup/*` (template timer/task), `README`/`docs` bagian backup.
-**Di luar scope**: engine (M5.1), service unit daemon (M5.4/M5.5).
+**Scope file**: `src/store/backup.ts` (**amandemen ADR-024:** retensi tiered `{hourly,daily}`), `test/backup.test.ts` (test tiered), `scripts/backup.js` (baru — `.js` ESM, pola `copy-migrations.js`), `deploy/backup/*` (template timer/task), `README`/`docs` bagian backup.
+**Di luar scope**: service unit daemon (M5.4/M5.5).
 **Kriteria selesai (testable)**:
-- Skrip render/exec atas engine M5.1 → hasil backup valid (sandbox: jalankan skrip atas DB fixture).
+- **Engine amandemen (ADR-024):** `backupDatabase` config `retention:number`→`{hourly,daily}`; prune tiered (24 hourly + 1 representatif/hari-lokal × 30 hari). Test tiered (bucket hourly + representatif-per-hari + gap-hari + hourly=1/daily=0 = rolling murni back-compat).
+- Skrip render/exec atas engine → hasil backup valid (sandbox: jalankan skrip atas DB fixture). Template jadwal default = **hourly** (ADR-024).
 - Restore terdokumentasi: stop service → ganti file → start; **1× LIVE**: user backup→restore→daemon start bersih.
 - Template penjadwalan per-OS ada + dokumentasi interval config.
 **Bukti verifikasi**: output skrip atas fixture (sandbox) + **[LIVE]** bukti user: backup→restore→`acca status` daemon hidup.

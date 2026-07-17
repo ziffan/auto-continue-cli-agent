@@ -1,0 +1,21 @@
+# Timer systemd --user — memicu acca-backup.service setiap jam (ADR-024: interval hourly,
+# selaras retensi tiered 24 hourly + 30 daily). Pasang bersama acca-backup.service (lihat
+# komentar di sana). `Persistent=true` = jalankan sesegera mungkin bila mesin mati saat jadwal
+# lewat (mis. laptop tidur/off) — hindari gap backup panjang tanpa perlu tetap online 24/7.
+#
+#   systemctl --user enable --now acca-backup.timer
+#   systemctl --user list-timers acca-backup.timer   # verifikasi jadwal
+#
+# Contoh EnvironmentFile (~/.config/acca/backup.env), diisi di acca-backup.service:
+#   ACCA_BACKUP_RETENTION_HOURLY=24
+#   ACCA_BACKUP_RETENTION_DAILY=30
+
+[Unit]
+Description=acca — jadwal backup acca.db (hourly, ADR-024)
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
