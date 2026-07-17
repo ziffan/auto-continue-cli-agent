@@ -31,6 +31,17 @@ export function dbPath(): string {
 }
 
 /**
+ * Direktori snapshot backup (M5.1). Prioritas: env `ACCA_BACKUP_DIR` (mis. untuk test) →
+ * `<dataDir()>/backups`. Dibuat otomatis bila belum ada.
+ */
+export function backupDir(): string {
+  const override = process.env.ACCA_BACKUP_DIR;
+  const dir = override ? override : join(dataDir(), 'backups');
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/**
  * Path socket IPC CLI↔daemon (ADR-015 — Node `net`: Unix domain socket / Windows named pipe,
  * bukan TCP). Prioritas: env `ACCA_SOCKET_PATH` (test) → Windows named pipe tetap →
  * `$XDG_RUNTIME_DIR/acca/daemon.sock` → fallback `~/.acca/daemon.sock`. Direktori dibuat

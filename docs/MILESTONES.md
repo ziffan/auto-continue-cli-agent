@@ -354,8 +354,9 @@ quick-start siap. Backlog M5 (post-MVP): `acca backup`/`acca install` in-CLI, na
 > service = **Tier 1** (security-sensitive: IPC, egress, credential, service privilege). Backup = Tier 1 (state/DB).
 
 #### M5.1 — Engine backup state (checkpoint + copy + prune) **[SANDBOX]**
-**Slice**: Fungsi murni yang meng-checkpoint WAL `acca.db`, menyalin file (+sidecar) ke lokasi backup ber-timestamp,
-lalu memangkas ke N snapshot terakhir — di-test end-to-end atas DB fixture (bukan CLI nyata).
+**Slice**: Fungsi murni yang meng-checkpoint WAL `acca.db` (`wal_checkpoint(TRUNCATE)`), menyalin **file utama saja**
+(bukan sidecar `-wal`/`-shm` — menyalin `-wal` basi = korupsi; pasca-TRUNCATE data ada di file utama) ke lokasi backup
+ber-timestamp, lalu memangkas ke N snapshot terakhir — di-test end-to-end atas DB fixture (bukan CLI nyata).
 **Scope file**: `src/store/backup.ts` (baru), `src/shared/paths.ts` (helper lokasi backup bila perlu), `test/backup.test.ts` (baru).
 **Di luar scope**: `daemon/`, `cli/`, service template. DILARANG fitur backup in-daemon (skrip = M5.2).
 **Kriteria selesai (testable)**:
