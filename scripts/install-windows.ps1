@@ -47,12 +47,18 @@ if (-not (Test-Path $templatePath)) {
 
 $userId = "$env:USERDOMAIN\$env:USERNAME"
 
+# conhost.exe headless-mode = node dijalankan tanpa jendela konsol (Hidden=true saja TAK cukup di
+# Task Scheduler @logon - node dapat PseudoConsoleWindow terlihat; LIVE 18 Jul, G-52). Selalu di System32.
+$conhost = Join-Path $env:SystemRoot 'System32\conhost.exe'
+if (-not (Test-Path $conhost)) { throw "conhost.exe tidak ditemukan di $conhost." }
+
 # XML-escape nilai substitusi (path/username jarang punya, tapi & < > wajib aman di XML).
 function ConvertTo-XmlText([string]$s) {
     return $s.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;')
 }
 
 $xml = Get-Content -Path $templatePath -Raw
+$xml = $xml.Replace('{{CONHOST}}',    (ConvertTo-XmlText $conhost))
 $xml = $xml.Replace('{{NODE}}',       (ConvertTo-XmlText $NodePath))
 $xml = $xml.Replace('{{ENTRYPOINT}}', (ConvertTo-XmlText $entrypoint))
 $xml = $xml.Replace('{{WORKDIR}}',    (ConvertTo-XmlText $InstallDir))

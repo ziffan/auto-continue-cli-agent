@@ -796,12 +796,29 @@ match` -> break menumpuk, file rusak, bisa lolos tak-ketahuan bila tak dicek pas
 **Cara benar:** untuk revert file untracked, simpan **salinan backup** dulu (`cp f f.bak` -> break -> run -> `mv f.bak f`),
 atau tulis-ulang isi benar setelahnya. **Sumber:** M5.5 negative-control 18 Jul.
 
+### G-52 — `<Hidden>true>` Task Scheduler TAK cegah jendela konsol; node @logon dapat PseudoConsoleWindow terlihat -> pakai conhost headless
+**Jebakan:** mengira `<Settings><Hidden>true</Hidden></Settings>` = run-hidden nol-jendela. **SALAH:** `Hidden` cuma
+menyembunyikan **task** dari daftar default UI Task Scheduler — **bukan** jendela proses aksinya. **LIVE 18 Jul (logon
+nyata, dikonfirmasi mata owner + detektor `EnumWindows`):** Task Scheduler @logon menjalankan `node.exe` langsung → node
+dapat **`PseudoConsoleWindow` TERLIHAT** (ConPTY) di desktop, walau `Hidden=true`. Detektor `MainWindowHandle` naif LOLOS
+(0) — jendela dimiliki ConPTY, bukan MainWindow node; deteksi benar = `EnumWindows` + class `PseudoConsoleWindow`/
+`ConsoleWindowClass` + `GetWindowThreadProcessId` cocok pohon-proses daemon.
+**Dampak:** AC-M5-2 "nol jendela konsol" gagal; jendela bisa ditutup owner tak sengaja → daemon mati.
+**Cara benar:** jalankan node via **`conhost.exe --headless`** (bukan `node` langsung) — Action `Command=conhost.exe`,
+`Arguments=--headless "<node>" "<entry>" daemon`. conhost headless = ConPTY tanpa jendela; ia tetap jadi **INDUK** node
+selama daemon hidup → task instance "running" → **`IgnoreNew` (watchdog anti-double-start) tetap sah** + kill node → conhost
+exit → repetisi restart. **Terverifikasi LIVE:** parent=conhost, `EnumWindows`→NONE, restart ~65s. **Reproduksi murah:**
+`Start-ScheduledTask` on-demand **mereproduksi** jendela logon (bukan cuma trigger logon) → iterasi fix tanpa logout/login
+berulang. **Alternatif ditolak:** VBScript+`wscript.exe` (GUI-subsystem, proven no-flash) — **VBScript deprecated** Win11 FoD;
+conhost native + tak-deprecated dipilih. **Revisit bila** `--headless` hilang/berubah di Windows mendatang. **Sumber:** M5.5 LIVE 18 Jul.
+
 ---
 
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-18 (M5.5 LIVE, no-flash) | **G-52** baru (`<Hidden>true>` Task Scheduler cuma sembunyikan task dari UI, BUKAN jendela proses; LIVE @logon nyata: `node` langsung dapat `PseudoConsoleWindow` TERLIHAT walau Hidden=true [mata owner + `EnumWindows`; `MainWindowHandle` naif lolos-palsu]. Fix: `conhost.exe --headless "<node>" "<entry>" daemon` → nol jendela + conhost=induk → IgnoreNew tetap sah + restart ~65s; `Start-ScheduledTask` on-demand mereproduksi jendela → iterasi murah tanpa logout berulang. VBScript+wscript ditolak [deprecated]). Dari M5.5 LIVE 18 Jul (logon nyata). |
 | 2026-07-18 (M5.5 LIVE, Task Scheduler) | **G-49** baru (`RestartOnFailure` Task Scheduler TAK andal me-restart daemon di-kill — LIVE: `taskkill /F` → nol restart 100s walau `Interval=PT1M Count=3`; pakai **watchdog repetisi** `LogonTrigger`+`Repetition PT1M`+`IgnoreNew` → restart ~61s; `<Repetition>` WAJIB sebelum `<Enabled>`). **G-50** baru (XML comment tak boleh muat `--`; naive tag-balance lolos, `System.Xml`/`Register-ScheduledTask` menolak → task gagal register; gate diperkuat cek `--`-in-comment; ketahuan hanya saat jalankan parser sungguhan = I-34). **G-51** baru (`git checkout -- <file>` tak bisa revert file untracked → negative-control break menumpuk; pakai backup `.bak` atau tulis-ulang). Dari M5.5 LIVE 18 Jul (Win 11). |
 | 2026-07-17 (M5.4 LIVE, systemd) | **G-47** baru (`Restart=on-failure` TAK restart pada exit bersih SIGTERM→exit 0; systemd anggap SIGTERM/SIGINT/SIGHUP/SIGPIPE + exit0 = sukses → uji auto-restart WAJIB SIGKILL, verifikasi `NRestarts`+PID baru; `Restart=always` bukan "fix" — melawan stop manual). **G-48** baru (`sed s\|<NODE>\|…\|g` global juga menggarabl token placeholder yang muncul di komentar prosa template → token `<X>` hanya di baris nilai, jangan di komentar; gate render tetap hijau krn tersubstitusi → tak ketahuan). Dari M5.4 LIVE 17 Jul (Ubuntu, systemd 255). |
 | 2026-07-17 (I-35, insiden FP live) | **G-45** baru (repo ini = korpus yang memicu detektornya sendiri; **3 LIMIT_HIT palsu dalam satu sesi**, nol dari CC yang benar-benar limit: [1] agent me-Read `patterns.ts` yang doc-comment-nya mengutip pesan asli verbatim → **detektor mendeteksi komentar sumbernya sendiri**; [2] **teks notifikasi acca sendiri** yang di-paste owner untuk didiagnosis; [3] **perintah `sed` redaksi yang ditulis pakai literal MENTAH** — perkakas pembersihnya sendiri jadi peluru. Skala: **103 literal di 20 file**, 46 di antaranya di 5 file yang `/session-start` WAJIBKAN dibaca → **ritual pembuka proyek ini ranjau di bawah acca**. Cara kerja aman: bentuk regex **ter-escape** [prefiks `\b` mematahkan word-boundary → tak cocok dirinya sendiri, terverifikasi] · redaksi pipeline [terbukti menangkap byte PTY nyata test I-31] · peta file berbahaya per-tool [literal agy aman utk sesi CC] · matikan daemon dulu [wrapper tetap menulis, yang berhenti actuation-nya]. Fix produk = **I-35**, higiene repo = **I-36**). Dari insiden live sesi `z36i` 17 Jul. |
