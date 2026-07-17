@@ -39,6 +39,58 @@
 > re-fire LIMIT_HIT palsu → I-31) + **reset clock-wrap** (output "resets 10:20pm" di-parse setelah lewat → jadwal +24 jam,
 > padahal probe tahu reset benar → I-30). Sisa I-15 CC = tutup I-30/I-31 lalu re-verify inject benar-benar melanjutkan turn.
 
+### I-33 — Windows Service ≠ sesi user: daemon-as-service pakai DB & kredensial BERBEDA → produk mati SENYAP [P1, BLOCKER M5.5 — premis ADR-021 bentrok ADR-005]
+**Ditemukan 17 Jul (slice M5.5, probe empiris di Win 11 owner) — SEBELUM kode ditulis.** ADR-021 menetapkan deployment
+Windows = Windows Service, tapi tak memeriksa **identitas akun** service. Windows Service default (WinSW tanpa
+`<serviceaccount>`) jalan sebagai **LocalSystem**, dan itu **bukan** sesi user. Ini bertabrakan langsung dengan **ADR-005**
+("supervisor mewarisi sesi login CLI yang ada di mesin").
+**BUKTI PROBE (service uji sekali-pakai, LocalSystem, sudah di-uninstall bersih):**
+| | Sesi user | Service (LocalSystem) |
+|---|---|---|
+| `whoami` | `lab2026zf\ziffa` | `nt authority\system` |
+| `os.homedir()` | `C:\Users\ziffa` | `C:\WINDOWS\system32\config\systemprofile` |
+| `dataDir()` (`paths.ts:12-26`) | `…\ziffa\AppData\Local\acca` | `…\systemprofile\AppData\Local\acca` |
+| **`sameDbAsUser`** | `true` | **`false`** |
+| `resolvedDbExists` | `true` | **`false`** |
+| **`credentials.exists`** (`credentials.ts:24`) | `true` | **`false`** |
+**Dampak (kelas kegagalan TERBURUK — senyap, dan lolos AC yang ada):**
+1. **Split-brain DB.** `%LOCALAPPDATA%` **terdefinisi** di bawah SYSTEM (koreksi: bukan "undefined" spt klaim awal) tapi
+   menunjuk `systemprofile` → daemon-service resolve `acca.db` **berbeda**. `resolvedDbExists:false` → daemon akan
+   menjalankan migrasi + **membuat DB kosong baru**, lalu jalan selamanya melihat **nol sesi**. Tanpa error.
+2. **Kredensial putus.** `.claude/.credentials.json` tak ada di profil SYSTEM → `claude`/`agy` yang di-spawn daemon
+   **tak terautentikasi** → resume gagal. Premis ADR-005 runtuh.
+3. **Menipu total.** `sc query` = RUNNING (hijau). `acca status` menampilkan sesi user (ingat **G-42**: CLI baca DB
+   LANGSUNG, bukan lewat IPC) → semuanya *tampak* benar. Jam 02:00: tak terjadi apa-apa.
+4. **AC-M5-2 seperti tertulis AKAN LULUS sementara produk mati** — ia hanya mengecek service survive reboot/auto-restart.
+   → **AC-M5-2 WAJIB diperkuat** (bukti wajib: daemon baca `acca.db` yang SAMA + CLI ter-spawn TERAUTENTIKASI).
+**Kenapa Linux (M5.4) TAK kena:** `systemd --user` + lingering jalan **sebagai user** dgn `$HOME` user + survive logout.
+Windows **tak punya padanan** `systemd --user`. Asimetri ini fundamental, bukan detail impl.
+**Opsi + status (BELUM diputuskan — butuh solusi sebelum M5.5 jalan):**
+- **(a) Service sebagai akun user.** Password sekali saat install → SCM simpan di **LSA secrets** (bukan file).
+  **WinSW `<serviceaccount>` DITOLAK** — `sample-allOptions.xml` resmi v2.12.0 menuntut `<password>Pa55w0rd</password>`
+  **plaintext di XML**. Jalur waras = install (LocalSystem) → set akun via `PSCredential`/WMI `Change()` (password tak
+  pernah ke file/command-line). **4 ketidakpastian bertumpuk (belum diuji):** butuh password owner; kemungkinan butuh
+  grant **`SeServiceLogonRight`** (mutasi kebijakan keamanan lokal via `secedit` — invasif, harus di-revert); MS
+  mendokumentasikan profil user **tidak** otomatis di-load untuk service → `%LOCALAPPDATA%` bisa TETAP salah walau jalan
+  sbg user; service hidup di **session 0** terisolasi → node-pty/ConPTY + auth `claude` di sana **belum pernah dibuktikan**.
+  Mitigasi parsial: pin `<env ACCA_DATA_DIR>` + `<env USERPROFILE>` di XML → resolusi path deterministik tak bergantung
+  profil ter-load (menutup #1, TIDAK menutup #2 bila auth butuh konteks user).
+- **(b) LocalSystem + pin `<env>`.** **DITOLAK atas dasar keamanan** (bukan teknis — SYSTEM bisa baca file user, jadi
+  mungkin saja jalan): men-spawn CLI agent arbitrer (`claude`/`agy`) dgn **privilege tertinggi mesin** = eskalasi
+  privilege sebagai fitur; proyek yang cermat soal residual DACL (ADR-023) tak boleh menerima ini. Risiko teknis sisa:
+  `.credentials.json` DPAPI user-scope → SYSTEM tak bisa decrypt; file tulisan `claude` jadi SYSTEM-owned di profil user.
+- **(c) DITUNDA — keputusan owner Ziffan 17 Jul:** **Windows = `acca daemon` manual di terminal** sampai solusi ketemu.
+  **ADR-021 TETAP jadi target** Windows (bila kelak jadi service, itu Windows Service — bukan Task Scheduler; keputusan
+  ADR-021 TIDAK dibalik); yang ditunda = realisasinya, karena blocker ini. Batasan sudah selaras ADR-007 ("di laptop yang
+  tidur, resume tertunda sampai bangun"). Host always-on sejati = node headless/VPS (Linux, M5.4) — di situ nol masalah.
+**Konsekuensi:** **M5.5 DITUNDA** (bukan dibatalkan). **AC-M5-2 + paruh Windows AC-M5-3 = terbuka.** M5 akan tutup
+**PARSIAL** (Linux hijau, Windows ditunda). ADR-021 dianotasi menunjuk issue ini supaya sesi berikutnya tak menginstall
+service lalu jatuh ke lubang yang sama.
+**Next bila dibuka lagi:** probe stage-2 (service as-user: profil ter-load? creds kebaca? butuh `secedit`?) lalu, bila
+lulus, verifikasi **session-0 PTY** dgn spawn `claude` sungguhan. Keduanya butuh owner + mesin asli.
+**Sumber:** probe sekali-pakai 17 Jul (`scratchpad/probe/`, di luar repo, read-only tanpa mutasi sistem — dibuktikan
+`resolvedDbExists:false`); `sample-allOptions.xml` WinSW v2.12.0; Microsoft Learn `LoadUserProfile`.
+
 ### I-32 — Backup one-shot vs daemon LIVE: race `wal_checkpoint(TRUNCATE)`+`copyFileSync` bisa hasilkan salinan korup [P2, tutup saat M5.2 LIVE / wiring backup]
 **Konteks:** M5.1/M5.2 engine `backupDatabase` membuka **koneksi kedua** ke `acca.db`, `wal_checkpoint(TRUNCATE)`, lalu `copyFileSync` file utama. Aman untuk **koneksi tunggal** (sandbox test, CLI one-shot tanpa daemon). Tapi `scripts/backup.js` dijadwalkan jalan **saat daemon HIDUP** memegang koneksinya sendiri (mode WAL) → dua risiko:
 - (a) Committed-but-not-checkpointed frames di WAL daemon tak masuk salinan → salinan sedikit basi (RPO gap, ≤beberapa txn — diterima R-6).

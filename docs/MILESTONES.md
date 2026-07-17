@@ -408,8 +408,20 @@ di-verify survive logout+reboot+auto-restart di Ubuntu asli.
 **Bukti verifikasi**: assert render (sandbox) + **[LIVE]** paste `systemctl --user status` pasca-reboot + log recovery job.
 **Tier review**: **1** (service privilege + lifecycle; least-privilege runtime).
 
-#### M5.5 — Service Windows (Windows Service via WinSW) template + skrip + LIVE **[SANDBOX render + LIVE]**
-**Slice**: Template WinSW XML + skrip install (unduh WinSW + **verifikasi hash** + register), di-verify survive
+#### M5.5 — Service Windows (Windows Service via WinSW) template + skrip + LIVE **[DITUNDA — BLOCKER I-33]**
+> **⛔ DITUNDA 17 Jul (keputusan owner Ziffan), SEBELUM kode ditulis — bukan dibatalkan.** Probe empiris membuktikan
+> **Windows Service ≠ sesi user**: default LocalSystem → `acca.db` BERBEDA (`sameDbAsUser:false`, DB kosong baru dibuat)
+> + `.claude/.credentials.json` tak ada → **produk mati SENYAP** sementara `sc query` RUNNING (**I-33**, bukti tabel di
+> ISSUES). Premis ADR-021 bentrok **ADR-005**. **Windows sementara = `acca daemon` manual di terminal** (batasan selaras
+> ADR-007). Pin WinSW (ADR-025) **tetap sah & tetap terpakai** saat slice ini dibuka lagi.
+> **Syarat buka lagi:** I-33 selesai — probe stage-2 (service as-user: profil ter-load? creds kebaca? butuh `secedit`?),
+> lalu verifikasi **session-0 PTY** dgn spawn `claude` sungguhan. Keduanya butuh owner + mesin Windows asli.
+> **AC-M5-2 WAJIB DIPERKUAT saat dibuka** — "service RUNNING" TAK cukup (ia lulus sambil produk mati). Bukti wajib:
+> daemon-service baca `acca.db` **yang SAMA** dgn CLI user **DAN** CLI ter-spawn **TERAUTENTIKASI**.
+> **DILARANG** jalur LocalSystem+`<env>` pin (ditolak atas dasar keamanan: spawn agent CLI sbg SYSTEM = eskalasi
+> privilege sbg fitur) dan **DILARANG** `<serviceaccount>` WinSW (menuntut password plaintext di XML).
+
+**Slice (saat dibuka lagi)**: Template WinSW XML + skrip install (unduh WinSW + **verifikasi hash** + register), di-verify survive
 logout+reboot+auto-restart di Windows asli.
 **⚠ Di-update 17 Jul (ADR-025 — gate pin DITUTUP sebelum slice mulai):** (a) **dokumentasi `sc.exe` fallback DIHAPUS dari
 scope** — klausa itu **VOID**: `sc.exe` tak bisa host `node` (registrasi sukses tapi service tak start, **error 1053** —

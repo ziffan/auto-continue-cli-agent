@@ -45,12 +45,36 @@ Jalankan dari source (`npm install && npm run build`; belum ada paket/installer 
 
 | Perintah                            | Fungsi                                                                                 |
 | ----------------------------------- | -------------------------------------------------------------------------------------- |
-| `acca run -- <claude\|agy> [args…]` | Jalankan CLI target di bawah supervisor (PTY wrapper); catat sesi + deteksi limit.     |
+| `acca run <claude\|agy> [args…]`    | Jalankan CLI target di bawah supervisor (PTY wrapper); catat sesi + deteksi limit.     |
 | `acca daemon`                       | Supervisor daemon: rekonsiliasi orphan, scheduler resume, monitor usage periodik, IPC. |
 | `acca status`                       | Sesi termonitor + usage best-effort (bar per window, indikator "perkiraan").           |
 | `acca log [sessionId]`              | Riwayat event / audit trail (terbaru dulu).                                            |
 
-Belum ada: kontrol Telegram (M-remote) & `resume-now`/`cancel` via remote, deploy sebagai service (M5).
+Belum ada: kontrol Telegram (M-remote) & `resume-now`/`cancel` via remote, deploy sebagai service (M5 — lihat bawah).
+
+## Menjalankan daemon
+
+Auto-resume hanya jalan bila **daemon hidup** saat window limit reset. Daemon harus jalan **sebagai kamu** — ia
+memakai `acca.db` di profil kamu dan mewarisi sesi login `claude`/`agy` kamu (ADR-005).
+
+**Sekarang (semua OS) — manual:**
+
+```bash
+acca daemon      # biarkan terminal ini terbuka
+```
+
+**Linux — service (systemd `--user` + lingering):** ini jalur always-on yang didukung; jalan sebagai user kamu dan
+bertahan pasca-logout. Template + skrip menyusul di slice M5.4.
+
+**Windows — service: DITUNDA, pakai `acca daemon` manual dulu.** Bukan karena belum sempat, tapi karena ada blocker
+nyata yang sudah kami buktikan empiris: Windows Service default jalan sebagai **LocalSystem**, bukan sebagai kamu →
+ia me-resolve **`acca.db` yang berbeda** (di `C:\WINDOWS\system32\config\systemprofile\…`, dan membuat DB kosong baru)
+serta **tak melihat kredensial** `claude`/`agy` kamu. Gejalanya menipu: `sc query` bilang RUNNING dan `acca status`
+terlihat normal — tapi daemon menatap database kosong dan **tak melakukan apa pun saat limit reset**. Jadi jangan
+daftarkan `acca daemon` sebagai Windows Service dulu. Detail + jalan keluar yang sedang digarap: **I-33**
+(`docs/ISSUES.md`).
+
+**Batasan (semua OS, ADR-007):** kalau mesin tidur/mati, resume tertunda sampai ia bangun.
 
 ## Backup & restore
 
