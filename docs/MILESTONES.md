@@ -271,12 +271,12 @@ di-LOCK** (3 Jul malam); butuh Notifier (M4). Sisa yang di-tune saat M-remote: r
 ## M5 — Hardening + Deploy sebagai service
 
 > **STATUS: ✅ DITUTUP PARSIAL 2026-07-17 (Linux track lengkap & LIVE-verified; Windows ditunda).** Slice: **M5.1/M5.2
-> engine backup ✅ SANDBOX** (restore LIVE 1× = residual T-L6, owner-hand) · **M5.3 security pass ✅** (T-L1/2/4/5/8 tutup,
-> T-L7 Linux tutup via M5.4, T-L6 residual) · **M5.4 systemd `--user` ✅ LIVE** (AC-M5-1 penuh + AC-M5-3 Linux) · **M5.5
-> Windows Service ⛔ DITUNDA (I-33)** — LocalSystem split-brain, owner: `acca daemon` manual dulu · **M5.6 wrap-up ✅**
-> (checklist di bawah). **585 test hijau.** **Gate ke M-remote:** sisa **T-L6 restore LIVE 1×** (kecil). AC-M5-2 + paruh
-> Windows AC-M5-3 = terbawa ke M5.5 saat I-33 dibuka. Penutupan **jujur** (bukan "dengan catatan"): tak ada kegagalan
-> disembunyikan — Windows deferral & T-L6 residual tercatat eksplisit + punya trigger/owner.
+> backup ✅** (engine SANDBOX + **restore LIVE-verified M5.6** — `tl6x` ter-revert = bukti restore genuine) · **M5.3
+> security pass ✅** (T-L1/2/4/5/8 tutup, T-L7 Linux tutup via M5.4, **T-L6 tutup via M5.6 restore LIVE**) · **M5.4 systemd
+> `--user` ✅ LIVE** (AC-M5-1 penuh + AC-M5-3 Linux) · **M5.5 Windows Service ⛔ DITUNDA (I-33)** — LocalSystem split-brain,
+> owner: `acca daemon` manual dulu · **M5.6 wrap-up ✅** (checklist di bawah). **585 test hijau.** **Gate security-review
+> ke M-remote BERSIH** (semua T-L lokal Linux tutup; T-L3 N/A). AC-M5-2 + paruh Windows AC-M5-3 = terbawa ke M5.5 saat I-33
+> dibuka. Penutupan **jujur** (bukan "dengan catatan"): tak ada kegagalan disembunyikan — Windows deferral tercatat eksplisit + trigger/owner.
 
 > **PRD+TRD di-lock 2026-07-17** (doc-first, skill `docs-first-spec` mode modul). ADR pengikat: **ADR-021**
 > (Windows Service), **ADR-022** (backup/DR minimal), **ADR-023** (IPC DACL residual + hardening I-26), di atas
@@ -337,12 +337,12 @@ Audit 5 permukaan fondasi; tiap temuan → tutup atau catat residual di THREAT-M
 - [x] **AC-M5-1** Service Linux (systemd --user + linger) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Ubuntu)* — **✅ PENUH 17 Jul (Ubuntu, systemd 255):** install→`active (running)` · **auto-restart on-crash** (SIGKILL→restart PID baru ~5s, `NRestarts=1`, <30s; G-47) · same-DB (`acca status`→daemon HIDUP, kontras I-33) · **logout→login survive** (owner) · **reboot→auto-start** (owner + korroborasi: `up 1min`, daemon `active since` +6s pasca-boot, PID baru 2642, `enabled`+`Linger=yes` bertahan).
 - [ ] **AC-M5-2** Service Windows (WinSW/sc.exe) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Windows)*
 - [x] **AC-M5-3** Reboot host saat ada job LIMIT_HIT pending → job tetap fire pasca-boot (recovery AC-7 end-to-end). *(live-verify)* — **✅ Linux 17 Jul:** job `probe` pending di-stage (sesi EXITED → guard I-35 = no-op aman, nol resume), daemon di-stop, host reboot → daemon **auto-start** → recovery-on-start fire job **7s pasca-boot** (`job_dispatch_done skipped:probe_stale_status`, created_at > boot) + job **terkonsumsi**. Paruh Windows menunggu M5.5 (ditunda/I-33).
-- [ ] **AC-M5-4** Security pass 5-permukaan selesai; tiap temuan ditutup atau tercatat residual di THREAT-MODEL.md.
-- [ ] **AC-M5-5** Egress ke host non-allowlist → `EgressBlockedError` (test); credential-read tak bocor ke log/DB (test/grep).
-- [ ] **AC-M5-6** Backup: `wal_checkpoint`+copy hasilkan `.db` konsisten yang bisa di-restore & daemon start bersih. *(sandbox-testable + 1 live)*
-- [ ] **AC-M5-7** Retensi backup pangkas ke N (config), tak hapus di luar N; no-hard-delete state terverifikasi.
-- [ ] **AC-M5-8** Quick-start install/backup/restore/uninstall lengkap per-OS; template unit/XML + skrip ada.
-- [ ] **AC-M5-9** Security-review gate (persona, skill `milestone-wrapup`) lolos untuk keseluruhan M5.
+- [x] **AC-M5-4** Security pass 5-permukaan selesai; tiap temuan ditutup atau tercatat residual di THREAT-MODEL.md. — **✅ M5.3** (T-L1 hardened + T-L2/4/5/8 verified, T-L3 N/A, T-L6/T-L7 kelak LIVE → keduanya kini ✅); THREAT-MODEL §8.4 close-out per-item.
+- [x] **AC-M5-5** Egress ke host non-allowlist → `EgressBlockedError` (test); credential-read tak bocor ke log/DB (test/grep). — **✅ M5.3** `test/security-egress.test.ts` (exact-hostname `Set.has`, typosquat/malformed→blocked) + `test/security-credential.test.ts` (8 bentuk error tak bocor token).
+- [x] **AC-M5-6** Backup: `wal_checkpoint`+copy hasilkan `.db` konsisten yang bisa di-restore & daemon start bersih. *(sandbox-testable + 1 live)* — **✅ LIVE 17 Jul (M5.6):** backup-saat-daemon-live → `integrity_check: ok`; restore (prosedur terdokumentasi) → daemon start bersih (HIDUP) + marker `tl6x` ter-revert + `m53t` terjaga. `test/backup.test.ts` (SANDBOX) + LIVE ini.
+- [x] **AC-M5-7** Retensi backup pangkas ke N (config), tak hapus di luar N; no-hard-delete state terverifikasi. — **✅** `pruneSnapshots` tiered (24 hourly + 30 daily, ADR-024) di `test/backup.test.ts`; `events`/`sessions` no-hard-delete (arsip, CONVENTIONS); LIVE `backup.js` `pruned 0` (1 snapshot, nihil di luar N).
+- [x] **AC-M5-8** Quick-start install/backup/restore/uninstall lengkap per-OS; template unit/XML + skrip ada. — **✅ Linux 17 Jul:** install (`install-linux.sh`) + backup (`deploy/backup/systemd/` + `backup.js`) + restore (README, LIVE) + **uninstall (`uninstall-linux.sh`, round-trip LIVE: uninstall→gone→reinstall→active)**; semua ter-gate `test/shell-script.test.ts`. Windows = `acca daemon` manual + Task Scheduler backup (M5.5 ditunda/I-33).
+- [x] **AC-M5-9** Security-review gate (persona, skill `milestone-wrapup`) lolos untuk keseluruhan M5. — **✅ 17 Jul (M5.6 wrap-up):** T-L1/2/4/5/6/7/8 tutup (Linux) + T-L3 N/A → gate BERSIH untuk track Linux; checklist web-app N/A (CLI lokal). Paruh Windows (T-L7) menunggu M5.5/I-33.
 
 ### Pembagian verifikasi (COWORK-TOOLING-NOTES — build/service = mesin asli)
 - **Sandbox-testable** (unit/integration, tak butuh mesin asli): logika backup (checkpoint+copy+prune) atas DB fixture,
