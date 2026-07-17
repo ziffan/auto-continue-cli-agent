@@ -743,10 +743,35 @@ string user-facing yang sengaja meniru bahasa kanonik).
 
 ---
 
+## Deploy / systemd (M5.4)
+
+### G-47 — `Restart=on-failure` TAK restart pada exit bersih (SIGTERM→exit 0); uji auto-restart WAJIB pakai SIGKILL
+**Jebakan:** menguji "daemon auto-restart saat crash" dengan `kill -TERM <pid>` (atau `systemctl --user stop`) **tak
+akan** memicu restart di unit `Restart=on-failure`. `daemon.ts` menangani SIGTERM/SIGINT → shutdown graceful →
+`process.exit(0)`; dan systemd menganggap **exit 0 + sinyal "bersih"** (SIGTERM, SIGINT, SIGHUP, SIGPIPE) sebagai
+terminasi **sukses** → `on-failure` diam. Mudah salah simpul "auto-restart tak jalan".
+**Dampak:** verifikasi AC-M5-1 keliru dinyatakan gagal, atau (lebih buruk) `Restart=always` dipilih sbg "perbaikan"
+padahal `always` akan me-restart bahkan saat owner sengaja `stop` (melawan kontrol manual).
+**Cara benar:** simulasikan **crash** dengan `kill -9 <MainPID>` (SIGKILL) — systemd melihat `Result: signal` (non-clean)
+→ `on-failure` fire → restart dalam `RestartSec` (5s). Ambil PID via `systemctl --user show -p MainPID --value
+acca-daemon`; verifikasi `NRestarts` naik + PID baru. **Sumber:** M5.4 LIVE 17 Jul (Ubuntu, systemd 255).
+
+### G-48 — `sed` substitusi placeholder juga menggarabl token yang sama di KOMENTAR prosa template
+**Jebakan:** `install-linux.sh` mengganti `<NODE>`/`<ENTRYPOINT>` via `sed s|<NODE>|…|g` **global** — bila token
+placeholder yang sama muncul di **komentar** template (mis. "placeholder `<NODE>`/`<ENTRYPOINT>` disubstitusi oleh…"),
+sed mengubah komentar itu jadi teks garbled (`placeholder /path/node//path/index.js disubstitusi…`). Kosmetik (komentar,
+tak mempengaruhi systemd) tapi menyesatkan.
+**Dampak:** unit terpasang punya komentar rusak; gate render (`<…>` nol tersisa) tetap **hijau** karena semua tersubstitusi
+→ tak ketahuan gate. **Cara benar:** token placeholder `<X>` HANYA di baris nilainya (`ExecStart=`), jangan pernah di
+prosa komentar — rujuk deskriptif ("path node + entrypoint di [Service]"). **Sumber:** M5.4 render LIVE 17 Jul.
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-17 (M5.4 LIVE, systemd) | **G-47** baru (`Restart=on-failure` TAK restart pada exit bersih SIGTERM→exit 0; systemd anggap SIGTERM/SIGINT/SIGHUP/SIGPIPE + exit0 = sukses → uji auto-restart WAJIB SIGKILL, verifikasi `NRestarts`+PID baru; `Restart=always` bukan "fix" — melawan stop manual). **G-48** baru (`sed s\|<NODE>\|…\|g` global juga menggarabl token placeholder yang muncul di komentar prosa template → token `<X>` hanya di baris nilai, jangan di komentar; gate render tetap hijau krn tersubstitusi → tak ketahuan). Dari M5.4 LIVE 17 Jul (Ubuntu, systemd 255). |
 | 2026-07-17 (I-35, insiden FP live) | **G-45** baru (repo ini = korpus yang memicu detektornya sendiri; **3 LIMIT_HIT palsu dalam satu sesi**, nol dari CC yang benar-benar limit: [1] agent me-Read `patterns.ts` yang doc-comment-nya mengutip pesan asli verbatim → **detektor mendeteksi komentar sumbernya sendiri**; [2] **teks notifikasi acca sendiri** yang di-paste owner untuk didiagnosis; [3] **perintah `sed` redaksi yang ditulis pakai literal MENTAH** — perkakas pembersihnya sendiri jadi peluru. Skala: **103 literal di 20 file**, 46 di antaranya di 5 file yang `/session-start` WAJIBKAN dibaca → **ritual pembuka proyek ini ranjau di bawah acca**. Cara kerja aman: bentuk regex **ter-escape** [prefiks `\b` mematahkan word-boundary → tak cocok dirinya sendiri, terverifikasi] · redaksi pipeline [terbukti menangkap byte PTY nyata test I-31] · peta file berbahaya per-tool [literal agy aman utk sesi CC] · matikan daemon dulu [wrapper tetap menulis, yang berhenti actuation-nya]. Fix produk = **I-35**, higiene repo = **I-36**). Dari insiden live sesi `z36i` 17 Jul. |
 | 2026-07-17 (M5.5, gate encoding) | **G-44** baru (em-dash di `.ps1` UTF-8-tanpa-BOM → PS 5.1 baca CP1252 → U+201D yang **diterima PowerShell sbg delimiter string** → string tertutup lebih awal → parse error berantai menunjuk baris salah. **Korban nyata: `register-backup-task.ps1` ter-commit M5.2 `85be83c` TIDAK parse** → backup terjadwal Win tak pernah jalan; lolos karena `[LIVE]` belum diverifikasi = reviewer baca tapi tak eksekusi parser. Fix: pure ASCII + gate `test/ps1-encoding.test.ts` cek byte [lintas-OS, bukan parse yg skip di Ubuntu], negative-control terbukti. **Pelajaran proses:** artefak tak-pernah-dieksekusi = titik buta review; tiap artefak shippable butuh >=1 gate yang memvalidasinya). Dari slice M5.5. |
 | 2026-07-17 (pin WinSW, ADR-025) | **G-43** baru (`sc.exe` **tak bisa host node** — `sc create` sukses tapi service tak start, error 1053 [SCM wajib `SERVICE_RUNNING`]; "registrasi sukses ≠ service jalan" → klausa fallback `sc.exe` ADR-021 VOID, wrapper wajib. + WinSW v2: exe **wajib senama** config-nya, dan config dimuat **sebelum** parse perintah → salah nama = FATAL menyesatkan yang terbaca seperti binary rusak. + `status` service tak-terdaftar = `NonExistent` exit 0 = kontrak idempotensi installer. + NET461 butuh .NET FW 4.6.1; Win 11 bawa 4.8 inbox — terverifikasi jalan). Dari verifikasi pin WinSW (web + eksekusi binary nyata di Win 11 owner). |

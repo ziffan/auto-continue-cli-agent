@@ -9,7 +9,7 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 > sudah **live-verified pada limit Claude Code ASLI** (16 Jul).
 > Sekarang di **M5 — hardening + deploy sebagai service**: backup/restore state + security pass ✅; **service Linux
 > (systemd `--user`) menyusul**; **service Windows DITUNDA** atas blocker terbukti — lihat [Menjalankan daemon](#menjalankan-daemon).
-> **570 test hijau** (2 skip POSIX-only di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
+> **585 test hijau** (2 skip POSIX-only di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
 > M-remote (kontrol Telegram) menyusul setelah M5. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
 ---
@@ -85,8 +85,20 @@ acca daemon                      # biarkan terminal ini terbuka
 # tanpa npm link: node dist/cli/index.js daemon
 ```
 
-**Linux — service (systemd `--user` + lingering):** ini jalur always-on yang didukung; jalan sebagai user kamu dan
-bertahan pasca-logout. Template + skrip menyusul di slice M5.4.
+**Linux — service (systemd `--user` + lingering):** ini jalur always-on yang didukung; jalan sebagai user kamu
+(bukan root) → `$HOME`, `acca.db`, dan kredensial `claude`/`agy` yang **sama** (justru asimetri inilah yang aman di
+Linux tapi tidak di Windows — lihat I-33). Pasang:
+
+```bash
+npm run build              # pastikan dist/ ada
+sh scripts/install-linux.sh   # render unit + enable --now + loginctl enable-linger
+systemctl --user status acca-daemon        # verifikasi active (running)
+journalctl --user -u acca-daemon -f        # log
+# cabut: systemctl --user disable --now acca-daemon && rm ~/.config/systemd/user/acca-daemon.service
+```
+
+`Restart=on-failure` + `RestartSec=5` → daemon auto-restart <30s bila crash; `enable-linger` → jalan tanpa sesi
+login (survive logout, auto-start saat boot).
 
 **Windows — service: DITUNDA, pakai `acca daemon` manual dulu.** Bukan karena belum sempat, tapi karena ada blocker
 nyata yang sudah kami buktikan empiris: Windows Service default jalan sebagai **LocalSystem**, bukan sebagai kamu →

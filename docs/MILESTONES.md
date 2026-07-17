@@ -326,7 +326,7 @@ Audit 5 permukaan fondasi; tiap temuan → tutup atau catat residual di THREAT-M
   `deploy/`). DILARANG: dokumentasi yang mengklaim "service hijau" tanpa bukti verifikasi live di mesin asli.
 
 ### Acceptance criteria M5 (checklist test milestone)
-- [ ] **AC-M5-1** Service Linux (systemd --user + linger) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Ubuntu)*
+- [~] **AC-M5-1** Service Linux (systemd --user + linger) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Ubuntu)* — **PARSIAL 17 Jul:** install→`active (running)` ✅, **auto-restart on-crash** (SIGKILL→restart PID baru ~5s, `NRestarts=1`, <30s) ✅, same-DB (`acca status`→daemon HIDUP, kontras I-33) ✅, `Linger=yes` ✅. **Residual (butuh tangan owner):** logout→login + **reboot** auto-start.
 - [ ] **AC-M5-2** Service Windows (WinSW/sc.exe) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Windows)*
 - [ ] **AC-M5-3** Reboot host saat ada job LIMIT_HIT pending → job tetap fire pasca-boot (recovery AC-7 end-to-end). *(live-verify)*
 - [ ] **AC-M5-4** Security pass 5-permukaan selesai; tiap temuan ditutup atau tercatat residual di THREAT-MODEL.md.
@@ -396,7 +396,13 @@ temuan ditutup (kode/test) atau tercatat residual di THREAT-MODEL §8; verifikas
 **Bukti verifikasi**: paste `test/security-*.test.ts` hijau + ringkasan audit per-permukaan (persona security-review) + THREAT-MODEL §8 ter-update.
 **Tier review**: **1** (auth/IPC/egress/credential — inti keamanan; persona security-review skill `tier-review` tier 4).
 
-#### M5.4 — Service Linux (systemd --user + lingering) template + skrip + LIVE **[SANDBOX render + LIVE]**
+#### M5.4 — Service Linux (systemd --user + lingering) template + skrip + LIVE **[SANDBOX render + LIVE]** — ✅ SANDBOX + LIVE PARSIAL (17 Jul)
+> **✅ 17 Jul (Opus inline, Tier-1).** Gate artefak DIDESAIN DULU (pelajaran I-34) lalu render: `test/systemd-unit.test.ts`
+> (struktur unit + render placeholder→assert `<…>` nol + Restart/RestartSec/Type/WantedBy + **install-sh menyubstitusi tiap
+> placeholder** = celah I-34 ditutup) + `test/shell-script.test.ts` (LF/shebang/BOM floor lintas-OS + `sh -n` depth) +
+> `deploy/linux/acca-daemon.service` + `scripts/install-linux.sh`. **585 test** (+15), 3 negative control terbukti konkret.
+> **LIVE (mesin Ubuntu):** install→active, **auto-restart SIGKILL ~5s** (AC-M5-1 sebagian), same-DB (kontras I-33), linger.
+> Residual: logout/reboot survival + AC-M5-3 (job pending pasca-boot) = butuh tangan owner.
 **Slice**: Template unit `acca-daemon.service` + skrip install (`systemctl --user enable --now` + `loginctl enable-linger`),
 di-verify survive logout+reboot+auto-restart di Ubuntu asli.
 **Scope file**: `deploy/linux/acca-daemon.service` (template), `scripts/install-linux.sh` (baru), `docs` bagian install Linux.
