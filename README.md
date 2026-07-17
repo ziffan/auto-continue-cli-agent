@@ -9,7 +9,7 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 > sudah **live-verified pada limit Claude Code ASLI** (16 Jul).
 > Sekarang di **M5 — hardening + deploy sebagai service**: backup/restore state + security pass ✅; **service Linux
 > (systemd `--user`) menyusul**; **service Windows DITUNDA** atas blocker terbukti — lihat [Menjalankan daemon](#menjalankan-daemon).
-> **585 test hijau** (2 skip POSIX-only di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
+> **615 test hijau** (2 skip POSIX-only di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
 > M-remote (kontrol Telegram) menyusul setelah M5. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
 ---
@@ -95,10 +95,25 @@ journalctl --user -u acca-daemon -f        # log
 
 `Restart=on-failure` + `RestartSec=5` → daemon auto-restart <30s bila crash; `enable-linger` → jalan tanpa sesi login (survive logout, auto-start saat boot).
 
-**Windows — service: DITUNDA, pakai `acca daemon` manual dulu.** Bukan karena belum sempat, tapi karena ada blocker nyata yang sudah kami buktikan empiris: Windows Service default jalan sebagai **LocalSystem**, bukan sebagai kamu →
-ia me-resolve **`acca.db` yang berbeda** (di `C:\WINDOWS\system32\config\systemprofile\…`, dan membuat DB kosong baru)
-serta **tak melihat kredensial** `claude`/`agy` kamu. Gejalanya menipu: `sc query` bilang RUNNING dan `acca status` terlihat normal — tapi daemon menatap database kosong dan **tak melakukan apa pun saat limit reset**. Jadi jangan daftarkan `acca daemon` sebagai Windows Service dulu. Detail + jalan keluar yang sedang digarap: **I-33**
-(`docs/ISSUES.md`).
+**Windows — autostart per-user (Task Scheduler @logon), BUKAN Windows Service (ADR-026).** Jalur always-on Windows =
+Task Scheduler trigger "At log on" yang jalan **sebagai user login kamu** (nol admin, task per-user) → `$HOME`, `acca.db`,
+dan kredensial `claude`/`agy` yang **sama** dengan sesi kamu. Pasang (PowerShell):
+
+```powershell
+npm run build                                                        # pastikan dist\ ada
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1   # daftar task autostart @logon (per-user, nol admin)
+Get-ScheduledTask acca-daemon | Get-ScheduledTaskInfo                # verifikasi
+Start-ScheduledTask -TaskName acca-daemon                            # jalankan sekarang (tak perlu tunggu logon)
+# cabut: powershell -ExecutionPolicy Bypass -File scripts\uninstall-windows.ps1   (task dihapus; acca.db & backups aman)
+```
+
+Watchdog repetisi (`Repetition PT1M` + `IgnoreNew`) → daemon crash auto-restart **~60-90s** (floor Task Scheduler = 1 menit,
+bukan <30s spt systemd — G-49); run-hidden (nol jendela konsol); `ExecutionTimeLimit=PT0S` (daemon long-running tak di-kill).
+**Scope jujur:** logon-scoped — daemon jalan selama kamu login, **tak** lintas-logout / at-boot-pra-login (direlakan untuk
+profil laptop; always-on sejati = Linux systemd). **Kenapa BUKAN Windows Service:** default LocalSystem → me-resolve
+**`acca.db` berbeda** (`…\systemprofile\…`, DB kosong baru) + **tak lihat kredensial** kamu → daemon menatap DB kosong,
+`sc query`/`acca status` tampak normal tapi **tak berbuat apa-apa saat limit reset** (menipu). Detail: **I-33/ADR-026**
+(`docs/ISSUES.md`, `docs/DECISIONS.md`).
 
 **Batasan (semua OS, ADR-007):** kalau mesin tidur/mati, resume tertunda sampai ia bangun.
 
@@ -128,7 +143,7 @@ Backup = tugas **one-shot periodik**, bukan proses long-running — Task Schedul
 
 **Restore (langkah manual):**
 
-1. **Hentikan daemon.** Linux (setelah M5.4): `systemctl --user stop acca-daemon`. **Windows: Ctrl+C di terminal `acca daemon`** — service Windows ditunda (I-33), jadi tak ada service untuk di-`sc stop`.
+1. **Hentikan daemon.** Linux: `systemctl --user stop acca-daemon`. **Windows (autostart Task Scheduler, ADR-026): `Stop-ScheduledTask -TaskName acca-daemon`** (bila watchdog repetisi aktif, `Disable-ScheduledTask` dulu supaya tak re-start saat restore) — atau Ctrl+C bila jalan manual `acca daemon`.
 2. **Ganti** `<dataDir>/acca.db` dengan snapshot pilihan:
    `cp <snapshot> <dataDir>/acca.db` — hapus sisa `<dataDir>/acca.db-wal` / `-shm` bila ada.
 3. **Jalankan daemon lagi** (`acca daemon`, atau `systemctl --user start acca-daemon` di Linux pasca-M5.4).

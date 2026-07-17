@@ -161,7 +161,7 @@ menggantikan I-35 — user lain punya repo & paste-an mereka sendiri.
 **Sumber:** insiden live 17 Jul (lihat I-35).
 </details>
 
-### I-34 — Artefak shippable tanpa gate yang MENGEKSEKUSINYA = titik buta review [P2, `.ps1` + `.service`/`.sh` ✅ ditutup 17 Jul; XML (M5.5) MASIH TERBUKA — tapi M5.5 sendiri ditunda/I-33]
+### I-34 — Artefak shippable tanpa gate yang MENGEKSEKUSINYA = titik buta review [P2, ✅ DITUTUP 18 Jul — `.ps1` + `.service`/`.sh` (17 Jul) + XML Task Scheduler (M5.5, 18 Jul)]
 **Kelas cacat (bukan bug tunggal), ditemukan 17 Jul lewat DUA korban nyata dalam satu sesi:**
 1. **`register-backup-task.ps1`** (M5.2 `85be83c`) — **ter-commit, ditandai selesai, LOLOS tier-review Opus**, padahal
    **tak bisa di-parse PowerShell 5.1** (em-dash dalam string, **G-44**) → backup terjadwal Windows tak pernah jalan.
@@ -186,9 +186,14 @@ daily selalu punya → tak bocor di daily driver). **Pelajaran tambahan:** asser
 disalin ke gate ini — systemd & POSIX-sh baca UTF-8 native, em-dash di komentar tak merusak parser (beda dari .ps1/
 CP1252). Menyalin gate lintas-format tanpa mekanisme yang membenarkannya = false-premise. **3 negative control terbukti
 konkret** (CRLF, `sh -n` sintaks, baris-tanpa-`=`, placeholder bocor, Restart salah). **585 test.**
-**MASIH TERBUKA — XML (M5.5):** `deploy/windows/acca-daemon.xml` + `install-windows.ps1` belum ada gate — tapi **M5.5
-sendiri DITUNDA (I-33)**, jadi bukan hutang aktif. Saat M5.5 dibuka: XML = well-formed + assert `<onfailure action=
-"restart">` + placeholder tersubstitusi (pola sama). Gate harus lintas-OS. **Sumber:** M5.4 17 Jul (kelas dari G-44, `d080f70`/`13da025`).
+**✅ DITUTUP untuk XML (M5.5, 18 Jul, Opus inline Tier-1):** `test/task-scheduler-xml.test.ts` (18 test) memvalidasi
+`deploy/windows/acca-daemon.task.xml` + substitusi `scripts/install-windows.ps1`: well-formed (tag-balance) + **`--`-in-comment**
+(gap yang naive tag-balance lewatkan tapi parser sungguhan tolak — ditemukan saat MENJALANKAN `System.Xml`, G-50) + ASCII +
+LogonTrigger/Principal(LeastPrivilege)/Hidden/PT0S/battery-safe/IgnoreNew/**watchdog Repetition** + render nol-remnant +
+substitusi-coverage `.ps1` (celah I-34 sebenarnya). `.ps1` baru ter-gate `ps1-encoding` (G-44). **3 negative control terbukti**
+(escalasi 1→2→4→5). **Pelajaran menegaskan I-34:** gate lintas-OS pure-TS TAK bisa memanggil parser XML sungguhan → tetap
+verifikasi eksekusi di mesin asli (di sini: `System.Xml` menolak `--`-comment yang gate lolos → gate lalu diperkuat). **Kelas
+I-34 kini tertutup untuk SEMUA artefak deploy** (`.ps1`/`.service`/`.sh`/XML). **Sumber:** M5.5 LIVE 18 Jul (kelas dari G-44).
 
 ### I-33 — Windows Service ≠ sesi user: daemon-as-service pakai DB & kredensial BERBEDA → produk mati SENYAP [P1 blocker MVP → RESOLVED-BY-PATH-CHANGE (ADR-026, 17 Jul); residual jalur-Service = deferred/P3]
 **✅ RESOLUSI (ADR-026, 17 Jul — ganti jalur, bukan pecahkan mismatch):** deployment Windows MVP **tak lagi lewat Windows
