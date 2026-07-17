@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<!--
+  deploy/windows/acca-daemon.task.xml - template Task Scheduler untuk daemon acca (M5.5, ADR-026).
+
+  JANGAN daftarkan file ini apa adanya: placeholder {{...}} disubstitusi jadi nilai nyata oleh
+  scripts/install-windows.ps1 (node absolut, entrypoint, working dir, user login saat ini), lalu
+  didaftarkan via `Register-ScheduledTask -Xml`. Placeholder pakai {{...}} (bukan <...>) supaya tak
+  bertabrakan dgn tag XML - lihat gate test/task-scheduler-xml.test.ts.
+
+  ADR-026: autostart PER-USER via trigger "At log on" -> daemon jalan SEBAGAI user login (bukan
+  Windows Service/LocalSystem) -> acca.db & kredensial CC/agy = milik user (tak kena I-33). Analog
+  Windows dari systemd user-scope (Linux M5.4), tanpa linger: logon-scoped, tak lintas-logout.
+
+  Catatan platform (jujur, bukan janji palsu):
+    - Crash-recovery PRIMER = watchdog repetisi: LogonTrigger ber-Repetition PT1M (indefinite) +
+      MultipleInstancesPolicy=IgnoreNew. Tiap menit trigger re-fire; daemon hidup -> IgnoreNew abaikan
+      (nol double-start), daemon mati -> di-start ulang. Self-heal <=~60-90s (BUKAN <30s spt systemd;
+      floor Task Scheduler = PT1M, direlakan utk profil laptop ADR-026/ADR-007). RestartOnFailure di
+      bawah = SEKUNDER (LIVE 18 Jul membuktikan ia TAK andal me-restart proses yang di-kill; watchdog
+      repetisi = mekanisme yang benar-benar menyembuhkan).
+    - ExecutionTimeLimit=PT0S WAJIB - default 72 jam akan menghentikan daemon long-running.
+    - Hidden=true menyembunyikan task dari daftar default; apakah konsol node berkedip saat logon =
+      diverifikasi LIVE. Bila berkedip, install-windows.ps1 punya jalur peluncur tersembunyi.
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>acca - supervisor daemon (auto-continue CLI agent). Autostart per-user @logon, ADR-026.</Description>
+    <Author>acca</Author>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Repetition>
+        <Interval>PT1M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <Enabled>true</Enabled>
+      <UserId>{{USERID}}</UserId>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{{USERID}}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>3</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{{NODE}}</Command>
+      <Arguments>"{{ENTRYPOINT}}" daemon</Arguments>
+      <WorkingDirectory>{{WORKDIR}}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

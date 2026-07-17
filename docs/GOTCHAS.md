@@ -765,12 +765,44 @@ tak mempengaruhi systemd) tapi menyesatkan.
 → tak ketahuan gate. **Cara benar:** token placeholder `<X>` HANYA di baris nilainya (`ExecStart=`), jangan pernah di
 prosa komentar — rujuk deskriptif ("path node + entrypoint di [Service]"). **Sumber:** M5.4 render LIVE 17 Jul.
 
+### G-49 — Task Scheduler `RestartOnFailure` TAK andal me-restart daemon yang di-kill; pakai watchdog repetisi + IgnoreNew
+**Jebakan:** menyandarkan auto-restart-on-crash Windows pada Setting `RestartOnFailure` (`<Interval>`/`<Count>`) — analog
+naif dari systemd `Restart=on-failure`. **LIVE 18 Jul membuktikan ia TAK jalan:** `taskkill /F` daemon (exit non-zero,
+`LastTaskResult=1`, task->`Ready`) -> **nol restart dalam 100s** walau `RestartOnFailure Interval=PT1M Count=3` terpasang.
+`RestartOnFailure` di Windows = supervisor proses yang lemah/tak konsisten (khususnya utk run on-demand & aksi
+long-running) — sebab NSSM/WinSW ada.
+**Dampak:** AC-M5-2 "auto-restart on-crash" GAGAL bila hanya andalkan `RestartOnFailure`; daemon mati diam sampai logon
+berikutnya. Lolos review "template terlihat benar" — hanya ketahuan saat DIJALANKAN (kelas I-34).
+**Cara benar:** watchdog via **repetisi trigger** — `LogonTrigger` ber-`<Repetition><Interval>PT1M</Interval>
+<StopAtDurationEnd>false</StopAtDurationEnd></Repetition>` + `<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>`.
+Tiap menit trigger re-fire; daemon hidup -> `IgnoreNew` abaikan (nol double-start), daemon mati -> di-start ulang.
+Terverifikasi LIVE: kill -> restart **~61s** (floor Task Scheduler = PT1M, jadi <90s bukan <30s — AC diamandemen).
+**Urutan schema:** `<Repetition>` WAJIB **sebelum** `<Enabled>` di dalam trigger, kalau tidak `Register-ScheduledTask`
+menolak. **Sumber:** M5.5 LIVE 18 Jul (Win 11, Task Scheduler on-demand + repetition test).
+
+### G-50 — XML comment tak boleh memuat `--`; naive tag-balance lolos, parser sungguhan menolak (task gagal register)
+**Jebakan:** komentar `<!-- ... systemd --user ... -->` di template XML. Spec XML melarang `--` di DALAM komentar (selain
+penutup `-->`). Gate `xmlTagBalance` buatan-sendiri (cocokkan buka/tutup tag) **lolos** karena komentar di-strip dulu ->
+false-confidence "well-formed". Tapi `System.Xml`/`Register-ScheduledTask` (parser sungguhan) **menolak** -> task gagal
+register. Ketahuan **hanya saat menjalankan parser di mesin Windows**, bukan dari gate lintas-OS.
+**Dampak:** artefak lolos gate CI tapi gagal di titik pakai (I-34 persis: "membaca != menjalankan"). **Cara benar:**
+(a) hindari `--` di komentar XML (mis. "systemd user-scope", bukan "systemd --user"); (b) gate diperkuat: cek `--` di
+dalam tiap `<!-- -->` (pure-string, lintas-OS) — kini di `test/task-scheduler-xml.test.ts`. **Sumber:** M5.5 18 Jul.
+
+### G-51 — `git checkout -- <file>` TAK bisa mengembalikan file baru/untracked (negative-control revert gagal senyap)
+**Jebakan:** saat menjalankan negative-control gate pada artefak **baru** (belum di-commit), pola `sed -i <break> ->
+run gate -> git checkout -- <file>` **gagal me-revert**: `git checkout` cuma tahu file ter-track -> `pathspec did not
+match` -> break menumpuk, file rusak, bisa lolos tak-ketahuan bila tak dicek pasca-loop.
+**Cara benar:** untuk revert file untracked, simpan **salinan backup** dulu (`cp f f.bak` -> break -> run -> `mv f.bak f`),
+atau tulis-ulang isi benar setelahnya. **Sumber:** M5.5 negative-control 18 Jul.
+
 ---
 
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-18 (M5.5 LIVE, Task Scheduler) | **G-49** baru (`RestartOnFailure` Task Scheduler TAK andal me-restart daemon di-kill — LIVE: `taskkill /F` → nol restart 100s walau `Interval=PT1M Count=3`; pakai **watchdog repetisi** `LogonTrigger`+`Repetition PT1M`+`IgnoreNew` → restart ~61s; `<Repetition>` WAJIB sebelum `<Enabled>`). **G-50** baru (XML comment tak boleh muat `--`; naive tag-balance lolos, `System.Xml`/`Register-ScheduledTask` menolak → task gagal register; gate diperkuat cek `--`-in-comment; ketahuan hanya saat jalankan parser sungguhan = I-34). **G-51** baru (`git checkout -- <file>` tak bisa revert file untracked → negative-control break menumpuk; pakai backup `.bak` atau tulis-ulang). Dari M5.5 LIVE 18 Jul (Win 11). |
 | 2026-07-17 (M5.4 LIVE, systemd) | **G-47** baru (`Restart=on-failure` TAK restart pada exit bersih SIGTERM→exit 0; systemd anggap SIGTERM/SIGINT/SIGHUP/SIGPIPE + exit0 = sukses → uji auto-restart WAJIB SIGKILL, verifikasi `NRestarts`+PID baru; `Restart=always` bukan "fix" — melawan stop manual). **G-48** baru (`sed s\|<NODE>\|…\|g` global juga menggarabl token placeholder yang muncul di komentar prosa template → token `<X>` hanya di baris nilai, jangan di komentar; gate render tetap hijau krn tersubstitusi → tak ketahuan). Dari M5.4 LIVE 17 Jul (Ubuntu, systemd 255). |
 | 2026-07-17 (I-35, insiden FP live) | **G-45** baru (repo ini = korpus yang memicu detektornya sendiri; **3 LIMIT_HIT palsu dalam satu sesi**, nol dari CC yang benar-benar limit: [1] agent me-Read `patterns.ts` yang doc-comment-nya mengutip pesan asli verbatim → **detektor mendeteksi komentar sumbernya sendiri**; [2] **teks notifikasi acca sendiri** yang di-paste owner untuk didiagnosis; [3] **perintah `sed` redaksi yang ditulis pakai literal MENTAH** — perkakas pembersihnya sendiri jadi peluru. Skala: **103 literal di 20 file**, 46 di antaranya di 5 file yang `/session-start` WAJIBKAN dibaca → **ritual pembuka proyek ini ranjau di bawah acca**. Cara kerja aman: bentuk regex **ter-escape** [prefiks `\b` mematahkan word-boundary → tak cocok dirinya sendiri, terverifikasi] · redaksi pipeline [terbukti menangkap byte PTY nyata test I-31] · peta file berbahaya per-tool [literal agy aman utk sesi CC] · matikan daemon dulu [wrapper tetap menulis, yang berhenti actuation-nya]. Fix produk = **I-35**, higiene repo = **I-36**). Dari insiden live sesi `z36i` 17 Jul. |
 | 2026-07-17 (M5.5, gate encoding) | **G-44** baru (em-dash di `.ps1` UTF-8-tanpa-BOM → PS 5.1 baca CP1252 → U+201D yang **diterima PowerShell sbg delimiter string** → string tertutup lebih awal → parse error berantai menunjuk baris salah. **Korban nyata: `register-backup-task.ps1` ter-commit M5.2 `85be83c` TIDAK parse** → backup terjadwal Win tak pernah jalan; lolos karena `[LIVE]` belum diverifikasi = reviewer baca tapi tak eksekusi parser. Fix: pure ASCII + gate `test/ps1-encoding.test.ts` cek byte [lintas-OS, bukan parse yg skip di Ubuntu], negative-control terbukti. **Pelajaran proses:** artefak tak-pernah-dieksekusi = titik buta review; tiap artefak shippable butuh >=1 gate yang memvalidasinya). Dari slice M5.5. |
