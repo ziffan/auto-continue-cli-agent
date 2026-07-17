@@ -24,7 +24,7 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 
 ## 2. Status
 
-Fase: **M5 — Hardening + Deploy sebagai service (SPEC LOCKED 17 Jul; M5.1 + M5.3 + M5.2 ✅ SANDBOX; M5.4 ✅ LIVE penuh [systemd --user]; M5.5 ✅ SANDBOX + LIVE-parsial 18 Jul [autostart per-user Task Scheduler @logon, ADR-026 — I-33-proof: daemon=user + same-DB + creds + watchdog-restart ~61s + nol-flash terbukti; sisa 1 aksi owner: logout/login konfirmasi @logon-fire]).** **615 test hijau** (2 skip POSIX).
+Fase: **M5 ✅ TUTUP PENUH (Linux + Windows) — Hardening + Deploy sebagai service.** (SPEC LOCKED 17 Jul; M5.1 backup + M5.2 skrip/restore + M5.3 security-pass ✅; M5.4 ✅ LIVE penuh [systemd --user]; M5.5 ✅ LIVE penuh 18 Jul [autostart per-user Task Scheduler @logon, ADR-026 — AC-M5-2 hijau: daemon=user + same-DB + creds + @logon-fire + watchdog ~65s + nol-jendela via `conhost --headless`, G-49/50/52]; M5.6 wrap-up ✅). **615 test hijau** (2 skip POSIX). **Next: M-remote tier A (Telegram).**
 Urutan roadmap: **M5 → M-remote (Telegram)** (keputusan owner 17 Jul — daemon wajib nyala 24/7 sbg service dulu sebelum
 Telegram). **Spec M5 doc-first:** ADR-021 (Windows Service, supersede sebagian ADR-007), ADR-022 (backup/DR minimal),
 ADR-023 (IPC DACL terbuka = residual R-5 + hardening lapisan-app, scope-ulang ADR-015; native addon & PID-check ditolak,
