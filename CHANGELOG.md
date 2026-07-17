@@ -9,12 +9,14 @@ versi mengikuti [SemVer](https://semver.org/). Belum ada rilis publik (`0.1.0`, 
 
 ### Added
 - **Deploy sebagai service Linux (M5.4)** — `deploy/linux/acca-daemon.service` (systemd `--user`) +
-  `scripts/install-linux.sh` (render placeholder → path absolut, `enable --now` + `loginctl enable-linger`).
+  `scripts/install-linux.sh` / `scripts/uninstall-linux.sh` (render placeholder → path absolut, `enable --now` +
+  `loginctl enable-linger`; uninstall round-trip LIVE-verified).
   LIVE-verified di Ubuntu (systemd 255): install→active, auto-restart on-crash <30s, survive logout + reboot
   auto-start, same-DB dengan CLI (kontras I-33), recovery job pending pasca-reboot (AC-M5-3).
 - **Backup/DR minimal (M5.1/M5.2)** — engine `backupDatabase` (WAL checkpoint + copy + integrity_check +
   prune tiered GFS-lite 24 hourly/30 daily, ADR-024); `scripts/backup.js`; template systemd backup + Windows
-  Task Scheduler; dokumentasi restore. *(restore LIVE 1× = residual T-L6.)*
+  Task Scheduler; dokumentasi restore. Restore **LIVE-verified** (M5.6): backup→marker→restore→revert terbukti +
+  `integrity_check: ok` + daemon start bersih (T-L6 tutup).
 - **Gate artefak shippable lintas-OS (I-34)** — `test/systemd-unit.test.ts`, `test/shell-script.test.ts`,
   `test/ps1-encoding.test.ts`: tiap `.service`/`.timer`/`.sh`/`.ps1` divalidasi (struktur/render/encoding),
   bukan sekadar dibaca reviewer.
@@ -32,3 +34,4 @@ versi mengikuti [SemVer](https://semver.org/). Belum ada rilis publik (`0.1.0`, 
 
 ### Security
 - Runtime least-privilege (T-L7, Linux): daemon jalan sebagai user, bukan root; install pun user-scope (nol sudo).
+- Backup/restore integritas (T-L6): restore LIVE-verified; gate security-review lokal Linux bersih (T-L1..T-L8 tutup/N/A).

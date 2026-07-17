@@ -94,7 +94,7 @@ npm run build              # pastikan dist/ ada
 sh scripts/install-linux.sh   # render unit + enable --now + loginctl enable-linger
 systemctl --user status acca-daemon        # verifikasi active (running)
 journalctl --user -u acca-daemon -f        # log
-# cabut: systemctl --user disable --now acca-daemon && rm ~/.config/systemd/user/acca-daemon.service
+# cabut: sh scripts/uninstall-linux.sh   (service disabled + unit dihapus; acca.db & backups aman)
 ```
 
 `Restart=on-failure` + `RestartSec=5` → daemon auto-restart <30s bila crash; `enable-linger` → jalan tanpa sesi
