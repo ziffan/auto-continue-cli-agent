@@ -185,6 +185,21 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         // C-4/RC-4: alive-tapi-PID-mati → exited (auto-recovery), sebelum branching proc_state.
         const session = reconcileDispatchLiveness(rawSession);
 
+        // I-35 residual: job `probe` secara semantik berarti "cek apakah kuota sesi LIMIT_HIT ini
+        // sudah tersedia". Sebelum guard ini, dispatch langsung lanjut ke probeUsage/optimistic-resume
+        // TANPA menanyakan status sesi saat ini — job probe yang fire pada sesi yang SUDAH tak lagi
+        // LIMIT_HIT (resume manual, race, atau kelak: verifikasi FP dari korroborasi) akan meng-inject
+        // sesi yang tak pernah dikonfirmasi limit, persis bahaya yang I-35 coba cegah. Job stale =
+        // no-op teraudit, bukan sinyal aksi.
+        if (session.status !== 'LIMIT_HIT') {
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_done',
+            payload: { jobId: job.id, action: 'skipped:probe_stale_status', status: session.status },
+          });
+          return 'done';
+        }
+
         // ADR-019 (men-supersede ADR-018): probe usage agy butuh sesi HIDUP ber-PTY — Language Server
         // hanya bind saat ber-PTY (G-3) & port-nya terikat PID sesi itu; sesi agy `exited` = PID mati =
         // tak ada port → probe-via-LS mustahil. Alternatif standalone OAuth (ADR-018 opsi #3,

@@ -9,7 +9,7 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 > sudah **live-verified pada limit Claude Code ASLI** (16 Jul).
 > Sekarang di **M5 — hardening + deploy sebagai service**: backup/restore state + security pass ✅; **service Linux
 > (systemd `--user`) menyusul**; **service Windows DITUNDA** atas blocker terbukti — lihat [Menjalankan daemon](#menjalankan-daemon).
-> **474 test hijau** (2 skip POSIX-only di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
+> **475 test hijau** (2 skip POSIX-only di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
 > M-remote (kontrol Telegram) menyusul setelah M5. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
 ---
