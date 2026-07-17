@@ -52,6 +52,48 @@ Jalankan dari source (`npm install && npm run build`; belum ada paket/installer 
 
 Belum ada: kontrol Telegram (M-remote) & `resume-now`/`cancel` via remote, deploy sebagai service (M5).
 
+## Backup & restore
+
+**Apa yang di-backup:** `acca.db` (checkpoint WAL `TRUNCATE` + salin file utama saja — sidecar
+`-wal`/`-shm` basi pasca-checkpoint TAK disalin, salinan konsisten diverifikasi `integrity_check`).
+Retensi **tiered GFS-lite** (ADR-024): **24 snapshot terbaru** (hourly) **+ 1 representatif per
+hari-kalender lokal** untuk **30 hari** terakhir yang punya snapshot — coverage 1 bulan, disk
+ter-cap ~54× ukuran DB. Lokasi default `<dataDir>/backups` (override env `ACCA_BACKUP_DIR`).
+Config via env (config-over-hardcode, ADR-022/024): `ACCA_BACKUP_RETENTION_HOURLY` (default 24),
+`ACCA_BACKUP_RETENTION_DAILY` (default 30), `ACCA_DATA_DIR`, `ACCA_BACKUP_DIR`.
+
+**Jalankan sekali manual:**
+
+```sh
+npm run build           # wajib — skrip mengimpor dist/
+node scripts/backup.js
+```
+
+**Pasang jadwal otomatis (default interval hourly, ADR-024):**
+
+| OS | Template |
+| --- | --- |
+| Linux (systemd --user) | [`deploy/backup/systemd/`](deploy/backup/systemd/) — `acca-backup.service` (oneshot) + `acca-backup.timer` (`OnCalendar=hourly`) |
+| Windows (Task Scheduler) | [`deploy/backup/windows/register-backup-task.ps1`](deploy/backup/windows/register-backup-task.ps1) — trigger repetition 1 jam |
+
+Backup = tugas **one-shot periodik**, bukan proses long-running — Task Scheduler cocok di sini.
+(Kelemahan Task Scheduler yang mendasari ADR-021 — gagal-senyap tanpa auto-restart — khusus
+relevan untuk **daemon** yang harus terus hidup; tidak berlaku untuk job one-shot yang memang
+dirancang exit setiap kali selesai.) Detail placeholder path + variabel ada di komentar tiap
+template.
+
+**Restore (langkah manual):**
+
+1. **Stop service** acca (nama service placeholder — isi sesuai instalasi M5.4/M5.5):
+   `systemctl --user stop acca-daemon` (Linux) / `sc stop acca-daemon` (Windows).
+2. **Ganti** `<dataDir>/acca.db` dengan snapshot pilihan:
+   `cp <snapshot> <dataDir>/acca.db` — hapus sisa `<dataDir>/acca.db-wal` / `-shm` bila ada.
+3. **Start** service kembali.
+4. **Verifikasi**: `acca status` menunjukkan daemon hidup + sesi termonitor sesuai snapshot.
+
+> **[LIVE] butuh user** — alur restore end-to-end (backup asli → restore → daemon start bersih)
+> belum diverifikasi live di mesin nyata; jangan anggap terverifikasi sampai dijalankan manual.
+
 ## Kenapa ini bukan hal sepele
 
 - Usage Claude Code kini terekspos resmi (statusLine JSON v2.1.80+), dan deteksi limit bisa event-driven

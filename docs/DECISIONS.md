@@ -2,8 +2,10 @@
 
 > Format Nygard. ADR *Accepted* immutable — revisi = ADR baru yang men-supersede.
 > Status per ADR: **Proposed** (masih bisa berubah) / Accepted / Deprecated / Superseded.
-> Status per 2026-07-17: **ADR-001…017 + ADR-019…023 Accepted (locked); ADR-018 Superseded by ADR-019** (12 Jul —
+> Status per 2026-07-17: **ADR-001…017 + ADR-019…024 Accepted (locked); ADR-018 Superseded by ADR-019** (12 Jul —
 > premis probe OAuth standalone terbukti baca pool kuota salah saat live-verify → optimistic resume + detect).
+> (**ADR-024, 17 Jul — slice M5.2:** amandemen klausa retensi ADR-022(3) → tiered GFS-lite 24 hourly + 30 daily; interval
+> hourly, owner Ziffan. Meng-amandemen, TIDAK men-supersede ADR-022.)
 > (**ADR-021/022/023, 17 Jul — spec M5:** ADR-021 deployment Windows = Windows Service, men-**supersede sebagian** klausa
 > Task Scheduler ADR-007 (systemd/Linux tetap); ADR-022 backup/DR minimal (WAL checkpoint + file copy + retensi); ADR-023
 > IPC named pipe Windows DACL terbuka DITERIMA sbg residual risk + hardening lapisan-app (I-26), men-**scope-ulang** klausa
@@ -578,7 +580,10 @@ Pemilihan WinSW vs sc.exe final + pin versi/hash WinSW = **gate DEPENDENCY-POLIC
 - **Native Windows Service via node langsung** (SCM API) — ditolak: node bukan native service host; butuh wrapper apa pun.
 
 ## ADR-022: Backup/DR state = WAL checkpoint + file copy + retensi (minimal, bukan DR penuh)
-**Status:** **Accepted** (locked 2026-07-17) — *immutable; revisi = ADR baru yang men-supersede.*
+**Status:** **Accepted** (locked 2026-07-17) — *immutable; revisi = ADR baru yang men-supersede. **Klausa retensi Decision (3)
+("N snapshot terakhir") DI-AMANDEMEN oleh ADR-024** (17 Jul: tiered GFS-lite 24 hourly + 30 daily — owner memilih interval
+hourly + coverage panjang; mekanisme WAL-checkpoint/copy/skrip tetap). **Klausa (2) "(+sidecar)" diklarifikasi = file utama
+saja** saat impl M5.1 (salinan `-wal` basi = korupsi). Baca bersama ADR-024.*
 **Context:** State daemon (`sessions`/`events`/`scheduled_jobs`) tinggal di SQLite `acca.db` (ADR-004, WAL mode).
 Preferensi user eksplisit **anti "skip backup/DR untuk production"**. Tanpa strategi backup, korupsi `acca.db`
 (crash saat write, disk error) = kehilangan seluruh riwayat sesi + job terjadwal (sesi LIMIT_HIT pending → resume
@@ -648,6 +653,43 @@ diverifikasi live di M5 = perilaku hardening (mis. `status` tak bocor cwd tak pe
   firewall Windows), tak menyelesaikan (token bocor = sama).
 - **Biarkan klaim ADR-015 apa adanya** — ditolak: klaim terbukti keliru; membiarkan = decision discipline rusak.
 
+## ADR-024: Retensi backup = tiered GFS-lite (24 hourly + 30 daily) — amandemen klausa retensi ADR-022(3)
+**Status:** **Accepted** (locked 2026-07-17) — *immutable; revisi = ADR baru yang men-supersede.*
+**Meng-amandemen** klausa retensi ADR-022 Decision (3) ("N snapshot terakhir"); TIDAK men-supersede ADR-022 —
+mekanisme (WAL checkpoint + file copy + skrip/doc, restore) tetap. Sejalan presedensi ADR-020 (amandemen token ADR-014 §1).
+**Context:** ADR-022 (17 Jul) menetapkan retensi = "N snapshot terakhir" (rolling sederhana). Di slice M5.2 owner Ziffan
+memilih **interval hourly** (RPO ≤1 jam — supervisor mengelola job resume terjadwal, kehilangan lama = lewatkan reset).
+Rolling-N sederhana memaksa trade-off buruk: coverage panjang butuh N besar → disk linear (hourly × 30 hari naif = 720
+snapshot). Owner memilih **tiered** (17 Jul) untuk dapat RPO-pendek **dan** coverage-panjang tanpa disk linear. Pola
+**grandfather-father-son (GFS)** = standar industri: banyak snapshot rapat jangka-pendek + representatif jarang jangka-panjang.
+**Decision:** Retensi backup = **tiered**: pertahankan (union) **`hourly` snapshot terbaru** (default **24**) **+** **1
+representatif per hari-kalender lokal** (snapshot ber-epoch terbesar di hari itu) untuk **`daily` hari terakhir** yang punya
+snapshot (default **30**); prune (unlink) sisanya. Config `{ hourly, daily }` terbaca dari env
+`ACCA_BACKUP_RETENTION_HOURLY`/`ACCA_BACKUP_RETENTION_DAILY` (bukan hardcode — config-over-hardcoding). Day-boundary = hari
+lokal host (konsisten `status.ts` yang render waktu lokal). Nilai konfigurasi turunan (owner Ziffan 17 Jul): **interval
+hourly**, **lokasi** `<dataDir>/backups` (override `ACCA_BACKUP_DIR`), **retensi 24 hourly + 30 daily** → coverage 1 bulan,
+disk ter-cap ~54× ukuran DB. Konsisten no-hard-delete (ADR-004): yang di-prune = **salinan** backup, bukan state asli.
+**Consequences:**
+- (+) RPO ≤1 jam (hourly) **dan** coverage 30 hari, disk ter-cap ~54× DB (bukan ~720× bila hourly×30hari naif). (+) Pola GFS
+  teruji. (+) Tetap config-over-hardcode, nol dep. (+) Deterministik: epoch di nama file (bukan mtime OS yang berubah saat copy/restore).
+- (−) Prune lebih kompleks dari "keep N terbaru" (klasifikasi bucket hari) → permukaan bug retensi lebih besar; dimitigasi
+  test tiered (bucket hourly + representatif-per-hari + gap-hari + boundary). (−) Melebihi "minimal" ADR-022 asli (scope
+  backup naik sedikit — tetap jauh dari DR penuh). (−) Day-boundary lokal → DST buat hari 23/25 jam, tapi representatif
+  per-hari benar (tak bergantung jumlah jam). (−) Engine M5.1 (`backup.ts` config `retention: number`) di-amandemen ke
+  `{ hourly, daily }` — API baru, hari-yang-sama (nol konsumen eksternal).
+- Reconcile sidecar: klausa ADR-022(2) "(+sidecar `-wal`/`-shm`)" diklarifikasi saat impl M5.1 = **file utama saja**
+  (salinan `-wal` basi = korupsi; pasca-`wal_checkpoint(TRUNCATE)` data ada di file utama) — di luar amandemen retensi ini,
+  dicatat agar konsisten.
+**Alternatives Rejected:**
+- **Rolling-N sederhana (ADR-022 asli)** — coverage pendek (N=7 hourly = 7 jam) atau disk linear untuk coverage panjang;
+  owner memilih tiered untuk RPO-pendek + coverage-panjang sekaligus.
+- **Keep-forever (manual delete)** — ditolak (challenge Opus, owner setuju): disk tumbuh tanpa batas untuk supervisor DB;
+  butuh strategi purge/disk manual = beban ops tanpa nilai jelas single-user.
+- **GFS penuh (+ tier weekly/monthly)** — ditunda: 2 tier (hourly+daily) cukup untuk coverage 1 bulan single-user; tier
+  ke-3 = over-engineering sekarang, tambah bila kebutuhan coverage >1 bulan konkret.
+- **Retensi berbasis mtime file OS** — ditolak: mtime bisa berubah saat copy/restore/rsync → tak deterministik; epoch di
+  nama file (`acca-backup-<epochMs>.db`) = sumber waktu stabil, konsisten M5.1.
+
 ## Pending decisions (belum diputuskan)
 
 | Keputusan | Owner | Target |
@@ -658,7 +700,7 @@ diverifikasi live di M5 = perilaku hardening (mis. `status` tak bocor cwd tak pe
 | ~~**Kebijakan resume agy sesi MATI** (I-22/A-4)~~ → 11 Jul (Ziffan): ADR-018 (opsi #3 OAuth). **→ REVISI 12 Jul: ADR-018 di-SUPERSEDE ADR-019** — opsi #3 terbukti baca pool kuota SALAH (gemini-cli harian ≠ grup agy weekly+5h; live-verify) → **optimistic resume + detect**; `oauth2.googleapis.com` dibatalkan. | — | ✅ selesai (ADR-019) |
 | Lisensi repo (MIT vs proprietary) — terkait rencana komersialisasi | Ziffan | sebelum publik |
 | **Pin WinSW vs `sc.exe` final + versi/hash WinSW** (ADR-021) — gate DEPENDENCY-POLICY | Ziffan | saat slice service M5 |
-| **Interval + lokasi + jumlah-retensi backup `acca.db`** (ADR-022) — nilai konfigurasi, bukan engine | Ziffan | saat slice backup M5 |
+| ~~**Interval + lokasi + jumlah-retensi backup `acca.db`** (ADR-022)~~ → **diputuskan 17 Jul (Ziffan, slice M5.2):** interval **hourly**, lokasi `<dataDir>/backups` (override `ACCA_BACKUP_DIR`), retensi **tiered 24 hourly + 30 daily** → **ADR-024** (amandemen retensi ADR-022; engine M5.1 di-amandemen ke config `{hourly,daily}`). | Ziffan | ✅ selesai (ADR-024) |
 | ~~Mekanisme probe usage Antigravity~~ → **ADR-010 (hybrid) LOCKED 3 Jul malam** (opsi #2 terbukti; residual #3/#1 = impl-tuning M3) | — | ✅ selesai |
 | ~~**Strategi continue sesi interaktif yang masih hidup** (inject "continue" ke PTY vs kill→resume-by-id; kebijakan default + gating)~~ → **diputuskan: ADR-014** (inject-ke-PTY preferred + gating ketat; fallback resume-by-id; gating-gagal = manual) | — | ✅ selesai (3 Jul malam) |
 | ~~**THREAT-MODEL.md** (ingress remote + egress sensitif + injection→aksi) — gate wajib tier C (ADR-013 §5)~~ → **dibuat 3 Jul (sore)**, di-review; **ADR-011/012/013 di-LOCK 3 Jul malam** | — | ✅ selesai |
@@ -669,6 +711,7 @@ diverifikasi live di M5 = perilaku hardening (mis. `status` tak bocor cwd tak pe
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-17 (sesi otonom, slice M5.2 — **ADR-024 baru**) | **ADR-024 + di-LOCK (Accepted, owner Ziffan): amandemen klausa retensi ADR-022(3) → tiered GFS-lite.** Slice M5.2, owner memilih **interval hourly** (RPO ≤1 jam) → rolling-N sederhana ADR-022 memaksa trade-off buruk (coverage panjang = disk linear, hourly×30hari naif = 720 snapshot). **Keputusan:** retensi **tiered** = 24 hourly terbaru + 1 representatif/hari-lokal untuk 30 hari (GFS-lite) → RPO-pendek + coverage 1 bulan, disk ter-cap ~54× DB. Config `{hourly,daily}` (env `ACCA_BACKUP_RETENTION_HOURLY/_DAILY`). **Meng-amandemen, TIDAK men-supersede ADR-022** (mekanisme WAL-checkpoint/copy/skrip tetap; pola ADR-020). Engine M5.1 `backup.ts` di-amandemen `retention:number`→`{hourly,daily}` (hari-yang-sama, nol konsumen eksternal). **Menutup Pending "interval/lokasi/retensi backup"** (interval hourly, lokasi `<dataDir>/backups`, retensi 24+30). Klausa sidecar ADR-022(2) diklarifikasi = file-utama-saja (salinan `-wal` basi=korupsi). Keep-forever ditolak (challenge Opus: disk tak terbatas), GFS-penuh (+weekly/monthly) ditunda, retensi-by-mtime ditolak (tak deterministik). Alternatif ditolak: rolling-N (owner pilih tiered). Anotasi ADR-022 status (immutable, isi tak diedit) + header + Pending diperbarui. Dampak docs lanjut: amandemen engine `backup.ts`+test (M5.2 slice), MILESTONES M5.1/M5.2 (retensi tiered), CONTEXT. |
 | 2026-07-17 (sesi, spec M5 doc-first — **ADR-021/022/023 baru**) | **Tiga ADR baru + di-LOCK (Accepted, owner Ziffan) untuk fase perencanaan M5.** Diputuskan pasca-verifikasi web (sumber primer). **ADR-021 (deployment Windows):** Task Scheduler ONSTART terbukti rapuh untuk daemon (gagal-senyap + tanpa auto-restart on-crash — persis mode kegagalan yang produk cegah) → **Windows Service** (auto-restart on failure), registrasi via **template + skrip manual** (WinSW primary / `sc.exe` fallback, **nol dep npm baru** — simetris systemd Linux). **Men-supersede SEBAGIAN klausa Task Scheduler ADR-007** (systemd/Linux tetap). Pin WinSW/sc.exe + hash = Pending (gate DEPENDENCY-POLICY, slice service). **ADR-022 (backup/DR):** minimal — **WAL checkpoint (TRUNCATE) + file copy `acca.db`+sidecar + retensi N** via skrip+doc (bukan fitur daemon MVP); RPO=interval snapshot (diterima single-user); DR penuh/nol-backup ditolak. Interval/lokasi/retensi = Pending (nilai config, slice backup). **ADR-023 (IPC DACL / I-26):** verifikasi web membantah klaim ADR-015 "ACL default owner Windows" — Node/libuv named pipe **terbuka by design** (Everybody+Anonymous read; Node tak punya API set-DACL; issues #47086/#30823/#17743) + kandidat "cek PID client" **gugur** (PID spoofable — Project Zero/CVE-2018-0749, Microsoft anti-PID-enforcement). **Keputusan:** terima DACL terbuka sbg **residual risk terdokumentasi + hardening lapisan-app** (minimalkan data sensitif lewat pipe, hanya daemon mutasi state, injection firewall `inject`-tanpa-payload utuh, audit events); **native addon set-DACL DITOLAK** (over-engineering solo-user). **Men-scope-ulang klausa keamanan ADR-015** (transport tetap). **Disiplin supersede:** status ADR-007 & ADR-015 dianotasi (isi immutable tak diedit) + pointer ke ADR baru; header status + Pending diperbarui. Belum ada kode (fase spec). Dampak docs lanjut (sesi ini): PRD/TRD M5 di MILESTONES + NFR (availability service + backup RPO) + THREAT-MODEL (permukaan service + DACL) + FAILURE-MODES (baru) + vertical slices + SPEC LOCK. |
 | 2026-07-16 (sesi Windows, gate M3e + C-4) | **Keputusan MINOR reversible (bukan ADR)** — tutup gate keluar M3e + hardening pra-M5. **F-1 (Opsi B, keputusan owner):** guard `resumed_from!=null && detected_at==null` → BLOCKED di cabang exited `supervisor.ts` (tanpa migrasi) memutus loop re-spawn RC-1 (continue-job landing di sesi hasil-resume yang exit cepat); semantik dua kolom (`markLimitHit` isi `detected_at` vs `markRunningAfterInject` NULL-kan hanya di jalur alive) menjamin siklus SEHAT lolos. **I-31 (CC-only, owner):** grace-window OUTPUT-CC 5s pasca-`unlatch()` di `limit-watcher` → repaint banner limit lama CC tak re-fire LIMIT_HIT palsu (G-37 ditutup); hook `feedSignal` + agy tak disuppress (ADR-019 immediate detect utuh). **I-30 (guard estimator, owner):** `resolveClockTime` recent-past ≤2h → probe near-now (`heuristic`), bukan wrap +24 jam. **C-4/RC-4:** `reconcileDispatchLiveness` di awal dispatch (alive+pid-mati → `markOrphanExited` → cabang exited auto-recovery) + attempts-cap catch generik → tutup keluarga terakhir retry-senyap. Semua dalam ADR-013/014/017/019 (bukan ADR baru); reversible. Opus inline Tier-1 self-review PASS. **+PTY-integration test I-31 (live TANPA limit, negative-control terbukti).** **406 test** (392→406). Dampak docs: ISSUES (F-1/F-2/I-30/I-31/C-4 Tertutup + gate header hijau), GOTCHAS (G-37 ditutup, G-39 anotasi), CONTEXT, CLAUDE.md §2/README test count. |
 | 2026-07-16 (sesi Windows, I-15 live-verify token → **ADR-020**) | **ADR-020 baru + di-LOCK (amandemen token ADR-014 §1, owner Ziffan).** Live-verify agy **1.1.3** + CC **2.1.211** (otorisasi user) mengisi "keystroke agy = TBD" ADR-014: kata **`"continue"` telanjang tak andal utk agy** — agy menafsirnya pesan NL baru ("I do not have context…"/"more of same"), bukan resume turn. **Bukti penentu (limit ASLI, sesi sama, owner):** kalimat eksplisit "lanjutkan pekerjaan, tadi terhenti karena limit" → **agy DAN CC langsung melanjutkan pekerjaan terhenti**. Mekanisme inject terbukti benar (`injected:true`). **Keputusan:** `CONTINUE_TOKEN` `"continue\r"` → **`"continue the work that was interrupted by the usage limit\r"`** (English, owner). Literal-tetap-hardcoded-wrapper → **injection firewall utuh** (hanya isi kalimat berubah); bersama agy+CC; nol dep/egress. **Amandemen (bukan supersede)** — strategi ADR-014 lain tetap; pola ADR-017. **Sisa:** live-verify literal English pasca-reset agy (kelas I-15, reversible). Delta versi tercatat: agy 1.1.1→1.1.3, CC 2.1.207→2.1.211 (patch; G-33 `esc to cancel` + G-36 resume-cmd re-confirmed holds @1.1.3). Dampak docs: DECISIONS (ADR-020 + anotasi ADR-014 §1 & catatan agy + header), GOTCHAS G-40 baru, ISSUES I-15, CONTEXT, CLAUDE.md §7/README. |

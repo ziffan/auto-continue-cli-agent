@@ -1,0 +1,22 @@
+# Unit systemd --user, ADR-022/024: backup one-shot acca.db (bukan daemon long-running —
+# beda dari service utama M5.4/ADR-021). Dipicu oleh acca-backup.timer (bukan diaktifkan langsung).
+#
+# Pasang (contoh):
+#   mkdir -p ~/.config/systemd/user
+#   cp acca-backup.service acca-backup.timer ~/.config/systemd/user/
+#   # sunting ExecStart + EnvironmentFile di bawah sesuai lokasi instalasi
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now acca-backup.timer
+#
+# Retensi tiered (ADR-024) dibaca dari env — lihat komentar acca-backup.timer untuk contoh
+# EnvironmentFile (ACCA_BACKUP_RETENTION_HOURLY=24, ACCA_BACKUP_RETENTION_DAILY=30).
+
+[Unit]
+Description=acca — backup snapshot acca.db (one-shot, dipicu acca-backup.timer)
+
+[Service]
+Type=oneshot
+# Ganti <INSTALL_DIR> dan <NODE_PATH> sesuai lokasi instalasi (mis. hasil `which node`).
+ExecStart=<NODE_PATH> <INSTALL_DIR>/scripts/backup.js
+# Opsional — file env berisi ACCA_DATA_DIR / ACCA_BACKUP_DIR / ACCA_BACKUP_RETENTION_HOURLY / _DAILY.
+# EnvironmentFile=-%h/.config/acca/backup.env
