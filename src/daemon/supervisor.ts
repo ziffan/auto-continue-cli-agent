@@ -208,7 +208,7 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         // resume agy (GOTCHAS G-38). Karena itu: JANGAN probe, JANGAN BLOCKED — resume OPTIMISTIC. Job
         // `probe` ini dijadwalkan pada `reset_at` (kuota sangat mungkin sudah tersedia) → enqueue `resume`
         // langsung. Bila ternyata masih limit, sesi hasil-resume mem-bind LS-nya sendiri → output TUI
-        // `Individual quota reached` (limit-watcher, G-19) → LIMIT_HIT baru → jadwal ulang di `reset_at`
+        // `\bIndividual \bquota reached` (limit-watcher, G-19) → LIMIT_HIT baru → jadwal ulang di `reset_at`
         // berikut (dibatasi cap attempts B-1). Actuation JADI probe. CC tak kena: probe CC = HTTP standalone
         // ke api.anthropic.com yang membaca limit CC nyata tanpa sesi hidup → CC-exited tetap di-probe normal.
         if (session.tool === 'antigravity' && session.proc_state === 'exited') {
@@ -461,7 +461,7 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       // KERJA (US-3/AC-3), jadwalkan job `resume` untuk sesi BARU (RUNNING+alive → dispatch jalur alive
       // yang ada meng-`requestInject`: gating idle/foreground, token literal di wrapper — nol kanal baru,
       // injection firewall utuh). Bila ternyata masih limit (agy optimistic ADR-019), inject memicu
-      // `Individual quota reached` → limit-watcher sesi BARU → LIMIT_HIT → reschedule di reset_at (siklus
+      // `\bIndividual \bquota reached` → limit-watcher sesi BARU → LIMIT_HIT → reschedule di reset_at (siklus
       // "detect" ADR-019 berjalan seperti didesain). scheduler.arm() pasca-dispatch memuat job ini.
       // Best-effort: resume sendiri SUDAH sukses (markResumed di atas). Bila enqueue gagal (mis. FK —
       // baris sesi baru belum ada; tak terjadi pada default runSession yang createSession dulu), JANGAN

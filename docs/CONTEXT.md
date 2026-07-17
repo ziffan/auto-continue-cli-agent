@@ -135,7 +135,7 @@
   **(1) RC-1 (`supervisor.ts` cabang resume):** pasca `resume_spawned` sukses → **enqueue job `resume` untuk sesi BARU**
   (`spawned.sessionId`, `run_at = now + RESUME_CONTINUE_DELAY_MS` 15s) → sesi baru RUNNING+alive → dispatch **jalur alive yang
   ADA** meng-`requestInject` (gating idle/foreground, token literal wrapper — **nol kanal baru, firewall ADR-013 utuh**). Masih
-  limit (agy optimistic ADR-019) → inject memicu `Individual quota reached` → limit-watcher sesi BARU → LIMIT_HIT → reschedule
+  limit (agy optimistic ADR-019) → inject memicu `\bIndividual \bquota reached` → limit-watcher sesi BARU → LIMIT_HIT → reschedule
   reset_at = **siklus "detect" ADR-019 berjalan seperti didesain**. Enqueue **best-effort** (try/catch + event
   `resume_continue_enqueue_failed`): kegagalan FK (baris sesi baru belum ada — TAK terjadi pada default `runSession` yg
   createSession dulu, G-39) tak boleh flip ke `'retry'` (cegah re-spawn loop). **+1 test kontrak** siklus penuh
@@ -201,14 +201,14 @@
   Client gemini-cli publik (`681255809395-…`, dari repo open-source) **berhasil refresh 200** → `retrieveUserQuota` **200**.
   **TEMUAN PENENTU (G-38):** shape = `buckets[].{modelId, tokenType:REQUESTS, remainingFraction, resetTime}` per-model gemini,
   reset **HARIAN**, semua **100%** — tapi ini kuota **request harian gemini-cli Code Assist**, **BUKAN** limit grup weekly+5h
-  yang agy tegakkan (`Individual quota reached`). Eksperimen non-destruktif (probe LS sesi agy hidup 17316, 0 kuota) buktikan
+  yang agy tegakkan (`\bIndividual \bquota reached`). Eksperimen non-destruktif (probe LS sesi agy hidup 17316, 0 kuota) buktikan
   divergensi serentak: OAuth gemini **1.0** vs LS `RetrieveUserQuotaSummary` gemini-5h **0.079** + gemini-weekly 0.688 +
   3p-weekly 0.330; Summary via OAuth = **403**. → **premis ADR-018 opsi #3 GUGUR** (probe standalone baca pool salah → bug
   korektness bila diteruskan). **Keputusan owner Ziffan (skill adr): ADR-019 men-supersede ADR-018 = optimistic resume +
   detect.** **Impl (Opus inline Tier-1, state-machine + egress):** `supervisor.ts` cabang `probe` — `antigravity && exited`
   → **enqueue `resume` langsung** (skip probe mustahil) + event `optimistic_resume_agy_exited` + done (ganti guard slice-1
   `probe_impossible`/BLOCKED). Sesi hasil-resume = **alive** (daemon pegang PTY) → siklus limit berikutnya probe-able via LS
-  normal; masih-limit → `Individual quota reached` (limit-watcher, G-19) → LIMIT_HIT → reschedule reset_at (cap B-1). Trade-off:
+  normal; masih-limit → `\bIndividual \bquota reached` (limit-watcher, G-19) → LIMIT_HIT → reschedule reset_at (cap B-1). Trade-off:
   ≤1 resume "sia-sia" per siklus (bounded). **Egress least-privilege:** `oauth2.googleapis.com` tak pernah masuk kode +
   `cloudcode-pa.googleapis.com` (opsi #3, nol pemanggil src) **dihapus** dari `ALLOWED_HOSTS`. CC tak kena (probe CC = HTTP
   `api.anthropic.com` baca limit CC nyata standalone). **Verifikasi (Opus sendiri):** `npm run check` typecheck+lint+**369 test**
@@ -331,7 +331,7 @@
   (jalur produksi). **Semua via node-pty + import dist** (`shared/port-discovery`/`http` + `adapters/usage`/`patterns`).
   **TEMUAN (semua docs diupdate):** (1) skema `RetrieveUserQuotaSummary`/`GetUserStatus` **tak berubah** di 1.1.1 →
   parser valid; angka tervalidasi (`3p-5h` 0.1094 → `usedFraction 0.8906`). (2) **G-19 re-verified**: pesan `Individual
-  quota reached` IDENTIK + **limit≠exit** + detektor produksi (`matchAgyLimit`/`detect`) **fire benar** → **paruh DETEKSI
+  \bquota reached` IDENTIK + **limit≠exit** + detektor produksi (`matchAgyLimit`/`detect`) **fire benar** → **paruh DETEKSI
   I-15 agy LULUS**. (3) **G-33 DIKOREKSI**: tak ada `request-review` mode (`--mode`=accept-edits/plan); idle marker =
   footer `? for shortcuts`. (4) **G-36/R2b-agy TERPECAHKAN**: sumber id andal = cmd yang agy CETAK saat exit
   `agy --conversation=<uuid>`; `.db` termuda racy (2 muncul). Resume-load terbukti (`--conversation=<id>` memuat percakapan
@@ -450,7 +450,7 @@
   **Verifikasi (Opus sendiri):** build ✅ · eslint ✅ · **270/270 test** (+26: `test/notifier.test.ts` 24 —
   mapping tiap transisi + null-cases + firewall + decorator passthrough/swallow + proximity 6 cabang; +2 no-op
   `notify` di supervisor-dispatch agar test senyap). **Live smoke e2e (PTY nyata):** fake-CLI cetak frasa limit CC
-  ASLI (`You've hit your session limit…`) → limit-watcher → `markLimitHit` → dekorator → `[acca warn] Usage limit
+  ASLI (`You've \bhit your session limit…`) → limit-watcher → `markLimitHit` → dekorator → `[acca warn] Usage limit
   reached — Session #2j2g hit its usage limit (via output).` di stderr; **`evidence` TAK muncul** (firewall live).
   **Catatan integrasi jujur:** RESUMED-via-inject muncul di stderr daemon (journal), bukan terminal user (desain
   baseline). **BLOCKED** cuma event `job_dispatch_error` — status sesi tak pernah di-set BLOCKED oleh dispatch
@@ -618,7 +618,7 @@
 - **Terakhir diupdate:** 2026-07-04 (sesi sore, session-end) — **3 slice M3d dikerjakan, semua Tier-1, hijau,
   di-commit lalu merged `main` (branch `m3d-wiring-live` fast-forward):**
   **(M3d.8, `a1470b4`)** korpus detektor agy provisional→**VERIFIED** — 4 fixture invented diganti pesan limit
-  agy ASLI `Individual quota reached` (G-19); `AGY_LIMIT_PATTERNS` = anchor terverifikasi + generalisasi
+  agy ASLI `\bIndividual \bquota reached` (G-19); `AGY_LIMIT_PATTERNS` = anchor terverifikasi + generalisasi
   konservatif; pola tebakan (weekly/daily-allowance) dibuang; reset relatif "59m14s" sengaja bukan resetHint
   (sumber andal = LS probe).
   **(M3d.1, `8d0a8b1`)** Detector ter-wire ke output PTY sesi live via `daemon/limit-watcher.ts` (engine murni,
@@ -639,7 +639,7 @@
   **(B) Design M3d** — dipecah **8 slice vertikal** (semua Tier-1) di MILESTONES + urutan eksekusi + scope-file.
   **(C) 🎯 LIMIT agy ASLI TERTANGKAP → ADR-001 di-ACCEPT (tak ada lagi ADR Proposed).** Kuota 5-jam Gemini
   dihabiskan terkontrol (burn print-mode sekuensial via node-pty). Temuan (scratchpad `FINDINGS.md` F1-F12,
-  ringkas di GOTCHAS G-16..G-19 + RESEARCH §2b/§4b): pesan TUI ASLI `⚠ Individual quota reached … Resets in
+  ringkas di GOTCHAS G-16..G-19 + RESEARCH §2b/§4b): pesan TUI ASLI `⚠ \bIndividual \bquota reached … Resets in
   <Xm Ys>` + Error ID; **agy limit≠exit** (tetap hidup di prompt → inject-continue viable, ADR-014 dianotasi
   verified); sinyal exhaustion LS = `remainingFraction` **absent** (bukan 0); **limit agy SOFT** bila AI Credits
   aktif (fallthrough senyap — toggle CLI `useG1Credits` ≠ IDE `useAiCredits`); print-mode `-p` stdout **kosong**
@@ -657,7 +657,7 @@
   budget-guard). Cron one-shot sudah auto-delete; **tak dijadwalkan ulang** (M3d bukan kerja otonom — tunggu user).
   **Lanjutan pagi (bersama user):** (1) **`.claude/skills/` di-commit** ke repo (`78ccad0`) — 8 skill workflow
   kini ter-version (sinkron Ubuntu); `settings.local.json` tetap gitignored. (2) **Analisis limit-hit ASLI**:
-  saat limit 5-jam habis ~07:18–07:20 WIB, transcript sesi menyimpan pesan `You've hit your session limit ·
+  saat limit 5-jam habis ~07:18–07:20 WIB, transcript sesi menyimpan pesan `You've \bhit your session limit ·
   resets 7:30am (Asia/Jakarta)` (synthetic `isApiErrorMessage:true`) → **temuan: false-negative detektor M2**
   (pesan nyata pakai qualifier "session", pola kontigu lolos). (3) **Slice M2-fix** (`755fe36`): pola
   `hit your (?:\w+ )?limit`, fixture asli, regression test end-to-end, RESEARCH §2b (TODO #2 sebagian tutup

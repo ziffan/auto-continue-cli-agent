@@ -68,7 +68,7 @@ const BUFFER_TAIL_LEN = 4096;
  * `feedOutput` → tanpa guard ini ia diklasifikasi ulang sbg limit BARU (LIMIT_HIT palsu, live 16 Jul).
  * HANYA jalur output CC yang disuppress: (a) re-limit CC SAH datang lewat `feedSignal` (hook StopFailure =
  * deteksi PRIMER CC, I-23) yang TAK disuppress → tetap fire seketika; (b) agy TAK disuppress → re-limit
- * langsung ADR-019 optimistic ("Individual quota reached") tetap terdeteksi. Genuine cycle-2 CC via output
+ * langsung ADR-019 optimistic ("\bIndividual \bquota reached") tetap terdeteksi. Genuine cycle-2 CC via output
  * (fallback tanpa hook) selalu >window kemudian → tetap terdeteksi. 5s = margin aman atas repaint (live: repaint
  * di detik yang sama dgn inject); reversibel. */
 const POST_UNLATCH_OUTPUT_GRACE_MS = 5_000;

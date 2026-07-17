@@ -116,20 +116,20 @@ Pola real-world yang dideteksi `claude-auto-retry` (README-nya, MIT — dipakai 
 
 | Pola | Contoh |
 |---|---|
-| N-hour limit reached | `5-hour limit reached - resets 3pm (UTC)` |
-| Usage limit | `Claude usage limit reached. Resets at 2pm` / `Claude usage limit reached. Your limit will reset at 3pm (America/New_York)` |
-| Out of extra usage | `You're out of extra usage · resets 3pm` |
-| Try again | `Please try again in 5 hours` |
-| Hit your limit | `You've hit your limit · resets 3pm (Europe/Dublin)` |
-| Rate limit | `Rate limit hit. Resets at 4pm` |
-| **Session limit (NYATA)** | `You've hit your session limit · resets 7:30am (Asia/Jakarta)` |
+| N-hour limit reached | `\b5-hour limit reached - resets 3pm (UTC)` |
+| Usage limit | `Claude \busage limit reached. Resets at 2pm` / `Claude \busage limit reached. Your limit will reset at 3pm (America/New_York)` |
+| \bOut of extra usage | `You're \bout of extra usage · resets 3pm` |
+| Try again | `\bPlease try again in 5 hours` |
+| \bHit your limit | `You've \bhit your limit · resets 3pm (Europe/Dublin)` |
+| Rate limit | `\bRate limit hit. Resets at 4pm` |
+| **Session limit (NYATA)** | `You've \bhit your session limit · resets 7:30am (Asia/Jakarta)` |
 
 **✅ TERKONFIRMASI LOKAL (4 Jul 2026, limit 5-jam ASLI — TODO #2 sebagian tertutup untuk CC).** Saat limit
 5-jam benar-benar habis (~07:18–07:20 WIB), transcript sesi (`~/.claude/projects/<enc>/<id>.jsonl`) menyimpan
 pesan sebagai **synthetic assistant message** — entri `isApiErrorMessage:true`, `model:"<synthetic>"`,
-`stop_reason:"stop_sequence"`, content = teks limit persis. Format nyata: **`You've hit your session limit ·
+`stop_reason:"stop_sequence"`, content = teks limit persis. Format nyata: **`You've \bhit your session limit ·
 resets 7:30am (Asia/Jakarta)`**. **Koreksi material vs korpus komunitas:** pesan nyata menyisipkan qualifier
-**"session"** (dan kemungkinan "weekly") antara "your" dan "limit" → pola detektor kontigu `hit your limit`
+**"session"** (dan kemungkinan "weekly") antara "your" dan "limit" → pola detektor kontigu `\bhit your limit`
 **LOLOS** (false-negative); pola diperbaiki jadi `hit your (?:\w+ )?limit` (GOTCHAS G-15). **`limit ≠ exit`
 terverifikasi di limit nyata:** proses interaktif tetap hidup, lanjut sendiri setelah reset 7:30 (validasi
 premis auto-continue §2c). **Belum tertangkap:** nilai hook `error:"rate_limit"` (transcript hanya simpan
@@ -143,7 +143,7 @@ fixture asli = korpus regresi.
 **✅ TERKONFIRMASI LOKAL (4 Jul 2026, limit 5-jam Gemini ASLI — TODO #2 varian Antigravity DITUTUP).** Kuota
 5-jam agy (pool Gemini) dihabiskan via burn terkontrol (probe LS memantau `remainingFraction`: `0.2565→0.117→
 0.0055→[absent]`). Fakta terkunci: **(1) Pesan limit TUI agy ASLI (interaktif, credit off):**
-`⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in <Xm Ys>.` +
+`⚠ \bIndividual \bquota reached. Please upgrade your subscription to increase your limits. Resets in <Xm Ys>.` +
 baris `Error ID: <uuid>` (reset **relatif** di pesan ↔ absolut `resetTime` LS). **(2) `limit ≠ exit` utk agy juga:**
 setelah pesan, agy **TETAP HIDUP** di prompt (footer `? for shortcuts` balik) — validasi jalur inject-continue
 ADR-014 utk agy. **(3) Sinyal exhaustion LS:** field `remainingFraction` **HILANG/absent** (bukan 0) saat habis
@@ -213,7 +213,7 @@ Harness uji tersimpan di scratchpad (`hooktest/`, non-repo).
 Basis: mekanisme inti claude-auto-retry (kirim "continue" ke pane hidup — hanya mungkin karena proses
 tak exit saat limit; §5c), premis #13354, dan semantik `StopFailure` ("turn ends", bukan "process exits").
 **✅ Diverifikasi untuk Antigravity (4 Jul 2026):** saat quota 5-jam habis (credit off), agy **TETAP HIDUP** di
-prompt setelah pesan `Individual quota reached` (limit≠exit, seperti CC) → jalur inject-continue viable (§2b, G-19).
+prompt setelah pesan `\bIndividual \bquota reached` (limit≠exit, seperti CC) → jalur inject-continue viable (§2b, G-19).
 Bila credit ada, agy fallthrough senyap ke credit (tak stop) — G-16.
 
 ## 3. Claude Code — resume sesi
@@ -324,7 +324,7 @@ pre-resume** (dasar uji §5b; #2 terbukti end-to-end — quotaInfo non-nil, TODO
 >   → menyehatkan actuation resume-by-id (relevan I-15).
 > - **agy 1.0.16→1.1.1 = NOL perubahan schema/endpoint** yang kita andalkan (quota/usage, LS `GetUserStatus`/
 >   `RetrieveUserQuotaSummary`, port-discovery, OAuth, `--conversation` **semua tak tersentuh** di changelog) → parser &
->   probe (G-24/G-31/G-23/G-17) tetap valid; fixture detektor `Individual quota reached` (G-19) tak berubah (nol entri
+>   probe (G-24/G-31/G-23/G-17) tetap valid; fixture detektor `\bIndividual \bquota reached` (G-19) tak berubah (nol entri
 >   quota/limit-message). **TIGA delta PERILAKU (bukan schema) dicatat:** (a) **1.1.1 print-mode** `agy -p` tak lagi baca
 >   stdin bila prompt via flag (workaround G-18a tak wajib lagi); (b) **1.1.1 print-mode** server-fail kini **stderr +
 >   exit≠0** (bukan "silent empty exit 0" — **G-18c berubah**) — positif, detektor agy tak bergantung print-mode; (c)

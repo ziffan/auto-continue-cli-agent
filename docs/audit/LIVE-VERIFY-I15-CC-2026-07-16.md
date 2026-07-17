@@ -23,7 +23,7 @@
 | 22:16:09 | `job_dispatch_pending {action:"still_limited"}` | Probe fire lagi, masih limit |
 | **22:31:10** | `job_dispatch_done {jobId:1, action:"usage_available_enqueue_resume"}` | Probe fresh: **usage available** (session usedFraction<1) → enqueue resume (job 2) |
 | **22:31:10** | `status_change RUNNING {reason:"inject_continue"}` + `job_dispatch_done {jobId:2, action:"inject_continue"}` | **INJECT-CONTINUE SUKSES** — token literal ditulis ke PTY CC nyata (gating lulus), R3 `markRunningAfterInject` + `unlatch` |
-| **22:31:10** | `status_change LIMIT_HIT {source:"output", evidence:"hit your session limit"}` | **Detik SAMA:** re-LIMIT_HIT via **output-scrape** langsung pasca-unlatch |
+| **22:31:10** | `status_change LIMIT_HIT {source:"output", evidence:CC_LIMIT_PATTERNS[3]}` | **Detik SAMA:** re-LIMIT_HIT via **output-scrape** langsung pasca-unlatch |
 | 22:31:10 | `probe_scheduled {resetSource:"exact", jobId:3}` (run_at **2026-07-17 22:20:00**) | Reset di-parse dari "resets 10:20pm" **→ wrap ke BESOK** (10:20pm sudah lewat jam 22:31) |
 
 `usage_snapshot_claude` (capturedAt 22:04): `session usedFraction=1, resetAt≈22:19:59` (= "10:20pm" **malam ini**),
@@ -44,8 +44,8 @@ actuation ADR-014/ADR-020 pada limit ASLI (sebelumnya hanya via harness `inject-
 di-inject; firewall utuh (IPC `inject` tanpa payload).
 
 ### ⚠ T-3 — G-37 TERKONFIRMASI LIVE (FALSE-POSITIVE): repaint pasca-inject re-fire LIMIT_HIT palsu
-Detik yang sama dengan inject (`unlatch` R3) muncul `LIMIT_HIT {source:"output", evidence:"hit your session
-limit"}`. **DIKONFIRMASI FALSE-POSITIVE (owner, Terminal B):** CC **jalan normal & MENYELESAIKAN kerja** (rencana
+Detik yang sama dengan inject (`unlatch` R3) muncul `LIMIT_HIT {source:"output", evidence:CC_LIMIT_PATTERNS[3]}`.
+**DIKONFIRMASI FALSE-POSITIVE (owner, Terminal B):** CC **jalan normal & MENYELESAIKAN kerja** (rencana
 remedi) pasca-inject — daemon log `[acca info] Session #6eum resumed (inject-continue)`. Jadi yang re-fire =
 **repaint baris banner limit LAMA** (ber-`\n`) mengalir lewat `onData` ke limit-watcher yang baru di-`unlatch`,
 **bukan** limit baru. Ini residual **G-37 / R3-I-21** yang selama ini teoretis → **nyata**. Asumsi lama "TUI

@@ -116,7 +116,7 @@ export const antigravityAdapter: Adapter = {
         if (isTransientRetry(signal.text)) return { kind: 'none', source: null };
         const overload = matchOverload(signal.text);
         if (overload) return { kind: 'overload', source: 'output', evidence: overload };
-        // VERIFIED (4 Jul): korpus agy dari limit 5-jam ASLI — "Individual quota reached" (G-19).
+        // VERIFIED (4 Jul): korpus agy dari limit 5-jam ASLI — "\bIndividual \bquota reached" (G-19).
         const limit = matchAgyLimit(signal.text);
         if (limit) {
           return { kind: 'limit', source: 'output', evidence: limit.evidence, resetHint: limit.resetHint };
