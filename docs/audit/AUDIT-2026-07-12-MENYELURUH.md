@@ -67,7 +67,7 @@ Verdict per area:
   RESUMED … Kembali ke 3") — dengan perilaku sekarang, yang terjadi hanyalah *terbuka kembali*.
 
 **Dampak berantai ke ADR-019.** Paruh "detect" optimistic-resume agy berasumsi: "bila masih limit,
-sesi hasil-resume mencetak `Individual quota reached` → limit-watcher fire" (DECISIONS ADR-019;
+sesi hasil-resume mencetak `\bIndividual \bquota reached` → limit-watcher fire" (DECISIONS ADR-019;
 ISSUES I-22). Pesan itu terverifikasi muncul saat **generate dicoba** (G-19) — sesi yang hanya
 di-load **tanpa pernah disubmit prompt** kemungkinan besar tidak mencetak apa-apa → LIMIT_HIT baru
 tak terpicu → siklus deteksi ADR-019 mati diam: sesi baru RUNNING+idle selamanya, user mengira

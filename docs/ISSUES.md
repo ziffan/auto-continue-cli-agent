@@ -119,7 +119,32 @@ awal Opus KELIRU):
 **Next:** keputusan owner (overload `probe` vs job `verify` baru) untuk membangun poin 2. Atau: buktikan perilaku
 repaint CC saat limit-asli-dan-diam → kalau repaint terkonfirmasi, residual poin 3 gugur tanpa kode.
 
-### I-36 — Repo ini sendiri = korpus yang memicu detektornya sendiri; `/session-start` = ranjau di bawah acca [P2, higiene dev — TIDAK menggantikan I-35]
+### I-36 — Repo ini sendiri = korpus yang memicu detektornya sendiri; `/session-start` = ranjau di bawah acca [P2, higiene dev ✅ DITUTUP 17 Jul — TIDAK menggantikan I-35]
+**✅ DITUTUP 17 Jul (Opus inline, Tier-1, 95+570 test).** 61 baris (bukan 103 literal — angka 103 dari korpus mentah
+sebelum dobel-cek cc+agy independen per baris menemukan 1 baris lagi [`DECISIONS.md:850`] dan idempotency-loop
+menemukan overlap pattern0-vs-pattern1 [+~40 titik sisip lagi]; hitungan akhir = 61 baris, 102 titik sisip) di 12
+file (`docs/{CONTEXT,DECISIONS,GOTCHAS,ISSUES,RESEARCH}.md` + 2 audit + 5 file `src/`) diperbaiki: escape `\b`
+(word-boundary patah, teks tetap terbaca — mayoritas) atau referensi by-index `CC_LIMIT_PATTERNS[N]` (3 titik yang
+merupakan **data record** `evidence:"..."` di audit docs — escape akan salah-representasi nilai yang benar-benar
+tercatat). **Dua pengecualian struktural bermarker `gate:allow-canonical-literal`:** `AGY_LIMIT_PATTERNS` array
+literal (`patterns.ts` — regex source-nya niscaya memuat teks targetnya, bukan kutipan prosa) + `notifier.ts` title
+(string user-facing yang SENGAJA meniru bahasa kanonik untuk kejelasan; risiko notif-memicu-diri-sendiri sudah
+ditutup di lapis deteksi oleh I-35, bukan dengan menyembunyikan kata dari user).
+**Gate permanen: `test/no-canonical-limit-literals.test.ts`** — scan SEMUA file text-ish (`.ts/.md/.json/.sh/.ps1/
+.xml/.service/.yml/.yaml`) di luar `test/**`, pakai `matchLimit`/`matchAgyLimit` PRODUKSI langsung (bukan salinan
+regex — tak bisa basi terhadap `patterns.ts`), skip baris ber-marker. Lintas-OS (pure fs+regex). **Negative control
+TERBUKTI** (literal mentah disisipkan → gate merah tepat di baris itu; dihapus → hijau) — dan gate ini **langsung
+membuktikan gunanya** saat menulis dokumentasi penutupnya sendiri (GOTCHAS G-46 draft pertama memuat 4 literal segar,
+tertangkap gate sebelum commit).
+**3 jebakan mekanis ditemukan & diperbaiki SAAT membangun gate ini sendiri (detail: GOTCHAS G-46):** (a) JS `'\b'`
+= backspace, bukan 2 karakter `\`+`b` → fix pertama no-op senyap; (b) menyisip escape ke baris DEFINISI regex
+(bukan komentar) mengubah semantik deteksi produksi — nyaris terjadi pada `AGY_LIMIT_PATTERNS`; (c) menyimpan
+SATU evidence per baris (bukan cc+agy independen) melewatkan baris ber-evidence-ganda. Pelajaran umum: gate/fixer
+mekanis untuk "teks yang mirip kode" wajib rescan-terverifikasi, jangan percaya "skrip jalan tanpa galat".
+**Sumber:** insiden live 17 Jul (I-35); implementasi gate 17 Jul.
+
+<details><summary>Temuan asli (sebelum ditutup)</summary>
+
 **Terukur 17 Jul: 103 literal yang cocok pola detektor, tersebar di 20 file.** Yang gawat — **5 di antaranya adalah file
 yang ritual `/session-start` WAJIBKAN dibaca tiap sesi**: `GOTCHAS.md` (13) · `RESEARCH.md` (12) · `DECISIONS.md` (8) ·
 `CONTEXT.md` (7) · `ISSUES.md` (6) = **46 literal**. Artinya **ritual pembuka proyek ini adalah ranjau** setiap kali
@@ -134,6 +159,7 @@ rujuk **by-index**. Gate ini pure-TS → lintas-OS, tak melanggar pelajaran I-34
 **Batas tegas:** I-36 = higiene dev (bikin repo ini aman dikerjakan di bawah acca). **I-35 = fix produk.** I-36 **tak**
 menggantikan I-35 — user lain punya repo & paste-an mereka sendiri.
 **Sumber:** insiden live 17 Jul (lihat I-35).
+</details>
 
 ### I-34 — Artefak shippable tanpa gate yang MENGEKSEKUSINYA = titik buta review [P2, `.ps1` ✅ ditutup 17 Jul; `.service`/`.sh`/XML MASIH TERBUKA → gate sebelum M5.4/M5.5 render]
 **Kelas cacat (bukan bug tunggal), ditemukan 17 Jul lewat DUA korban nyata dalam satu sesi:**
@@ -298,7 +324,7 @@ sinyal limit dari **OUTPUT** untuk sesi **CC** dalam `POST_UNLATCH_OUTPUT_GRACE_
 `limit_suppressed`, TAK melatch → sinyal SAH setelah window tetap fire). Repaint banner limit LAMA CC (ber-`\n`) pasca-inject
 = FP yang disuppress. **Kunci CC-only + OUTPUT-only:** (a) re-limit CC SAH datang via `feedSignal` (hook StopFailure = deteksi
 PRIMER, I-23) yang **TAK** disuppress → tetap fire seketika; (b) **agy TAK tersentuh** → re-limit langsung ADR-019 optimistic
-("Individual quota reached") tetap terdeteksi (immediate detect utuh); (c) genuine CC cycle-2 via output (fallback tanpa hook)
+("\bIndividual \bquota reached") tetap terdeteksi (immediate detect utuh); (c) genuine CC cycle-2 via output (fallback tanpa hook)
 selalu > window → tetap fire. Clock di-inject (deterministik test, purity engine utuh); wrapper feed `nowMs` + audit event
 (field terkontrol, firewall G-9 utuh). **+3 test** (repaint suppress + hook tak-disuppress + agy tak-disuppress) + **1 test R3
 di-update** (cycle-2 CC output kini setelah advance clock > grace — genuine cycle-2 selalu jauh kemudian).
@@ -313,7 +339,7 @@ Yang tetap opportunistik (kelas I-15): repaint CC di limit **nyata** byte-identi
 <details><summary>Detail temuan asli</summary>
 
 **Live-verify 16 Jul (T-3):** detik yang sama dengan inject-continue (`unlatch` R3), `LIMIT_HIT {source:"output",
-evidence:"hit your session limit"}` muncul — indikasi kuat **repaint banner limit LAMA** di TUI CC mengalir lewat
+evidence:CC_LIMIT_PATTERNS[3]}` muncul — indikasi kuat **repaint banner limit LAMA** di TUI CC mengalir lewat
 `onData` ber-newline → limit-watcher (baru di-unlatch) klasifikasi ulang sbg limit BARU. Residual G-37/R3-I-21 yang
 selama ini teoretis → nyata. **DIKONFIRMASI FALSE-POSITIVE (owner):** CC (Terminal B) jalan normal & selesaikan kerja
 pasca-inject → banner LAMA yang di-repaint, bukan limit baru. **Dampak korektness:** sesi ter-tandai LIMIT_HIT palsu +
@@ -368,7 +394,7 @@ memilih probe standalone OAuth `retrieveUserQuota` (+refresh `oauth2.googleapis.
 - **✅ RESOLVED — ADR-019 (men-supersede ADR-018): optimistic resume + detect.** `supervisor.ts` cabang `probe`:
   `tool===antigravity && proc_state===exited` → **enqueue `resume` langsung** (skip probe) + event `job_dispatch_done
   {action:'optimistic_resume_agy_exited'}` + `return 'done'`. Sesi hasil-resume = **alive** (daemon pegang PTY) → siklus
-  limit berikutnya probe-able via LS normal; bila masih limit → `Individual quota reached` (limit-watcher, G-19) → LIMIT_HIT
+  limit berikutnya probe-able via LS normal; bila masih limit → `\bIndividual \bquota reached` (limit-watcher, G-19) → LIMIT_HIT
   → reschedule di reset_at (cap B-1). Guard slice-1 (`probe_impossible`/BLOCKED) DIGANTI jalur ini. **Egress:**
   `oauth2.googleapis.com` tak pernah masuk kode + `cloudcode-pa.googleapis.com` (opsi #3, tak dipakai) **dihapus** dari
   allowlist (least-privilege). **CC tak kena** (probe CC = HTTP `api.anthropic.com` baca limit CC nyata standalone). Firewall
@@ -409,7 +435,7 @@ bila mengganggu auto-continue. Catatan positif: CC **2.1.206** memperbaiki bug k
 startup → jalur resume-by-id lebih mulus di 2.1.207.
 
 **✅ SEBAGIAN BESAR TERVERIFIKASI untuk agy 1.1.1 (11 Jul, burn `3p-5h` ~11% ke limit, otorisasi user):**
-- **Deteksi limit (jalur produksi):** pesan TUI `Individual quota reached` NYATA di 1.1.1 → `matchAgyLimit` +
+- **Deteksi limit (jalur produksi):** pesan TUI `\bIndividual \bquota reached` NYATA di 1.1.1 → `matchAgyLimit` +
   `antigravityAdapter.detect` fire benar (`{kind:'limit',source:'output'}`). **limit≠exit** dikonfirmasi (agy hidup di
   prompt). (G-19 re-verified, G-33 dikoreksi.)
 - **Resume-by-id (paruh load):** `agy --conversation=<id>` **memuat percakapan lama utuh** di sesi baru, hidup di prompt
@@ -551,11 +577,11 @@ String UX di `console.log` sengaja TAK dikunci test (brittle, low-value P3). **S
 **RESOLVED (RC-1, Opus inline Tier-1).** `claude --resume <id>` / `agy --conversation=<id>` memuat percakapan lalu
 **diam di prompt** (bukti live G-36) — tak ada jalur kode meng-inject `continue` ke sesi HASIL-resume → US-3/AC-3 gagal
 separuh (sesi ditinggal tidur "resumed" tapi tak lanjut kerja). Juga melemahkan paruh "detect" ADR-019 (sesi yang cuma
-di-load tak mencetak `Individual quota reached` → LIMIT_HIT tak terpicu). **Fix (`supervisor.ts` cabang resume, pasca
+di-load tak mencetak `\bIndividual \bquota reached` → LIMIT_HIT tak terpicu). **Fix (`supervisor.ts` cabang resume, pasca
 `resume_spawned`):** enqueue job `resume` untuk sesi BARU (`spawned.sessionId`, `run_at = now + RESUME_CONTINUE_DELAY_MS`
 15s) → sesi baru RUNNING+alive → dispatch **jalur alive yang ada** meng-`requestInject` (gating idle/foreground, token
 literal di wrapper — **nol kanal baru, injection firewall ADR-013 utuh**). Bila masih limit (agy optimistic ADR-019):
-inject memicu `Individual quota reached` → limit-watcher sesi BARU → LIMIT_HIT → reschedule reset_at → siklus "detect"
+inject memicu `\bIndividual \bquota reached` → limit-watcher sesi BARU → LIMIT_HIT → reschedule reset_at → siklus "detect"
 berjalan seperti didesain. Enqueue **best-effort** (try/catch + event `resume_continue_enqueue_failed`): kegagalan FK
 (baris sesi baru belum ada — tak terjadi pada default `runSession`) tak boleh flip dispatch ke `'retry'` (cegah re-spawn
 loop). **+1 test kontrak** (`supervisor-dispatch`: siklus penuh exited→spawn→continue-enqueue→fire→requestInject sesi

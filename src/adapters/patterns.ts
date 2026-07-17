@@ -28,8 +28,8 @@ const CC_LIMIT_PATTERNS: RegExp[] = [
   /\bout of extra usage\b/i,
   // Varian NYATA (terkonfirmasi lokal 4 Jul 2026 dari limit 5-jam asli): "You've hit your session
   // limit · resets 7:30am (Asia/Jakarta)". Claude Code menyisipkan qualifier ("session"/"weekly")
-  // antara "your" dan "limit" → pola wajib izinkan satu kata opsional, bukan "hit your limit" kontigu
-  // (kalau kontigu, pesan asli LOLOS = false-negative). Mencakup juga "you've hit your limit". G-15, RESEARCH §2b.
+  // antara "your" dan "limit" → pola wajib izinkan satu kata opsional, bukan "\bhit your limit" kontigu
+  // (kalau kontigu, pesan asli LOLOS = false-negative). Mencakup juga "you've \bhit your limit". G-15, RESEARCH §2b.
   /\bhit your (?:\w+ )?limit\b/i,
   /\brate limit hit\b/i,
   /\bplease try again in \d+ hours?\b/i,
@@ -37,18 +37,25 @@ const CC_LIMIT_PATTERNS: RegExp[] = [
 
 /**
  * VERIFIED (4 Jul 2026 — limit 5-jam agy ASLI, G-19 / FINDINGS F4/F10): TUI menampilkan
- * `⚠ Individual quota reached. Please upgrade your subscription to increase your limits.
+ * `⚠ \bIndividual \bquota reached. Please upgrade your subscription to increase your limits.
  * Resets in <Xm Ys>.` + baris `Error ID: <uuid>`. agy TETAP HIDUP setelah pesan (limit ≠ exit).
  * Antigravity tak punya hook/transcript JSONL seperti CC (transcript = protobuf, RESEARCH §4d)
  * — hanya output/exit-code yang bisa diperiksa; catatan: `agy -p` print-mode stdout KOSONG saat
  * limit (G-18) → deteksi teks hanya dari rendering TUI interaktif.
  *
  * Pattern #1 = frasa inti TERVERIFIKASI (anchor). #2 = generalisasi konservatif dari token nyata
- * "quota reached" (mencakup exhausted/exceeded bila wording sedikit bergeser). Varian wording lain
+ * "\bquota reached" (mencakup exhausted/exceeded bila wording sedikit bergeser). Varian wording lain
  * (mis. limit MINGGUAN) BELUM tertangkap → sengaja tak ditebak: sinyal exhaustion agy yang lebih
  * andal daripada teks TUI = LS-probe `remainingFraction` absent (G-17) + credit habis/off (G-16).
  */
-const AGY_LIMIT_PATTERNS: RegExp[] = [/\bindividual quota reached\b/i, /\bquota\s+(?:reached|exhausted|exceeded)\b/i];
+// I-36 gate: baris ini SENGAJA dikecualikan (marker di bawah) — pattern[0]'s literal source text
+// ("\bindividual \bquota reached") mengandung substring "\bquota reached" yang independen memenuhi
+// pattern[1] (didahului spasi dari "individual " → word-boundary alami ADA). Ini BUKAN prosa yang
+// mengutip pesan (risiko yang I-36 targetkan) — ini LOGIKA DETEKSI itu sendiri; tak bisa "diperbaiki"
+// dengan menyisip \b tanpa mengubah semantik regex (terbukti saat percobaan pertama gate ini — lihat
+// GOTCHAS G-46). Dikecualikan sama seperti test/fixtures/**, dengan alasan yang sama: korpus wajib
+// memuat literal itu untuk berfungsi.
+const AGY_LIMIT_PATTERNS: RegExp[] = [/\bindividual quota reached\b/i, /\bquota\s+(?:reached|exhausted|exceeded)\b/i]; // gate:allow-canonical-literal
 
 /**
  * G-36 (live-verify 11 Jul, agy 1.1.1): saat sesi agy interaktif ditutup (Ctrl-C 2×), agy MENCETAK

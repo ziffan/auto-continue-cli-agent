@@ -85,7 +85,7 @@ hanya salah satu bentuk. **Sumber:** I-15 live-verify 11 Jul.
 **(c)** saat kuota habis, `agy -p` = **stdout KOSONG, exit 0** — pesan limit **TIDAK** muncul di print-mode (hanya di rendering TUI interaktif).
 **Dampak:** probe/burner agy print-mode hang atau salah-baca "sukses" saat justru limit.
 **Cara benar:** `child.stdin.end()` segera setelah spawn; **jangan** skip-permissions (batasi "jawab teks, tanpa tool");
-deteksi limit agy **jangan** dari stdout print-mode — pakai rendering TUI (pola `Individual quota reached`, G-19) atau
+deteksi limit agy **jangan** dari stdout print-mode — pakai rendering TUI (pola `\bIndividual \bquota reached`, G-19) atau
 probe LS (G-17). **Sumber:** FINDINGS F5/F6/F11, 4 Jul.
 **⚠ Anotasi versi (agy 1.1.1, 11 Jul):** jebakan **(a)** & **(c)** ini **spesifik agy ≤1.0.16**. CHANGELOG 1.1.1: `agy -p`
 **tak lagi baca stdin** bila prompt via flag → `child.stdin.end()` (a) tak lagi wajib (tetap harmless). Print-mode yang gagal
@@ -95,19 +95,19 @@ tapi **tetap jangan** andalkan print-mode utk deteksi limit agy (server-fail vs 
 
 ### G-19 — Pesan limit agy TUI ASLI + agy tetap HIDUP (limit≠exit) + tak boleh sesi konkuren
 **Jebakan/Fakta:** pesan limit agy interaktif (kuota 5-jam=0, credit off) =
-`⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in <Xm Ys>.` + baris `Error ID: <uuid>`.
+`⚠ \bIndividual \bquota reached. Please upgrade your subscription to increase your limits. Resets in <Xm Ys>.` + baris `Error ID: <uuid>`.
 Setelah pesan, agy **TETAP HIDUP** di prompt (footer `? for shortcuts` balik) — **limit≠exit** (seperti CC) → jalur
 **inject-continue** ADR-014 viable untuk agy. Reset ditampilkan **relatif** ("Resets in 59m14s"), korelasi `resetTime`
 absolut LS. **⚠ Update C-6 (17 Jul):** countdown relatif kompak ini (`Resets in Xh Ym Zs`, unit RAPAT tanpa spasi)
 KINI di-parse `extractResetHint` → `relativeMinutes`/`relativeSeconds` (dulu sengaja tidak). Presedensi estimator
 tetap: `isoTimestamp` LS-probe absolut **DI ATAS** relatif → LS menang saat ada; parse relatif hanya menggantikan
 backoff sia-sia saat output = satu-satunya sinyal (mempersempit jendela false-positive G-37). **Juga:** agy **tak mendukung sesi print konkuren** (state `~/.gemini`/LS/token di-share → hang) → burner/probe wajib sekuensial.
-**Dampak:** fixture detektor agy = pola `Individual quota reached` (bukan tebakan); gating continue agy = alive-path.
+**Dampak:** fixture detektor agy = pola `\bIndividual \bquota reached` (bukan tebakan); gating continue agy = alive-path.
 **Cara benar:** korpus detektor agy pakai pesan ASLI ini; jangan spawn banyak sesi agy serentak. **Sumber:** FINDINGS F4/F10/F11, 4 Jul (`agy-REAL-limit-message.txt`).
-**✅ Re-verified live 11 Jul (agy 1.1.1):** pesan **IDENTIK** (`⚠ Individual quota reached. Please upgrade your
+**✅ Re-verified live 11 Jul (agy 1.1.1):** pesan **IDENTIK** (`⚠ \bIndividual \bquota reached. Please upgrade your
 subscription to increase your limits. Resets in 4h31m7s.` + `Error ID: …`), **limit≠exit tetap berlaku** (agy hidup di
 prompt `>` + footer `? for shortcuts`). `matchAgyLimit` + `antigravityAdapter.detect` **fire benar** atas output 1.1.1
-nyata (`{kind:'limit',source:'output',evidence:'Individual quota reached'}`) — detektor produksi live-validated (menutup
+nyata (`{kind:'limit',source:'output',evidence:'\bIndividual \bquota reached'}`) — detektor produksi live-validated (menutup
 paruh DETEKSI I-15 untuk agy). **Sumber:** I-15 live-verify 11 Jul (`agy-burn-interactive.mjs`).
 
 ## Claude Code
@@ -127,8 +127,8 @@ parse integer. `api/oauth/usage` juga punya array `limits[]` lebih kaya (severit
 `last_assistant_message` (teks user-facing) berguna utk fixture. **Sumber:** RESEARCH §2c (TODO #7).
 
 ### G-15 — Pesan limit CC nyata menyisipkan qualifier ("session"/"weekly") + warning proaktif UI-only
-**Jebakan (a):** pesan limit Claude Code nyata = `You've hit your session limit · resets 7:30am (Asia/Jakarta)`
-— ada kata **"session"** antara "your" dan "limit". Pola detektor kontigu `hit your limit` **tak match** →
+**Jebakan (a):** pesan limit Claude Code nyata = `You've \bhit your session limit · resets 7:30am (Asia/Jakarta)`
+— ada kata **"session"** antara "your" dan "limit". Pola detektor kontigu `\bhit your limit` **tak match** →
 false-negative pada limit ASLI (korpus komunitas keliru mengira kontigu). **Jebakan (b):** banner peringatan
 proaktif (~90% window 5-jam, ~75% mingguan) yang muncul di terminal **TIDAK di-persist** ke transcript JSONL
 (UI-only, transien) — mencari-nya di transcript = nihil.
@@ -370,12 +370,12 @@ spike I-16 (ISSUES), CodexBar `docs/antigravity.md` (mereka prioritas `RetrieveU
 **Jebakan/Fakta (live-verify 11 Jul, agy 1.1.1 Windows, I-15):** `RetrieveUserQuotaSummary` (dan `GetUserStatus`) yang
 ditembak ke port LS milik **sesi agy yang sedang hidup** mengembalikan **snapshot kuota saat sesi itu LAUNCH** —
 **tidak** ter-refresh saat sesi membakar kuota. Terbukti: satu sesi agy dibakar 3 turn Opus berat sampai TUI
-`Individual quota reached`, tapi probe ke LS sesi itu **tetap** lapor `3p-5h remainingFraction=0.0712544` (angka PERSIS
+`\bIndividual \bquota reached`, tapi probe ke LS sesi itu **tetap** lapor `3p-5h remainingFraction=0.0712544` (angka PERSIS
 sama sepanjang hidup sesi), sementara **sesi baru** yang di-launch sedetik kemudian lapor `3p-5h=0`. Sekelas `/usage`
 stale (RESEARCH §4b): nilai beku di launch-time.
 **Dampak:** (a) **I-17 usage-monitor** yang probe periodik ke sesi RUNNING panjang akan membaca angka **basi**
 (launch-snapshot) → proximity meleset. (b) **Deteksi limit agy TAK BOLEH mengandalkan probe sesi-hidup** — sinyal LIVE
-andal = **output TUI** (`Individual quota reached`, limit-watcher — terbukti fire benar 1.1.1, G-19) ATAU **probe FRESH**
+andal = **output TUI** (`\bIndividual \bquota reached`, limit-watcher — terbukti fire benar 1.1.1, G-19) ATAU **probe FRESH**
 (sesi baru / standalone OAuth ADR-018). Ini **memperkuat ADR-018** (probe pre-resume standalone = fresh, hindari cache
 sesi). **Cara benar:** untuk kuota real-time launch sesi baru / standalone probe; jangan percaya angka dari LS sesi yang
 sudah lama hidup. **Sumber:** I-15 live-verify 11 Jul (scratchpad `agy-burn-interactive.mjs`).
@@ -391,14 +391,14 @@ gemini-cli publik (`681255809395-…apps.googleusercontent.com` + secret `GOCSPX
 HTTP 200**. Lalu `POST cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota` (Bearer, body `{}`) → **200**, bentuk:
 `{ buckets[]: { modelId, tokenType:"REQUESTS", remainingFraction, resetTime(ISO-8601 Z) } }` — **per-MODEL gemini** (gemini-2.5-flash/
 -flash-lite/-pro, gemini-3.1-flash-lite), reset **~24 jam (HARIAN)**, nol PII. **TAPI ini kuota request harian gemini-cli Code
-Assist — BUKAN** limit **grup weekly+5h** yang agy tegakkan untuk `Individual quota reached`. **Bukti divergensi (akun sama,
+Assist — BUKAN** limit **grup weekly+5h** yang agy tegakkan untuk `\bIndividual \bquota reached`. **Bukti divergensi (akun sama,
 serentak 12 Jul):** OAuth `retrieveUserQuota` gemini = **1.0 (100%)** sementara LS `RetrieveUserQuotaSummary` (sesi hidup) =
 **gemini-5h 0.079 (7.9%)** + gemini-weekly 0.688 + 3p-weekly 0.330 + 3p-5h 0.9996. `retrieveUserQuotaSummary` **via OAuth =
 403 PERMISSION_DENIED** (client gemini-cli tak berhak atas quota-group Antigravity 2.0).
 **Dampak:** probe standalone OAuth **TAK BISA** menggerbang resume agy — kalau agy limit (gemini-5h=0) ia tetap lapor gemini
 100% → dispatch keliru "resume". **Premis ADR-018 (opsi #3) gugur** → di-supersede **ADR-019** (optimistic resume + detect;
 `oauth2.googleapis.com`/`cloudcode-pa.googleapis.com` dihapus dari egress). **Cara benar:** limit grup agy HANYA terbaca via
-**LS sesi-hidup** (`RetrieveUserQuotaSummary`, opsi #2) atau **output TUI** (`Individual quota reached`, limit-watcher). Untuk
+**LS sesi-hidup** (`RetrieveUserQuotaSummary`, opsi #2) atau **output TUI** (`\bIndividual \bquota reached`, limit-watcher). Untuk
 agy-exited (tak ada LS): jangan probe standalone — resume optimistik lalu deteksi ulang via LS sesi hasil-resume. **Sumber:**
 R4 slice 2 live-verify 12 Jul (scratchpad `agy-oauth-probe-spike.mjs` + `agy-ls-compare.mjs`), DECISIONS ADR-019.
 
@@ -571,7 +571,7 @@ agy/CC saat limit asli. **Sumber:** R3/I-21, `src/daemon/{limit-watcher,process-
 `src/store/repositories/sessions.ts`, `src/notify/notifier.ts`.
 **⚠ RESIDUAL TERKONFIRMASI LIVE (16 Jul, limit CC ASLI, otorisasi user → I-31):** repaint memang **re-fire LIMIT_HIT
 palsu**. Trace: inject-continue sukses (`status RUNNING reason:inject_continue`, un-latch) → **detik yang sama**
-`LIMIT_HIT {source:"output", evidence:"hit your session limit"}` → probe dijadwalkan sia-sia. **Terbukti FALSE-POSITIVE:**
+`LIMIT_HIT {source:"output", evidence:CC_LIMIT_PATTERNS[3]}` → probe dijadwalkan sia-sia. **Terbukti FALSE-POSITIVE:**
 sesi CC (Terminal B) **jalan normal & menyelesaikan kerja** pasca-inject (owner + daemon log `Session resumed
 (inject-continue)`) — banner limit LAMA yang di-repaint (ber-`\n`), bukan limit baru. Asumsi "TUI repaint in-place
 tanpa `\n`" GUGUR untuk CC. **Dampak:** `unlatch()` reset-buffer TAK cukup; sesi ter-tandai LIMIT_HIT palsu + probe
@@ -693,7 +693,7 @@ ketika sesinya jalan di bawah acca.** Sesi 17 Jul lolos separuh hanya karena Rea
 - **Redaksi pipeline** saat menjalankan test / membaca file yang memuat korpus. Tulis polanya **ter-escape** — bentuk itu
   aman **dan** tetap berfungsi (GNU sed `-E` paham `\b`), jadi contoh ini tak memicu dirinya sendiri:
   ```sh
-  npm run test 2>&1 | sed -E 's/(\bhit your ([A-Za-z]+ )?limit\b|\busage limit reached\b|\bindividual quota reached\b)/«REDACTED»/gI'
+  npm run test 2>&1 | sed -E 's/(\bhit your ([A-Za-z]+ )?limit\b|\busage limit reached\b|\bindividual \bquota reached\b)/«REDACTED»/gI'
   ```
   **Terbukti**: menangkap byte PTY nyata dari test integration I-31 yang men-spawn banner limit sungguhan lewat PTY.
 - **Tahu file mana yang berbahaya untuk sesi mana:** literal di `limit-watcher.ts`/`supervisor.ts` semuanya frasa **agy**
@@ -706,6 +706,40 @@ ketika sesinya jalan di bawah acca.** Sesi 17 Jul lolos separuh hanya karena Rea
 **Fix produk = I-35** (korroborasi thd snapshot usage; suppress bila window mengikat <0.85). **Higiene repo = I-36.**
 G-45 ini = cara kerja untuk manusia/agent, bukan pengganti keduanya.
 **Sumber:** insiden live 17 Jul, sesi `z36i`, events #43/#48 (bukti di ISSUES I-35).
+
+### G-46 — Membangun gate I-36 (fix mekanis literal kanonik) hampir merusak regex produksi DUA cara berbeda
+**Jebakan (a) — JS `'\b'` = backspace U+0008, BUKAN dua karakter `\`+`b`:** skrip fix pertama menyisip `'\b' + ev`
+(string JS) untuk mematahkan word-boundary regex (konvensi ISSUES.md: "prefiks `\b`"). Backspace **JUGA** non-word
+char → `\b`-metachar regex masih menemukan boundary di posisinya → fix **no-op SENYAP** (rescan pasca-fix melapor
+hit **identik** — nyaris lolos tanpa terdeteksi kalau rescan tak dijalankan segera). **Cara benar:** literal dua
+karakter — `'\\b' + ev` (backslash literal + huruf b), diverifikasi via rescan otomatis SETIAP kali skrip fix jalan
+(jangan percaya "sudah jalan tanpa galat" — no-op tak melempar galat).
+**Jebakan (b) — sisip `\b` ke BARIS DEFINISI regex-nya sendiri = mengubah regex PRODUKSI, bukan cuma dokumentasi:**
+`AGY_LIMIT_PATTERNS` array literal (`patterns.ts`) — pattern[0]'s teks sumber `\bindividual \bquota reached` secara
+independen memenuhi pattern[1] (`quota\s+(?:reached|...)`, didahului spasi dari "individual " → boundary alami
+ADA). Scanner generik yang menyisip `\b` di titik match PERTAMA yang ditemukan akan mengedit BARIS REGEX ITU
+SENDIRI (bukan komentar di atasnya) — mengubah semantik pola yang benar-benar dipakai deteksi produksi, bukan
+sekadar teks tampilan. **Cara benar:** kenali baris yang MENDEFINISIKAN pattern (bukan mengutipnya) via marker
+eksplisit `// gate:allow-canonical-literal` di akhir baris, dan SKIP baris itu di scanner/fixer — jangan andalkan
+"kelihatannya cuma teks". Kelas serupa: string literal RUNTIME yang sengaja meniru bahasa kanonik untuk
+kejelasan manusia (`notifier.ts` `title: '\bUsage limit reached'` — notifikasi USER-FACING, bukan komentar) —
+gate mekanis yang menyisip `\b` ke sana mengubah **teks yang dilihat user**, bukan hygiene repo; butuh marker +
+alasan tertulis yang sama, BUKAN otomatis "diperbaiki".
+**Jebakan (c) — `matchLimit(line) ?? matchAgyLimit(line)` (satu evidence per baris) melewatkan match KEDUA:**
+scan awal hanya mencatat SATU evidence per baris (cc jika ada, else agy) → baris yang memuat KEDUA pola independen
+(mis. `DECISIONS.md:850`, satu baris memuat baik "\bhit your session limit" MAUPUN "\bIndividual \bquota reached") →
+evidence kedua tak tercatat, residual bertahan pasca "fix". **Cara benar:** cek `matchLimit` DAN `matchAgyLimit`
+independen per baris (dua `if`, bukan `??`), lalu — untuk robust penuh — LOOP re-scan per baris sampai bersih
+(bukan percaya daftar evidence yang dihitung sekali di awal; kasus RESEARCH.md:120 punya evidence yang sama
+muncul **2×** di baris yang sama, lolos dari fix satu-kali-per-evidence).
+**Dampak gabungan:** ketiganya membuktikan pola umum — **gate/fixer mekanis untuk "teks yang mirip kode" wajib
+di-verifikasi dengan rescan otomatis, tak boleh percaya "skrip jalan tanpa galat" sebagai bukti sukses.** Silent
+no-op (a) dan silent-corruption (b) sama-sama TAK melempar exception.
+**Cara benar (final, `test/no-canonical-limit-literals.test.ts`):** gate permanen re-derive match dari fungsi
+produksi `matchLimit`/`matchAgyLimit` (bukan salinan regex) tiap kali dijalankan — tak ada state "evidence
+list" yang bisa basi; marker `gate:allow-canonical-literal` untuk pengecualian struktural (regex definitions +
+string user-facing yang sengaja meniru bahasa kanonik).
+**Sumber:** membangun gate I-36, 17 Jul.
 
 ---
 
@@ -739,7 +773,7 @@ G-45 ini = cara kerja untuk manusia/agent, bukan pengganti keduanya.
 | 2026-07-05 (live-verify Ubuntu) | G-23 (GetUserStatus agy = port HTTPS(gRPC) + Connect-JSON; retry ~2–4s pasca bind sampai HTTP 200; `Auth succeeded` = auth lokal LS bukan login upstream; salah-protokol gagal senyap ECONNRESET/EPROTO), G-24 (bentuk entri model NYATA = `label` + `modelOrAlias.model`, bukan flat `model` — koreksi I-7; parser + fixture direkonsiliasi ke capture live; G-17 exhausted di-emit usedFraction=1 bukan skip). Dari live-verify port-discovery + GetUserStatus di Ubuntu 24.04 (I-12 poin 3). |
 | 2026-07-04 (M3d rebuild) | G-21 (`require()` di ESM = ReferenceError runtime, lolos tsc — selalu `import`), G-22 (port→PID Linux wajib korelasi inode `/proc/<pid>/fd`→`/proc/net/tcp{,6}` st=0A, jangan grep tabel global; hex localhost `0100007F`). Dari review + rebuild kerja Haiku yang di-revert. |
 | 2026-07-04 (M3d.1 wiring) | G-20 (output PTY ConPTY sisipkan ANSI/CSI walau baris polos → detector wajib strip ANSI per-baris sebelum classify; cakupan CSI, OSC/charset belum). Dari smoke live M3d.1. |
-| 2026-07-04 (limit agy asli) | G-16 (`useG1Credits` CLI vs IDE `useAiCredits` + fallthrough credit senyap), G-17 (`remainingFraction` absent = exhausted, jangan crash), G-18 (agy `-p` stdin-EOF + print kosong saat limit + skip-permissions kontraproduktif), G-19 (pesan limit TUI agy ASLI `Individual quota reached` + limit≠exit + tak konkuren). Dari eksperimen limit 5-jam agy ASLI (FINDINGS F4-F12). |
+| 2026-07-04 (limit agy asli) | G-16 (`useG1Credits` CLI vs IDE `useAiCredits` + fallthrough credit senyap), G-17 (`remainingFraction` absent = exhausted, jangan crash), G-18 (agy `-p` stdin-EOF + print kosong saat limit + skip-permissions kontraproduktif), G-19 (pesan limit TUI agy ASLI `\bIndividual \bquota reached` + limit≠exit + tak konkuren). Dari eksperimen limit 5-jam agy ASLI (FINDINGS F4-F12). |
 | 2026-07-04 (M2-fix) | G-15 (pesan limit CC nyata "hit your **session** limit" → pola kontigu false-negative, diperbaiki `hit your (?:\w+ )?limit`; warning proaktif 90/75 = UI-only, hitung proximity dari usage-probe). Dari limit 5-jam ASLI tertangkap di transcript sesi. |
 | 2026-07-04 (M3a) | G-14 (unlink socket unix tanpa syarat sebelum listen = steal socket daemon hidup → dua daemon; fix connect-probe stale-vs-live). Dari tier-review M3a. |
 | 2026-07-04 (M2) | G-13 (reset-estimator clock-time next-occurrence tambah `MS_PER_DAY` mentah → meleset ±1j di hari transisi DST; non-blocking, I-4/P3). Dari tier-review M2. |

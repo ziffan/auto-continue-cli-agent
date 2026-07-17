@@ -64,7 +64,9 @@ export function notificationForEvent(input: AppendEventInput): Notification | nu
       return {
         event: 'LIMIT_HIT',
         level: 'warn',
-        title: 'Usage limit reached',
+        title: 'Usage limit reached', // gate:allow-canonical-literal — user-facing, sengaja pakai bahasa kanonik (jelas
+        // bagi manusia); risiko notif-memicu-diri-sendiri (I-35 akar #2, G-45) sudah ditangani di lapis DETEKSI
+        // (korroborasi ambang 0.85), bukan dengan menyembunyikan kata dari user. Menyamarkan title jadi kurang jelas.
         // `source` = label detektor kita ('output'/'hook'/…), bukan isi output → aman. `evidence`
         // (snippet PTY) sengaja TIDAK disertakan (firewall).
         body: `Session ${shortId(sid)} hit its usage limit${source ? ` (via ${source})` : ''}.`,
