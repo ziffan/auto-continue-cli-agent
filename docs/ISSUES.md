@@ -39,6 +39,28 @@
 > re-fire LIMIT_HIT palsu → I-31) + **reset clock-wrap** (output "resets 10:20pm" di-parse setelah lewat → jadwal +24 jam,
 > padahal probe tahu reset benar → I-30). Sisa I-15 CC = tutup I-30/I-31 lalu re-verify inject benar-benar melanjutkan turn.
 
+### I-34 — Artefak shippable tanpa gate yang MENGEKSEKUSINYA = titik buta review [P2, `.ps1` ✅ ditutup 17 Jul; `.service`/`.sh`/XML MASIH TERBUKA → gate sebelum M5.4/M5.5 render]
+**Kelas cacat (bukan bug tunggal), ditemukan 17 Jul lewat DUA korban nyata dalam satu sesi:**
+1. **`register-backup-task.ps1`** (M5.2 `85be83c`) — **ter-commit, ditandai selesai, LOLOS tier-review Opus**, padahal
+   **tak bisa di-parse PowerShell 5.1** (em-dash dalam string, **G-44**) → backup terjadwal Windows tak pernah jalan.
+2. **Instruksi README** — `npm install && npm run build` (`&&` tak ada di PS 5.1) + `acca run claude` (`acca` tak pernah
+   di PATH tanpa `npm link`). **Sudah diketahui sejak 16 Jul** (CONTEXT: "`acca` tak di PATH") tapi tak pernah diperbaiki
+   → menggigit owner dua kali; owner gagal di langkah PERTAMA README saat mencoba menjalankan daemon.
+**Akar yang sama:** `npm run check` (typecheck+lint+test) **tak menyentuh** artefak non-TS. Reviewer **membaca** artefak,
+tak **mengeksekusi**-nya. Jadi `.ps1`, template unit, XML, dan instruksi README = **shippable tapi tak ter-gate**.
+Membaca ≠ menjalankan — dan kelas ini lolos justru karena slice-nya ditandai `[LIVE]` (verifikasi ditunda ke user).
+**Ditutup untuk `.ps1` (17 Jul):** `test/ps1-encoding.test.ts` — tiap `*.ps1` wajib pure-ASCII/ber-BOM. Sengaja menguji
+**root cause (byte)** bukan gejala (parse): parser PowerShell butuh Windows → test bakal **skip di Ubuntu** (mesin harian)
+= gate bocor di tempat kerja paling sering. **Negative control terbukti.** README diperbaiki + **diverifikasi dengan
+benar-benar dijalankan** (`npm link` → `acca --version` → `0.1.0` → `acca status` render nyata).
+**MASIH TERBUKA — jangan ulangi pola ini:** **M5.4** akan mengirim `deploy/linux/acca-daemon.service` +
+`scripts/install-linux.sh`; **M5.5** (bila dibuka) akan mengirim `deploy/windows/acca-daemon.xml` +
+`install-windows.ps1`. **Kelas artefak yang PERSIS sama, dan `.service`/`.sh`/XML belum punya gate apa pun.**
+**DoD slice M5.4/M5.5: tiap artefak shippable WAJIB punya ≥1 gate yang memvalidasinya** — mis. `.service` = parse
+key=value + assert `Restart=on-failure`/`ExecStart` terisi + tak ada placeholder `<…>` tertinggal; `.sh` = `sh -n`
+(syntax check, lintas-OS via `sh`) atau minimal shellcheck bila ada; XML = well-formed + assert `<onfailure>`. Gate
+harus **lintas-OS** (jangan yang skip di Ubuntu). **Sumber:** M5.5 17 Jul (G-44, commit `d080f70`/`13da025`).
+
 ### I-33 — Windows Service ≠ sesi user: daemon-as-service pakai DB & kredensial BERBEDA → produk mati SENYAP [P1, BLOCKER M5.5 — premis ADR-021 bentrok ADR-005]
 **Ditemukan 17 Jul (slice M5.5, probe empiris di Win 11 owner) — SEBELUM kode ditulis.** ADR-021 menetapkan deployment
 Windows = Windows Service, tapi tak memeriksa **identitas akun** service. Windows Service default (WinSW tanpa
