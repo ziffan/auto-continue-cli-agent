@@ -612,12 +612,33 @@ Google Project Zero PID-spoofing), ADR-023, I-26.
 - **Handler IPC `status`** (`supervisor.ts`, `createIpcServer({status})`) = jalur TERPISAH; **tak ada pengirim `cmd:'status'` di `src/`** (nol konsumen produksi — kandidat untuk M-remote/health kelak).
 **Dampak:** (a) mengubah satu **tak** otomatis mengubah lain — jangan asumsikan. (b) Sebelum M5.3, handler IPC me-return SELURUH kolom Session (`cli_session_id`, `cwd`) ke pipe DACL-terbuka (G-41) padahal tak ada yang butuh → data-minimize `toSessionStatusView` (T-L1) nol breakage justru karena nol konsumen. **Pelajaran:** saat menyentuh "status", pastikan jalur mana (CLI-direct-DB vs IPC-projected); data yang keluar pipe ≠ data yang dilihat CLI. **Sumber:** M5.3 T-L1 (Opus), THREAT-MODEL §8.4.
 
+### G-43 — `sc.exe` TAK bisa host `node` (error 1053) · WinSW v2: exe wajib SENAMA config-nya + config dimuat SEBELUM parse perintah
+**Jebakan 1 — "sc.exe = fallback nol-tool" itu ILUSI (verifikasi 17 Jul, mengoreksi ADR-021 → ADR-025):** `sc create`
+akan **menerima** exe apa pun (perintahnya sukses!), tapi service-nya **tak akan start**: Windows SCM mewajibkan binary
+memanggil `StartServiceCtrlDispatcher` + lapor `SERVICE_RUNNING` via `SetServiceStatus` dalam batas waktu. `node
+dist\cli\index.js daemon` tak pernah melakukannya → **error 1053** "The service did not respond to the start or control
+request in a timely fashion". **Registrasi sukses ≠ service jalan** — inilah yang menipu. Node **tak punya** binding SCM;
+menambahkannya = native addon / FFI (`koffi`/`ffi-napi`) = justru **menambah** dep native prebuild dua-OS.
+→ **Wrapper Windows WAJIB** (ADR-025 pin **WinSW v2.12.0**). *(node-windows justru membundel WinSW.)*
+**Jebakan 2 — konvensi penamaan WinSW v2 (empiris, saat pin ADR-025):** WinSW mencari config **bernama sama dengan
+exe-nya** di direktori yang sama → `acca-daemon.exe` **wajib** berpasangan `acca-daemon.xml`. Salah nama →
+`FATAL Unhandled exception … FileNotFoundException: Unable to locate WinSW.NET461.[xml|yml] file within executable
+directory`. **Perangkapnya:** WinSW v2 memuat config **SEBELUM** mem-parse perintah → bahkan `--version` gagal dgn
+FATAL config-not-found, yang **menyesatkan** (terbaca seperti binary rusak/runtime hilang, padahal cuma salah nama).
+Jadi: rename exe hasil unduh → `<service-id>.exe`, taruh `<service-id>.xml` di sebelahnya, baru jalankan apa pun.
+**Fakta berguna (kontrak idempotensi installer):** `<svc>.exe status` atas service **belum terdaftar** → cetak
+`NonExistent` + **exit 0** (bukan error) → aman dipakai skrip install untuk cek "sudah terpasang?" tanpa try/catch.
+**Runtime:** varian `WinSW.NET461.exe` butuh .NET Framework 4.6.1+; Windows 11 membawa **4.8 inbox** (mesin owner:
+4.8.09221 / Release 533509) → jalan. Host tanpa .NET Framework → pakai `WinSW-x64.exe` self-contained (DEPENDENCY-POLICY).
+**Sumber:** verifikasi pin WinSW 17 Jul (web sumber primer error 1053 + eksekusi binary nyata di Win 11 owner), ADR-025.
+
 ---
 
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-17 (pin WinSW, ADR-025) | **G-43** baru (`sc.exe` **tak bisa host node** — `sc create` sukses tapi service tak start, error 1053 [SCM wajib `SERVICE_RUNNING`]; "registrasi sukses ≠ service jalan" → klausa fallback `sc.exe` ADR-021 VOID, wrapper wajib. + WinSW v2: exe **wajib senama** config-nya, dan config dimuat **sebelum** parse perintah → salah nama = FATAL menyesatkan yang terbaca seperti binary rusak. + `status` service tak-terdaftar = `NonExistent` exit 0 = kontrak idempotensi installer. + NET461 butuh .NET FW 4.6.1; Win 11 bawa 4.8 inbox — terverifikasi jalan). Dari verifikasi pin WinSW (web + eksekusi binary nyata di Win 11 owner). |
 | 2026-07-17 (spec M5, verifikasi web) | **G-41** baru (DACL named pipe Windows Node = terbuka by design [Everybody+Anonymous read], Node tak punya API set-DACL — issues #47086/#30823/#17743; kandidat "cek PID client" gugur = spoofable, Project Zero/CVE-2018-0749; → ADR-023 terima residual R-5 + hardening lapisan-app, native addon ditolak). Mengoreksi klaim keamanan ADR-015. Dari verifikasi web sumber primer saat spec M5 (I-26).
 | 2026-07-17 (sesi otonom, M5.3) | **G-42** baru (`acca status` CLI baca DB langsung `openDb()`, BUKAN lewat IPC; handler IPC `status` = jalur terpisah nol konsumen produksi → data-minimize `toSessionStatusView` T-L1 nol breakage; jangan asumsikan mengubah satu = mengubah lain). Dari slice M5.3 T-L1.
 
