@@ -39,6 +39,13 @@
 > re-fire LIMIT_HIT palsu → I-31) + **reset clock-wrap** (output "resets 10:20pm" di-parse setelah lewat → jadwal +24 jam,
 > padahal probe tahu reset benar → I-30). Sisa I-15 CC = tutup I-30/I-31 lalu re-verify inject benar-benar melanjutkan turn.
 
+### I-32 — Backup one-shot vs daemon LIVE: race `wal_checkpoint(TRUNCATE)`+`copyFileSync` bisa hasilkan salinan korup [P2, tutup saat M5.2 LIVE / wiring backup]
+**Konteks:** M5.1/M5.2 engine `backupDatabase` membuka **koneksi kedua** ke `acca.db`, `wal_checkpoint(TRUNCATE)`, lalu `copyFileSync` file utama. Aman untuk **koneksi tunggal** (sandbox test, CLI one-shot tanpa daemon). Tapi `scripts/backup.js` dijadwalkan jalan **saat daemon HIDUP** memegang koneksinya sendiri (mode WAL) → dua risiko:
+- (a) Committed-but-not-checkpointed frames di WAL daemon tak masuk salinan → salinan sedikit basi (RPO gap, ≤beberapa txn — diterima R-6).
+- (b) **Lebih serius:** bila checkpoint daemon menulis ke file utama SAAT `copyFileSync` membaca → salinan bisa **korup** (half-written).
+**Fail-safe yang ADA:** `integrity_check` pada salinan → korup → `BackupError` → cycle backup itu GAGAL (ter-log, exit 1), **tak ada file korup menyamar sebagai backup baik**. Jadi bukan silent-corrupt; dampak = occasional missed cycle di bawah beban tulis konkuren.
+**Remedi (saat M5.2 LIVE / wiring backup):** upgrade mekanisme salin ke **SQLite online backup API** (`better-sqlite3` `db.backup(dest)`) — concurrency-safe by design (page-by-page dengan lock benar), hilangkan race. Sudah di-flag komentar `backup.ts` sejak M5.1. Butuh `backupDatabase` async (atau varian async terpisah untuk jalur daemon). **Verifikasi LIVE:** jalankan backup berulang saat daemon aktif menulis → integrity_check konsisten OK. **Sumber:** tier-1 review M5.1/M5.2 (Opus), 17 Jul.
+
 ### F-1 — RC-1 memperkenalkan loop re-spawn (continue-job landing di sesi hasil-resume yang exit cepat) [P2] ✅ (16 Jul, Opsi B guard)
 **RESOLVED (16 Jul, Opus inline Tier-1, keputusan owner = Opsi B tanpa migrasi).** Guard di cabang exited
 `supervisor.ts` (SEBELUM cwd/cli_session_id/resume-by-id): `if (session.resumed_from !== null && session.detected_at === null)`

@@ -24,13 +24,16 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 
 ## 2. Status
 
-Fase: **M5 — Hardening + Deploy sebagai service (SPEC LOCKED 17 Jul, belum ada kode).** Semua gate M3e ✅ hijau (412 test).
+Fase: **M5 — Hardening + Deploy sebagai service (SPEC LOCKED 17 Jul; implementasi mulai — M5.1 + M5.3 + M5.2 ✅ SANDBOX).** **448 test hijau** (2 skip POSIX).
 Urutan roadmap: **M5 → M-remote (Telegram)** (keputusan owner 17 Jul — daemon wajib nyala 24/7 sbg service dulu sebelum
 Telegram). **Spec M5 doc-first:** ADR-021 (Windows Service, supersede sebagian ADR-007), ADR-022 (backup/DR minimal),
 ADR-023 (IPC DACL terbuka = residual R-5 + hardening lapisan-app, scope-ulang ADR-015; native addon & PID-check ditolak,
-G-41). 6 vertical slice (M5.1 backup / M5.2 skrip+restore / M5.3 security-audit / M5.4 systemd / M5.5 Windows Service /
-M5.6 quickstart+gate) — semua Tier 1, LIVE-vs-SANDBOX ditandai. Pending: pin WinSW/`sc.exe` + backup config (owner Ziffan,
-saat slice). **Next:** slice **M5.1 (engine backup, [SANDBOX])** atau M5.3 (security-audit, paralel). Detail: `docs/MILESTONES.md` M5.
+G-41), **ADR-024 (retensi backup tiered GFS-lite 24 hourly + 30 daily, amandemen ADR-022)**. 6 vertical slice (M5.1 backup ✅ /
+M5.2 skrip+restore ✅ / M5.3 security-audit ✅ / M5.4 systemd / M5.5 Windows Service / M5.6 quickstart+gate) — semua Tier 1,
+LIVE-vs-SANDBOX ditandai. **✅ 3 slice SANDBOX ter-commit** (`1e5cbf7`/`6474bdb`/`85be83c`, ditahan lokal belum push): engine backup
+tiered + security pass 5-permukaan (T-L1 data-minimize) + skrip/template jadwal/restore-doc. **Sisa = semua `[LIVE]`.** Pending:
+**pin WinSW/`sc.exe`** (owner Ziffan, blok M5.5). **Next:** keputusan pin WinSW → M5.5 (Windows Service, LIVE) / render M5.4
+systemd (siap-Ubuntu) / M5.2 LIVE restore. I-32 (race backup-vs-daemon → online-backup API) saat wiring LIVE. Detail: `docs/MILESTONES.md` M5.
 
 **M3e (fase sebelumnya, ✅ selesai):** dari tiga audit menyeluruh, `docs/audit/AUDIT-2026-07-11.md` + `-12-FOLLOWUP` +
 `-12-MENYELURUH`. **M1–M3d + M4 inti bertes** (412 test, 2 skip POSIX-only di Windows): deteksi limit → jadwal reset →
