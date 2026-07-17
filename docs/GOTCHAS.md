@@ -670,10 +670,50 @@ byte `E2 80 94` → CP1252 → U+201D.
 
 ---
 
+## Deteksi limit vs prosa (I-35/I-36)
+
+### G-45 — Repo ini adalah korpus yang memicu detektornya sendiri; mengerjakan acca DI BAWAH acca = FP berulang
+
+**Insiden live 17 Jul (sesi `z36i`, `acca run claude`): DUA LIMIT_HIT palsu dalam 8 menit**, keduanya siklus penuh
+sampai inject. Yang memicu bukan hal eksotis:
+1. **Query pencarian agent sendiri** yang memuat frasa kanonik CC mentah — tool call tercetak ke terminal → detector
+   membacanya. (Agent me-Read `src/adapters/patterns.ts`, yang doc-comment-nya mengutip pesan asli verbatim untuk
+   mendokumentasikan G-15. **Detektor mendeteksi komentar sumbernya sendiri.**)
+2. **Teks notifikasi acca SENDIRI** (`notify/notifier.ts` — judul warn memuat frasa kanonik) yang di-paste owner ke
+   agent untuk didiagnosis. Loop lengkapnya: limit → notif → user paste → FP.
+
+**Skala terukur: 103 literal yang cocok pola detektor di 20 file** — termasuk **5 file yang `/session-start` WAJIBKAN
+dibaca** (`GOTCHAS`/`RESEARCH`/`DECISIONS`/`CONTEXT`/`ISSUES` = 46 literal). **Ritual pembuka proyek ini adalah ranjau
+ketika sesinya jalan di bawah acca.** Sesi 17 Jul lolos separuh hanya karena Read-nya ter-truncate — keberuntungan.
+
+**Cara kerja aman (dipakai & terbukti 17 Jul):**
+- **Jangan tulis frasa kanonik mentah** — di jawaban, di query pencarian, di dokumen. Rujuk **by-index**
+  (`CC_LIMIT_PATTERNS[1]`) atau tulis **regex ter-escape**: prefiks `\b` mematahkan word-boundary → string itu **tak
+  cocok dirinya sendiri**. Terverifikasi: menulis pola detektor dalam bentuk ter-escape aman, bentuk mentah tidak.
+- **Redaksi pipeline** saat menjalankan test / membaca file yang memuat korpus. Tulis polanya **ter-escape** — bentuk itu
+  aman **dan** tetap berfungsi (GNU sed `-E` paham `\b`), jadi contoh ini tak memicu dirinya sendiri:
+  ```sh
+  npm run test 2>&1 | sed -E 's/(\bhit your ([A-Za-z]+ )?limit\b|\busage limit reached\b|\bindividual quota reached\b)/«REDACTED»/gI'
+  ```
+  **Terbukti**: menangkap byte PTY nyata dari test integration I-31 yang men-spawn banner limit sungguhan lewat PTY.
+- **Tahu file mana yang berbahaya untuk sesi mana:** literal di `limit-watcher.ts`/`supervisor.ts` semuanya frasa **agy**
+  → aman dibaca dari sesi `tool='claude'` (adapter CC tak pernah menjalankan `AGY_LIMIT_PATTERNS`). Yang berbahaya untuk
+  sesi CC hanya file ber-frasa **CC**: `patterns.ts`, `notifier.ts`, fixture `cc-*`, dan test detector.
+- **Matikan daemon** sebelum kerja detector: tanpa daemon, deteksi palsu cuma menulis baris DB (inert) — tak ada inject.
+  Wrapper TETAP mendeteksi & menulis (ADR-017), yang berhenti hanya actuation-nya. Bersihkan job pending **sebelum**
+  daemon dinyalakan lagi (recovery-saat-`start()` akan mem-fire-nya — AC-7 bekerja melawan kita).
+
+**Fix produk = I-35** (korroborasi thd snapshot usage; suppress bila window mengikat <0.85). **Higiene repo = I-36.**
+G-45 ini = cara kerja untuk manusia/agent, bukan pengganti keduanya.
+**Sumber:** insiden live 17 Jul, sesi `z36i`, events #43/#48 (bukti di ISSUES I-35).
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-17 (I-35, insiden FP live) | **G-45** baru (repo ini = korpus yang memicu detektornya sendiri; **3 LIMIT_HIT palsu dalam satu sesi**, nol dari CC yang benar-benar limit: [1] agent me-Read `patterns.ts` yang doc-comment-nya mengutip pesan asli verbatim → **detektor mendeteksi komentar sumbernya sendiri**; [2] **teks notifikasi acca sendiri** yang di-paste owner untuk didiagnosis; [3] **perintah `sed` redaksi yang ditulis pakai literal MENTAH** — perkakas pembersihnya sendiri jadi peluru. Skala: **103 literal di 20 file**, 46 di antaranya di 5 file yang `/session-start` WAJIBKAN dibaca → **ritual pembuka proyek ini ranjau di bawah acca**. Cara kerja aman: bentuk regex **ter-escape** [prefiks `\b` mematahkan word-boundary → tak cocok dirinya sendiri, terverifikasi] · redaksi pipeline [terbukti menangkap byte PTY nyata test I-31] · peta file berbahaya per-tool [literal agy aman utk sesi CC] · matikan daemon dulu [wrapper tetap menulis, yang berhenti actuation-nya]. Fix produk = **I-35**, higiene repo = **I-36**). Dari insiden live sesi `z36i` 17 Jul. |
 | 2026-07-17 (M5.5, gate encoding) | **G-44** baru (em-dash di `.ps1` UTF-8-tanpa-BOM → PS 5.1 baca CP1252 → U+201D yang **diterima PowerShell sbg delimiter string** → string tertutup lebih awal → parse error berantai menunjuk baris salah. **Korban nyata: `register-backup-task.ps1` ter-commit M5.2 `85be83c` TIDAK parse** → backup terjadwal Win tak pernah jalan; lolos karena `[LIVE]` belum diverifikasi = reviewer baca tapi tak eksekusi parser. Fix: pure ASCII + gate `test/ps1-encoding.test.ts` cek byte [lintas-OS, bukan parse yg skip di Ubuntu], negative-control terbukti. **Pelajaran proses:** artefak tak-pernah-dieksekusi = titik buta review; tiap artefak shippable butuh >=1 gate yang memvalidasinya). Dari slice M5.5. |
 | 2026-07-17 (pin WinSW, ADR-025) | **G-43** baru (`sc.exe` **tak bisa host node** — `sc create` sukses tapi service tak start, error 1053 [SCM wajib `SERVICE_RUNNING`]; "registrasi sukses ≠ service jalan" → klausa fallback `sc.exe` ADR-021 VOID, wrapper wajib. + WinSW v2: exe **wajib senama** config-nya, dan config dimuat **sebelum** parse perintah → salah nama = FATAL menyesatkan yang terbaca seperti binary rusak. + `status` service tak-terdaftar = `NonExistent` exit 0 = kontrak idempotensi installer. + NET461 butuh .NET FW 4.6.1; Win 11 bawa 4.8 inbox — terverifikasi jalan). Dari verifikasi pin WinSW (web + eksekusi binary nyata di Win 11 owner). |
 | 2026-07-17 (spec M5, verifikasi web) | **G-41** baru (DACL named pipe Windows Node = terbuka by design [Everybody+Anonymous read], Node tak punya API set-DACL — issues #47086/#30823/#17743; kandidat "cek PID client" gugur = spoofable, Project Zero/CVE-2018-0749; → ADR-023 terima residual R-5 + hardening lapisan-app, native addon ditolak). Mengoreksi klaim keamanan ADR-015. Dari verifikasi web sumber primer saat spec M5 (I-26).

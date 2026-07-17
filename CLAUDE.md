@@ -24,14 +24,21 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 
 ## 2. Status
 
-Fase: **M5 — Hardening + Deploy sebagai service (SPEC LOCKED 17 Jul; implementasi mulai — M5.1 + M5.3 + M5.2 ✅ SANDBOX; M5.5 ⛔ DITUNDA/I-33).** **451 test hijau** (2 skip POSIX).
+Fase: **M5 — Hardening + Deploy sebagai service (SPEC LOCKED 17 Jul; implementasi mulai — M5.1 + M5.3 + M5.2 ✅ SANDBOX; M5.5 ⛔ DITUNDA/I-33).** **474 test hijau** (2 skip POSIX).
 Urutan roadmap: **M5 → M-remote (Telegram)** (keputusan owner 17 Jul — daemon wajib nyala 24/7 sbg service dulu sebelum
 Telegram). **Spec M5 doc-first:** ADR-021 (Windows Service, supersede sebagian ADR-007), ADR-022 (backup/DR minimal),
 ADR-023 (IPC DACL terbuka = residual R-5 + hardening lapisan-app, scope-ulang ADR-015; native addon & PID-check ditolak,
 G-41), **ADR-024 (retensi backup tiered GFS-lite 24 hourly + 30 daily, amandemen ADR-022)**. 6 vertical slice (M5.1 backup ✅ /
 M5.2 skrip+restore ✅ / M5.3 security-audit ✅ / M5.4 systemd / M5.5 Windows Service / M5.6 quickstart+gate) — semua Tier 1,
-LIVE-vs-SANDBOX ditandai. **✅ 3 slice SANDBOX ter-commit** (`1e5cbf7`/`6474bdb`/`85be83c`, ditahan lokal belum push): engine backup
-tiered + security pass 5-permukaan (T-L1 data-minimize) + skrip/template jadwal/restore-doc. **17 Jul (sesi M5.5):** Pending pin
+LIVE-vs-SANDBOX ditandai. **✅ 3 slice SANDBOX ter-commit + ter-push** (`1e5cbf7`/`6474bdb`/`85be83c`): engine backup
+tiered + security pass 5-permukaan (T-L1 data-minimize) + skrip/template jadwal/restore-doc.
+**17 Jul (sesi di bawah acca) — M5 DIINTERUPSI insiden live → I-35 (P1):** deteksi limit dari OUTPUT **false-positive pada
+PROSA yang mengutip pesan kanonik** (dokumentasi/komentar kode/**notifikasi acca sendiri**/paste user) → **3 LIMIT_HIT palsu
+dalam 1 sesi** + inject token ke sesi SEHAT (satu mendarat di tengah ketikan owner); metrik FP `PROJECT.md` §1 meleset **orde
+besaran**. **Paruh utama DITUTUP** (korroborasi thd snapshot usage: CC-only + OUTPUT-only, ambang **0.85**, hook `StopFailure`
+**BYPASS**; keputusan owner). **Residual terbuka:** probe verifikasi eksplisit (disetujui, belum dibangun — cabang `probe`
+tak pernah menanyakan apakah sesi limit → butuh guard status). **G-45 + I-36:** repo ini = korpus yang memicu detektornya
+sendiri (103 literal di 20 file; 46 di file yang `/session-start` wajibkan baca → **ritual pembuka = ranjau di bawah acca**). **17 Jul (sesi M5.5):** Pending pin
 **DITUTUP → ADR-025** (WinSW **v2.12.0** `WinSW.NET461.exe` + SHA256, unduh-saat-install + verifikasi hash; klausa fallback
 `sc.exe` ADR-021 **VOID** — sc.exe tak bisa host node, error 1053, G-43; punya **revisit trigger** eksplisit → servy).
 **M5.5 ⛔ DITUNDA (I-33, P1) — jangan install daemon sbg Windows Service:** probe empiris buktikan Service default =

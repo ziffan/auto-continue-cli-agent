@@ -131,7 +131,9 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       const { sessionId: newId, waitForExit } = runSession(
         // resumedFrom = id sesi ASAL → baris sesi baru menautkan rantai resume (I-14).
         { file: spec.file, args: spec.args, cwd: spec.cwd ?? session.cwd, tool: session.tool, resumedFrom: session.id },
-        { sessions, events, jobs },
+        // I-35: sesi hasil-resume juga di-supervise wrapper → korroborasi wajib ikut ter-wire di sini,
+        // bukan hanya di jalur `acca run` (kalau tidak, FP di sesi hasil-resume tetap lolos).
+        { sessions, events, jobs, usageSnapshotJson: (tool) => meta.get(`usage_snapshot_${tool}`) },
       );
       // A-2 (audit 11 Jul): saat spawn GAGAL sinkron (mis. binary CLI hilang — skenario nyata daemon
       // service dgn PATH minimal), `runSession` mengembalikan `waitForExit` yang REJECT. Bila promise

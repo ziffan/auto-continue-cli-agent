@@ -39,6 +39,89 @@
 > re-fire LIMIT_HIT palsu → I-31) + **reset clock-wrap** (output "resets 10:20pm" di-parse setelah lewat → jadwal +24 jam,
 > padahal probe tahu reset benar → I-30). Sisa I-15 CC = tutup I-30/I-31 lalu re-verify inject benar-benar melanjutkan turn.
 
+> **KONVENSI WAJIB (sejak 17 Jul, I-36):** dokumen ini & seluruh repo di luar `test/fixtures/**` **DILARANG**
+> memuat frasa kanonik pesan limit dalam bentuk yang **cocok** dengan `CC_LIMIT_PATTERNS`/`AGY_LIMIT_PATTERNS`
+> (`src/adapters/patterns.ts`). Sebut **by-index** (mis. "CC_LIMIT_PATTERNS[3]") atau tulis dalam bentuk regex
+> ter-escape (prefiks `\b` mematahkan word-boundary → string tak cocok dirinya sendiri). Alasan: mencetak frasa itu
+> ke terminal sesi yang di-supervise = memicu detektor. Lihat I-35/I-36.
+
+### I-35 — Deteksi limit dari OUTPUT false-positive pada PROSA yang mengutip pesan kanonik → inject token ke sesi SEHAT [P1 — korroborasi ✅ DITUTUP 17 Jul; probe verifikasi eksplisit MASIH TERBUKA]
+**Ditemukan live 17 Jul di sesi ini sendiri** (`acca run claude` — dogfood tak sengaja, sesi `z36i`). **DUA FP nyata
+dalam ~8 menit**, keduanya siklus penuh sampai actuation.
+**BUKTI (tabel `events`, evidence teredaksi — harness read-only di scratchpad):**
+| event | waktu | evidence | pemicu |
+|---|---|---|---|
+| #43 | 09:16:37Z | 22 char (= CC_LIMIT_PATTERNS[3], varian ber-qualifier) | **query pencarian agent sendiri** yang memuat frasa kanonik mentah → tercetak ke terminal |
+| #48 | 09:24:14Z | 19 char (= CC_LIMIT_PATTERNS[1]) | **teks notifikasi acca SENDIRI** (`notify/notifier.ts:70` + judul warn) yang di-paste owner untuk didiagnosis |
+Keduanya: `status_change LIMIT_HIT {source:'output'}` → `probe_scheduled {resetSource:'backoff'}` (+5m) →
+`job_dispatch_done {action:'usage_available_enqueue_resume'}` → `inject_continue` → `RUNNING`.
+**AKAR:** kalibrasi konservatif `CC_LIMIT_PATTERNS` (komentar `patterns.ts` + `test/fixtures/cc-noise.txt`) menutup prosa
+yang **MENYEBUT** kata "limit"/"usage" — tapi **tak pernah** menutup prosa yang **MENGUTIP pesan kanoniknya**. Padahal
+itu persis yang dilakukan dokumentasi, komentar kode, changelog, thread forum, **notifikasi produk ini sendiri**, dan
+**paste user**. Untuk persona MVP (agentic engineer yang seharian membaca docs & nge-paste error ke agent-nya), ini
+bukan skenario eksotis — ini hari Selasa.
+**DAMPAK:**
+1. **Metrik `PROJECT.md` §1 "deteksi salah < 1 per 100 sesi" meleset ORDE BESARAN** — terukur **2 FP dalam 1 sesi**.
+2. Tiap FP meng-inject `CONTINUE_TOKEN` ke sesi **sehat**. Inject #1 mendarat **di TENGAH ketikan owner** → merusak
+   input, bukan sekadar bising.
+3. FP#2 = **produk memicu dirinya sendiri lewat notifikasinya sendiri** (loop: limit asli → notif → user paste → FP).
+**IRONI YANG MENUNJUK FIX:** probe pasca-FP menemukan `usage_available` (session **53%**) lalu memakai temuan itu untuk
+memutuskan **resume**. Informasi pembatalnya **sudah ada, sudah diambil, sudah dikonsultasi** — hanya satu tahap
+terlambat. Probe menjawab "kuota tersedia sekarang?" (ya) → "bagus, resume!", bukan "tunggu, kuotanya tak pernah habis."
+`acca status` bahkan **memajang kontradiksinya di layar**: `session 53%` berdampingan dengan `LIMIT_HIT`.
+**USUL ARAH (BELUM diputuskan — butuh owner):** **korroborasi**. Sinyal `source:'output'` untuk sesi **CC** tak melatch
+bila snapshot usage **SEGAR** menunjukkan kuota **jelas longgar** (< ambang) → suppress + audit (`limit_suppressed_*`,
+kosakata sama dgn I-31). **Hook `StopFailure` (PRIMER, ADR-001) BYPASS** — otoritatif, tak pernah disuppress.
+**Ambang wajib condong ke arah aman (jangan tukar FP dengan false-negative):** T-6 (live-verify 16 Jul) mengukur lag
+probe **~2 menit** (terminal 94% vs claude.ai 100%) → pada **94% TETAP latch**; suppress hanya saat jelas longgar.
+Snapshot **basi** → jangan suppress (percaya output, perilaku sekarang).
+**Scope usulan:** **CC-only + output-only** — meniru persis bentuk I-31 (grace-window). **agy TAK disentuh**: nol hook,
+dan G-35 (snapshot LS stale in-sesi) bikin korroborasi agy tak andal.
+**Sumber:** insiden live 17 Jul, sesi `z36i`; events #43/#48; `docs/audit/LIVE-VERIFY-I15-CC-2026-07-16.md` (T-6).
+
+**✅ DIKERJAKAN 17 Jul (Opus inline, Tier-1, 474 test):** keputusan owner = **suppress di deteksi, ambang 0.85, hook BYPASS**.
+- `adapters/usage.ts`: `claudeMaxBindingUsedFraction` + `bindingLimits` di-ekstrak → **satu definisi** window-mengikat
+  dipakai bersama `claudeUsageAvailable` (I-25) supaya keduanya tak pernah menyimpang. `limits` kosong → `null` (tak tahu).
+- `limit-watcher.ts`: `usageSnapshot` + `onUsageContradiction` **injektabel** (engine tetap murni — tak menyentuh store).
+  Guard CC-only + OUTPUT-only, setelah grace-window I-31. Konstanta: ambang **0.85**, kesegaran **5 menit** (~2,5 siklus
+  usage-monitor). **Firewall justru MENGUAT** — lebih sedikit aksi diturunkan dari isi output, bukan lebih banyak.
+- `process-wrapper.ts`: `readUsageCorroboration` (di-export utk test) — **setiap** jalur cacat → `null` → latch. Guard
+  `tool !== 'claude'` → null = CC-only **struktural di dua tempat** (jangan bergantung guard engine saja).
+- Wiring **kedua** pemanggil produksi: `cli/commands/run.ts` + `supervisor.ts` (sesi hasil-resume juga di-supervise).
+- **+23 test.** **Negative control TERBUKTI:** ambang→0 ⇒ tepat 2 test merah (suppress + jaring FN), 22 lain tetap hijau.
+
+**⚠ MASIH TERBUKA — jaring FN eksplisit (probe verifikasi) TIDAK dibangun.** Owner menyetujui "suppress + probe
+verifikasi"; yang terkirim baru **suppress**. Alasan (ditemukan saat implementasi, framing awal Opus KELIRU):
+1. **Probe verifikasi TAK bisa menunggangi job `probe` yang ada.** Cabang `probe` (`supervisor.ts:248-259`) tak pernah
+   menanyakan apakah sesinya limit — ia hanya bertanya "kuota tersedia?" → ya → `enqueue resume` → **inject**. Persis
+   bahaya yang mau dicegah. Butuh **guard status** di cabang itu (`session.status !== 'LIMIT_HIT'` ⇒ semantik verifikasi:
+   kuota habis → latch; tersedia → FP terkonfirmasi, **jangan** resume). Guard itu **perbaikan korektness berdiri sendiri**
+   — job `probe` yang menyala pada sesi RUNNING hari ini akan meng-inject tanpa alasan (keluarga F-1).
+2. **Jaring FN sebagian sudah GRATIS:** suppress **tak membuang** sinyal — baris limit berikutnya tetap diklasifikasi, jadi
+   saat snapshot menyusul (~2 menit) repaint banner CC melatch. Ada test-nya.
+   **TAPI — asumsi yang belum dibuktikan:** bukti repaint (G-37) berasal dari skenario **pasca-inject**, BUKAN dari sesi
+   yang limit-asli-dan-diam. Kalau CC mencetak banner **sekali** lalu bungkam, dan snapshot kebetulan basi <0.85, sesi
+   menggantung SENYAP. **Residual ini nyata, kecil, dan belum tertutup.**
+**Next:** guard status cabang probe + enqueue verifikasi dari `onUsageContradiction` (Tier-1, butuh keputusan: overload
+semantik `probe` vs job kind `verify` baru [= migrasi]). Atau: buktikan perilaku repaint CC saat limit-asli-dan-diam →
+kalau repaint terkonfirmasi, residual ini gugur tanpa kode.
+
+### I-36 — Repo ini sendiri = korpus yang memicu detektornya sendiri; `/session-start` = ranjau di bawah acca [P2, higiene dev — TIDAK menggantikan I-35]
+**Terukur 17 Jul: 103 literal yang cocok pola detektor, tersebar di 20 file.** Yang gawat — **5 di antaranya adalah file
+yang ritual `/session-start` WAJIBKAN dibaca tiap sesi**: `GOTCHAS.md` (13) · `RESEARCH.md` (12) · `DECISIONS.md` (8) ·
+`CONTEXT.md` (7) · `ISSUES.md` (6) = **46 literal**. Artinya **ritual pembuka proyek ini adalah ranjau** setiap kali
+sesinya jalan di bawah `acca run claude`. Sesi 17 Jul lolos separuh **hanya karena Read-nya ter-truncate** — keberuntungan,
+bukan disiplin. FP#1 (I-35) meledak begitu `src/adapters/patterns.ts` dibaca utuh: **detektor membaca komentar sumbernya
+sendiri**, yang mengutip pesan asli verbatim justru untuk mendokumentasikan G-15.
+**Pengecualian sah:** `test/fixtures/**` **WAJIB** memuat literal itu — itu korpus ujinya. Kecualikan, jangan "perbaiki".
+**Usul:** konvensi (sudah ditulis di header "Terbuka" di atas) + **gate kelas I-34** — file di luar `test/fixtures/**`
+tak boleh memuat string yang cocok `CC_LIMIT_PATTERNS`/`AGY_LIMIT_PATTERNS`. Bentuk aman yang **terverifikasi**: tulis
+pola dalam bentuk regex ter-escape (prefiks `\b` mematahkan word-boundary → string itu tak cocok dirinya sendiri), atau
+rujuk **by-index**. Gate ini pure-TS → lintas-OS, tak melanggar pelajaran I-34 (jangan bikin gate yang skip di satu OS).
+**Batas tegas:** I-36 = higiene dev (bikin repo ini aman dikerjakan di bawah acca). **I-35 = fix produk.** I-36 **tak**
+menggantikan I-35 — user lain punya repo & paste-an mereka sendiri.
+**Sumber:** insiden live 17 Jul (lihat I-35).
+
 ### I-34 — Artefak shippable tanpa gate yang MENGEKSEKUSINYA = titik buta review [P2, `.ps1` ✅ ditutup 17 Jul; `.service`/`.sh`/XML MASIH TERBUKA → gate sebelum M5.4/M5.5 render]
 **Kelas cacat (bukan bug tunggal), ditemukan 17 Jul lewat DUA korban nyata dalam satu sesi:**
 1. **`register-backup-task.ps1`** (M5.2 `85be83c`) — **ter-commit, ditandai selesai, LOLOS tier-review Opus**, padahal

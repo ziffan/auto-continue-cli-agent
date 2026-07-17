@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  claudeMaxBindingUsedFraction,
   claudeUsageAvailable,
   parseAgyQuotaSummary,
   parseAgyUserStatus,
@@ -382,5 +383,54 @@ describe('claudeUsageAvailable (I-25 — gate resume CC hanya window mengikat)',
       lim('weekly_scoped', 0.3, { scope: 'Model B', isActive: false }),
     ]);
     expect(claudeUsageAvailable(s)).toBe(false);
+  });
+});
+
+describe('claudeMaxBindingUsedFraction (I-35 — korroborasi sinyal limit OUTPUT)', () => {
+  function snap(limits: UsageLimit[]): UsageSnapshot {
+    return { tool: 'claude', limits, capturedAt: NOW };
+  }
+  const lim = (kind: string, usedFraction: number, extra: Partial<UsageLimit> = {}): UsageLimit => ({
+    kind,
+    usedFraction,
+    resetAt: null,
+    ...extra,
+  });
+
+  it('mengambil MAX di antara window mengikat — bentuk snapshot NYATA saat FP live 17 Jul', () => {
+    // Persis snapshot sesi z36i saat LIMIT_HIT palsu: session 0.55 + weekly_all 0.39 + scoped non-aktif.
+    const s = snap([
+      lim('session', 0.55, { isActive: true }),
+      lim('weekly_all', 0.39, { isActive: false }),
+      lim('weekly_scoped', 0, { scope: 'Fable', isActive: false }),
+    ]);
+    expect(claudeMaxBindingUsedFraction(s)).toBeCloseTo(0.55);
+  });
+
+  it('scoped NON-aktif yang habis TAK mengerek angka — konsisten dgn definisi mengikat I-25', () => {
+    // Kalau scoped-non-aktif ikut dihitung, max jadi 1.0 → korroborasi mati & FP lolos.
+    const s = snap([
+      lim('session', 0.2),
+      lim('weekly_scoped', 1, { scope: 'Claude Opus 4.6', isActive: false }),
+    ]);
+    expect(claudeMaxBindingUsedFraction(s)).toBeCloseTo(0.2);
+  });
+
+  it('scoped AKTIF ikut dihitung (window yang benar-benar mengikat sesi)', () => {
+    const s = snap([
+      lim('session', 0.2),
+      lim('weekly_scoped', 0.97, { scope: 'Claude Sonnet 5', isActive: true }),
+    ]);
+    expect(claudeMaxBindingUsedFraction(s)).toBeCloseTo(0.97);
+  });
+
+  it('limits kosong → null (tak tahu) — pemanggil WAJIB latch, bukan menyimpulkan "tak limit"', () => {
+    expect(claudeMaxBindingUsedFraction(snap([]))).toBeNull();
+  });
+
+  it('sepakat dgn claudeUsageAvailable soal window mana yang dihitung (satu definisi, tak menyimpang)', () => {
+    const s = snap([lim('session', 0.99), lim('weekly_scoped', 1, { scope: 'X', isActive: false })]);
+    expect(claudeUsageAvailable(s)).toBe(true); // window mengikat masih < 1
+    expect(claudeMaxBindingUsedFraction(s)).toBeCloseTo(0.99); // dan angkanya dari window yang sama
   });
 });

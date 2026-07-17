@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { resolveAdapter } from '../../adapters/index.js';
 import { closeDb, openDb } from '../../store/db.js';
 import { createEventsRepo } from '../../store/repositories/events.js';
+import { createMetaRepo } from '../../store/repositories/meta.js';
 import { createScheduledJobsRepo } from '../../store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../../store/repositories/sessions.js';
 import { withNotifications } from '../../notify/notifier.js';
@@ -22,10 +23,12 @@ async function runExecutor(tool: string, args: string[]): Promise<void> {
     // ter-surface ke stderr (out-of-band, tak mengotori stdout TUI child).
     const events = withNotifications(createEventsRepo(db));
     const jobs = createScheduledJobsRepo(db);
+    const meta = createMetaRepo(db);
 
     const { waitForExit } = runSession(
       { file: spawnSpec.file, args: spawnSpec.args, cwd, tool: adapter.tool },
-      { sessions, events, jobs },
+      // I-35: korroborasi sinyal limit OUTPUT terhadap snapshot usage terakhir (ditulis daemon).
+      { sessions, events, jobs, usageSnapshotJson: (tool) => meta.get(`usage_snapshot_${tool}`) },
     );
 
     const exitCode = await waitForExit;

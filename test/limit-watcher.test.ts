@@ -189,3 +189,104 @@ describe('createLimitWatcher — feedSignal', () => {
     expect(getCalls()).toBe(0);
   });
 });
+
+// I-35 (insiden live 17 Jul): korroborasi sinyal limit OUTPUT terhadap snapshot usage.
+// Konteks: sesi `z36i` kena 2 LIMIT_HIT palsu dalam 8 menit — sekali dari query pencarian agent
+// yang memuat frasa kanonik, sekali dari teks notifikasi acca SENDIRI yang di-paste owner. Window
+// mengikat saat itu 0.55; limit ASLI terukur >=0.94 (T-6). Ambang 0.85 (keputusan owner Ziffan).
+describe('createLimitWatcher — korroborasi usage (I-35)', () => {
+  const CC_LIMIT_LINE = "You've hit your session limit · resets 7:30am (Asia/Jakarta)\n";
+  const AGY_LIMIT_LINE = '⚠ Individual quota reached. Resets in 59m14s.\n';
+  const NOW = 1_700_000_000_000;
+
+  function makeCorroborated(opts: {
+    tool?: Tool;
+    maxBindingUsedFraction?: number;
+    /** umur snapshot dalam ms (default: segar). */
+    ageMs?: number;
+    /** true = `usageSnapshot` mengembalikan null (tak tahu). */
+    unknown?: boolean;
+  }) {
+    let calls = 0;
+    let contradictions = 0;
+    let fraction = opts.maxBindingUsedFraction ?? 0.55;
+    const watcher = createLimitWatcher({
+      tool: opts.tool ?? 'claude',
+      now: () => NOW,
+      onLimit: () => {
+        calls += 1;
+      },
+      usageSnapshot: () =>
+        opts.unknown === true
+          ? null
+          : { capturedAt: NOW - (opts.ageMs ?? 30_000), maxBindingUsedFraction: fraction },
+      onUsageContradiction: () => {
+        contradictions += 1;
+      },
+    });
+    return {
+      watcher,
+      getCalls: () => calls,
+      getContradictions: () => contradictions,
+      setFraction: (f: number) => {
+        fraction = f;
+      },
+    };
+  }
+
+  it('snapshot SEGAR yang membantah (0.55 < 0.85) → TAK melatch + audit kontradiksi', () => {
+    const c = makeCorroborated({ maxBindingUsedFraction: 0.55 });
+    c.watcher.feedOutput(CC_LIMIT_LINE);
+    expect(c.getCalls()).toBe(0);
+    expect(c.getContradictions()).toBe(1);
+  });
+
+  it('limit ASLI (0.94, T-6) tetap melatch — korroborasi tak menelan limit sungguhan', () => {
+    const c = makeCorroborated({ maxBindingUsedFraction: 0.94 });
+    c.watcher.feedOutput(CC_LIMIT_LINE);
+    expect(c.getCalls()).toBe(1);
+    expect(c.getContradictions()).toBe(0);
+  });
+
+  it('tepat DI ambang (0.85) melatch — suppress hanya bila BENAR-BENAR di bawah', () => {
+    const c = makeCorroborated({ maxBindingUsedFraction: 0.85 });
+    c.watcher.feedOutput(CC_LIMIT_LINE);
+    expect(c.getCalls()).toBe(1);
+  });
+
+  it('snapshot BASI (>5 menit) tak boleh membantah — daemon mati = korroborasi mati, latch spt pra-I-35', () => {
+    const c = makeCorroborated({ maxBindingUsedFraction: 0.1, ageMs: 5 * 60_000 + 1 });
+    c.watcher.feedOutput(CC_LIMIT_LINE);
+    expect(c.getCalls()).toBe(1);
+    expect(c.getContradictions()).toBe(0);
+  });
+
+  it('snapshot tak diketahui (null) → latch (ragu tak pernah berarti "tak limit")', () => {
+    const c = makeCorroborated({ unknown: true });
+    c.watcher.feedOutput(CC_LIMIT_LINE);
+    expect(c.getCalls()).toBe(1);
+  });
+
+  it('hook StopFailure = PRIMER (ADR-001) → BYPASS korroborasi walau snapshot membantah', () => {
+    const c = makeCorroborated({ maxBindingUsedFraction: 0.02 });
+    c.watcher.feedSignal({ type: 'stopfailure', error: 'rate_limit' });
+    expect(c.getCalls()).toBe(1);
+    expect(c.getContradictions()).toBe(0);
+  });
+
+  it('agy TAK disuppress (nol hook + snapshot LS stale in-sesi, G-35) → latch', () => {
+    const c = makeCorroborated({ tool: 'antigravity', maxBindingUsedFraction: 0.02 });
+    c.watcher.feedOutput(AGY_LIMIT_LINE);
+    expect(c.getCalls()).toBe(1);
+    expect(c.getContradictions()).toBe(0);
+  });
+
+  it('JARING FALSE-NEGATIVE: suppress TAK membuang sinyal — begitu snapshot menyusul, repaint (G-37) melatch', () => {
+    const c = makeCorroborated({ maxBindingUsedFraction: 0.55 });
+    c.watcher.feedOutput(CC_LIMIT_LINE);
+    expect(c.getCalls()).toBe(0); // snapshot masih tertinggal → ditahan
+    c.setFraction(1.0); // usage-monitor menyusul: ternyata limitnya ASLI
+    c.watcher.feedOutput(CC_LIMIT_LINE); // CC me-repaint bannernya (G-37, terbukti live)
+    expect(c.getCalls()).toBe(1); // → latch. Tak ada limit asli yang hilang.
+  });
+});
