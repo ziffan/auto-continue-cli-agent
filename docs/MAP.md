@@ -36,9 +36,12 @@ auto-continue-cli-agent/
 │   │   └── repositories/    #   sessions / events / scheduled_jobs / meta
 │   ├── notify/              # Notifier lokal (node-notifier/stdout) + hook ke remote (M4)
 │   └── shared/              # tipe umum, waktu (epoch-ms), path lintas-OS, logger terstruktur
-├── test/                    # unit + integration (fixtures deteksi limit di test/fixtures/)
+├── test/                    # unit + integration (fixtures deteksi limit di test/fixtures/); gate artefak: systemd-unit / shell-script / ps1-encoding (I-34)
+├── deploy/                  # template service+backup (non-TS, dirender/di-substitusi saat install — bukan dibuild ke dist/)
+│   ├── linux/               #   acca-daemon.service (systemd --user, M5.4)
+│   └── backup/              #   systemd/ (.service+.timer) + windows/ (.ps1) — M5.2
 ├── docs/                    # spec (file ini)
-├── scripts/                 # tooling dev (verifikasi prebuild, dll)
+├── scripts/                 # tooling dev + install-linux.sh (M5.4) + backup.js / copy-migrations.js
 └── package.json / tsconfig.json / .nvmrc
 ```
 

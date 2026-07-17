@@ -270,6 +270,14 @@ di-LOCK** (3 Jul malam); butuh Notifier (M4). Sisa yang di-tune saat M-remote: r
 
 ## M5 — Hardening + Deploy sebagai service
 
+> **STATUS: ✅ DITUTUP PARSIAL 2026-07-17 (Linux track lengkap & LIVE-verified; Windows ditunda).** Slice: **M5.1/M5.2
+> engine backup ✅ SANDBOX** (restore LIVE 1× = residual T-L6, owner-hand) · **M5.3 security pass ✅** (T-L1/2/4/5/8 tutup,
+> T-L7 Linux tutup via M5.4, T-L6 residual) · **M5.4 systemd `--user` ✅ LIVE** (AC-M5-1 penuh + AC-M5-3 Linux) · **M5.5
+> Windows Service ⛔ DITUNDA (I-33)** — LocalSystem split-brain, owner: `acca daemon` manual dulu · **M5.6 wrap-up ✅**
+> (checklist di bawah). **585 test hijau.** **Gate ke M-remote:** sisa **T-L6 restore LIVE 1×** (kecil). AC-M5-2 + paruh
+> Windows AC-M5-3 = terbawa ke M5.5 saat I-33 dibuka. Penutupan **jujur** (bukan "dengan catatan"): tak ada kegagalan
+> disembunyikan — Windows deferral & T-L6 residual tercatat eksplisit + punya trigger/owner.
+
 > **PRD+TRD di-lock 2026-07-17** (doc-first, skill `docs-first-spec` mode modul). ADR pengikat: **ADR-021**
 > (Windows Service), **ADR-022** (backup/DR minimal), **ADR-023** (IPC DACL residual + hardening I-26), di atas
 > ADR-007/015/017 yang sudah ada. Slice formal (vertical) ada di sub-bagian "Vertical slices M5" bawah.
@@ -328,7 +336,7 @@ Audit 5 permukaan fondasi; tiap temuan → tutup atau catat residual di THREAT-M
 ### Acceptance criteria M5 (checklist test milestone)
 - [x] **AC-M5-1** Service Linux (systemd --user + linger) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Ubuntu)* — **✅ PENUH 17 Jul (Ubuntu, systemd 255):** install→`active (running)` · **auto-restart on-crash** (SIGKILL→restart PID baru ~5s, `NRestarts=1`, <30s; G-47) · same-DB (`acca status`→daemon HIDUP, kontras I-33) · **logout→login survive** (owner) · **reboot→auto-start** (owner + korroborasi: `up 1min`, daemon `active since` +6s pasca-boot, PID baru 2642, `enabled`+`Linger=yes` bertahan).
 - [ ] **AC-M5-2** Service Windows (WinSW/sc.exe) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Windows)*
-- [ ] **AC-M5-3** Reboot host saat ada job LIMIT_HIT pending → job tetap fire pasca-boot (recovery AC-7 end-to-end). *(live-verify)*
+- [x] **AC-M5-3** Reboot host saat ada job LIMIT_HIT pending → job tetap fire pasca-boot (recovery AC-7 end-to-end). *(live-verify)* — **✅ Linux 17 Jul:** job `probe` pending di-stage (sesi EXITED → guard I-35 = no-op aman, nol resume), daemon di-stop, host reboot → daemon **auto-start** → recovery-on-start fire job **7s pasca-boot** (`job_dispatch_done skipped:probe_stale_status`, created_at > boot) + job **terkonsumsi**. Paruh Windows menunggu M5.5 (ditunda/I-33).
 - [ ] **AC-M5-4** Security pass 5-permukaan selesai; tiap temuan ditutup atau tercatat residual di THREAT-MODEL.md.
 - [ ] **AC-M5-5** Egress ke host non-allowlist → `EgressBlockedError` (test); credential-read tak bocor ke log/DB (test/grep).
 - [ ] **AC-M5-6** Backup: `wal_checkpoint`+copy hasilkan `.db` konsisten yang bisa di-restore & daemon start bersih. *(sandbox-testable + 1 live)*
@@ -402,8 +410,9 @@ temuan ditutup (kode/test) atau tercatat residual di THREAT-MODEL §8; verifikas
 > placeholder** = celah I-34 ditutup) + `test/shell-script.test.ts` (LF/shebang/BOM floor lintas-OS + `sh -n` depth) +
 > `deploy/linux/acca-daemon.service` + `scripts/install-linux.sh`. **585 test** (+15), 3 negative control terbukti konkret.
 > **LIVE (mesin Ubuntu) — AC-M5-1 PENUH:** install→active, **auto-restart SIGKILL ~5s** (G-47), same-DB (kontras I-33),
-> linger, **logout + reboot auto-start terverifikasi owner** (daemon `active` +6s pasca-boot, PID baru). Residual: **AC-M5-3**
-> (reboot saat job LIMIT_HIT pending → fire pasca-boot; mekanisme recovery-on-start sudah unit-tested/AC-7, sisa = LIVE e2e).
+> linger, **logout + reboot auto-start terverifikasi owner** (daemon `active` +6s pasca-boot, PID baru). **AC-M5-3 ✅**
+> (job probe pending di-stage pada sesi EXITED → reboot → recovery-on-start fire 7s pasca-boot, no-op aman guard I-35).
+> **Semua AC Linux M5.4 (AC-M5-1 + AC-M5-3 paruh Linux) HIJAU.** Paruh Windows AC-M5-2/M5-3 = M5.5 (ditunda/I-33).
 **Slice**: Template unit `acca-daemon.service` + skrip install (`systemctl --user enable --now` + `loginctl enable-linger`),
 di-verify survive logout+reboot+auto-restart di Ubuntu asli.
 **Scope file**: `deploy/linux/acca-daemon.service` (template), `scripts/install-linux.sh` (baru), `docs` bagian install Linux.

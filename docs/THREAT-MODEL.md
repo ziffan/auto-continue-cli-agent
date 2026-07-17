@@ -192,10 +192,12 @@ tercatat residual (R-5/R-6) **sebelum** M5 dinyatakan selesai — dan **sebelum*
 | T-L4 | **TUTUP (verified)** | Kredensial hanya-baca; tiap cabang error `ClaudeCredentialsError`/`extractClaudeToken` (8 bentuk) tak membocorkan nilai token; modul tak punya jalur tulis/network. `test/security-credential.test.ts`. |
 | T-L5 | **TUTUP (verified)** | Egress whitelist exact-hostname (`Set.has`, bukan substring); domain-confusion/typosquat + URL malformed → `EgressBlockedError`; insecure-TLS hanya loopback. `test/security-egress.test.ts` + `test/http-egress.test.ts`. |
 | T-L6 | **PARSIAL — engine ✅, restore/jadwal menunggu M5.2 [LIVE]** | Engine backup (`wal_checkpoint(TRUNCATE)`+copy+prune) ✅ M5.1 (`test/backup.test.ts`); restore terdokumentasi + jadwal + 1× live = M5.2 (belum). Residual R-6 (RPO interval) diterima. |
-| T-L7 | **MENUNGGU M5.4/M5.5 [LIVE]** | Least-privilege runtime service (admin hanya saat install) diverifikasi saat registrasi service di mesin asli — bukan permukaan SANDBOX. |
+| T-L7 | **TUTUP untuk Linux (M5.4 LIVE 17 Jul); Windows = M5.5 ditunda/I-33** | systemd `--user` jalan sebagai **user** (bukan root/LocalSystem) — `whoami`/`$HOME`/`acca.db`/kredensial identik dengan sesi user; **install pun user-scope, nol sudo** (`systemctl --user` + `loginctl enable-linger` sendiri). Justru asimetri ini yang membuat Windows Service (LocalSystem, eskalasi privilege) DITOLAK → M5.5 ditunda (I-33). Bukti LIVE: `CGroup: …/user@1000.service/…`, daemon berjalan sbg uid 1000. |
 | T-L8 | **TUTUP (verified)** | `events` repo hanya `append`/`listRecent`/`listBySession` — nol method update/delete (struktural). `test/security-audit-append-only.test.ts`. |
 
 **Kesimpulan M5.3:** 5 permukaan SANDBOX-verifiable (T-L1/T-L2/T-L4/T-L5/T-L8) **tertutup**; T-L3 N/A; T-L6/T-L7 menunggu slice `[LIVE]` (M5.2/M5.4/M5.5). Gate security-review §8.3 belum lengkap sampai slice LIVE itu selesai — jangan nyatakan M5 selesai atau mulai M-remote sebelum T-L6/T-L7 ditutup dengan bukti mesin asli.
+
+**Update penutupan M5 (M5.6 wrap-up, 17 Jul):** **T-L7 ✅ TUTUP untuk Linux** (M5.4 LIVE — service = user-scope, nol root). **T-L6 = residual terbuka** (engine backup ✅, tapi **restore LIVE 1× belum dijalankan** = M5.2 LIVE, butuh owner). **Windows (T-L7 paruh Windows) = M5.5 ditunda/I-33.** → **M5 ditutup PARSIAL (Linux track lengkap & LIVE-verified).** Gate ke M-remote: sisa **T-L6 restore LIVE** (1× smoke restore) — kecil, owner-hand.
 
 ---
 
