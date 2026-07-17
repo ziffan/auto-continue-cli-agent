@@ -632,12 +632,37 @@ Jadi: rename exe hasil unduh → `<service-id>.exe`, taruh `<service-id>.xml` di
 4.8.09221 / Release 533509) → jalan. Host tanpa .NET Framework → pakai `WinSW-x64.exe` self-contained (DEPENDENCY-POLICY).
 **Sumber:** verifikasi pin WinSW 17 Jul (web sumber primer error 1053 + eksekusi binary nyata di Win 11 owner), ADR-025.
 
+### G-44 — Em-dash di `.ps1` = parse error PowerShell 5.1 (UTF-8-tanpa-BOM dibaca CP1252; U+201D = delimiter string)
+**Jebakan (ditemukan 17 Jul saat M5.5 — dan sudah MEMAKAN korban di kode ter-commit):** file `.ps1` yang ditulis
+UTF-8 **tanpa BOM** dibaca **PowerShell 5.1** (Windows PowerShell, default Windows 11) sebagai **CP1252**. Em-dash `—`
+(U+2014 = byte `E2 80 94`) jadi 3 karakter, yang **terakhirnya `0x94` = U+201D** (right double quotation mark) — dan
+**PowerShell MENERIMA U+201D sebagai delimiter string** (terbukti: `$x = ”halo”` dgn U+201D dieksekusi normal).
+Akibat: em-dash **di dalam string** menutup string itu lebih awal → **parse error berantai** yang menunjuk baris yang
+**sama sekali tak salah** (mis. "missing terminator" di baris 61, padahal biangnya baris 51).
+**Korban nyata:** `deploy/backup/windows/register-backup-task.ps1` (ter-commit M5.2 `85be83c`, **lolos tier-review**)
+**TIDAK bisa di-parse** PS 5.1 (`[Parser]::ParseFile()` → error baris 53: `-Description "acca — backup snapshot …"`)
+→ **backup terjadwal Windows tak akan pernah jalan.** Lolos karena slice ditandai `[LIVE]` belum diverifikasi: reviewer
+**membaca** skrip, tak ada yang **mengeksekusi parser** atasnya. Diperbaiki 17 Jul (em-dash → `-`, pure ASCII).
+**Aturan:** file `.ps1` WAJIB **pure ASCII**, atau dibuka **UTF-8 BOM** (`EF BB BF`). **Pure ASCII lebih disukai**
+(nol ketergantungan encoding). Dokumen/komentar `.md`/`.ts` bebas em-dash — **`.ps1` tidak**. Hati-hati juga smart quote
+`“ ”` (PowerShell menerimanya sbg delimiter → sumber bug sekelas).
+**Gate:** `test/ps1-encoding.test.ts` — tiap `*.ps1` di repo wajib pure-ASCII/ber-BOM. Sengaja menguji **root cause
+(byte)**, bukan gejala (parse): memanggil parser PowerShell butuh Windows → test bakal **skip di Ubuntu** (mesin harian)
+= gate bocor persis di tempat kerja paling sering. Cek byte = deterministik, lintas-OS, nol dep. **Negative control
+terbukti** (satu em-dash dikembalikan → gate gagal + tunjuk baris tepat).
+**Pelajaran proses (lebih penting dari fakta encoding-nya):** artefak yang **tak pernah dieksekusi** di gate mana pun
+(`.ps1`, template unit, XML) = titik buta review. `npm run check` tak menyentuhnya; mata reviewer tak menjalankan parser.
+Tiap artefak shippable butuh **minimal satu gate yang mengeksekusi/memvalidasinya**, walau cuma cek byte.
+**Sumber:** M5.5 17 Jul — parse error nyata di mesin owner + `[Parser]::ParseFile()` atas file ter-commit + verifikasi
+byte `E2 80 94` → CP1252 → U+201D.
+
 ---
 
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-17 (M5.5, gate encoding) | **G-44** baru (em-dash di `.ps1` UTF-8-tanpa-BOM → PS 5.1 baca CP1252 → U+201D yang **diterima PowerShell sbg delimiter string** → string tertutup lebih awal → parse error berantai menunjuk baris salah. **Korban nyata: `register-backup-task.ps1` ter-commit M5.2 `85be83c` TIDAK parse** → backup terjadwal Win tak pernah jalan; lolos karena `[LIVE]` belum diverifikasi = reviewer baca tapi tak eksekusi parser. Fix: pure ASCII + gate `test/ps1-encoding.test.ts` cek byte [lintas-OS, bukan parse yg skip di Ubuntu], negative-control terbukti. **Pelajaran proses:** artefak tak-pernah-dieksekusi = titik buta review; tiap artefak shippable butuh >=1 gate yang memvalidasinya). Dari slice M5.5. |
 | 2026-07-17 (pin WinSW, ADR-025) | **G-43** baru (`sc.exe` **tak bisa host node** — `sc create` sukses tapi service tak start, error 1053 [SCM wajib `SERVICE_RUNNING`]; "registrasi sukses ≠ service jalan" → klausa fallback `sc.exe` ADR-021 VOID, wrapper wajib. + WinSW v2: exe **wajib senama** config-nya, dan config dimuat **sebelum** parse perintah → salah nama = FATAL menyesatkan yang terbaca seperti binary rusak. + `status` service tak-terdaftar = `NonExistent` exit 0 = kontrak idempotensi installer. + NET461 butuh .NET FW 4.6.1; Win 11 bawa 4.8 inbox — terverifikasi jalan). Dari verifikasi pin WinSW (web + eksekusi binary nyata di Win 11 owner). |
 | 2026-07-17 (spec M5, verifikasi web) | **G-41** baru (DACL named pipe Windows Node = terbuka by design [Everybody+Anonymous read], Node tak punya API set-DACL — issues #47086/#30823/#17743; kandidat "cek PID client" gugur = spoofable, Project Zero/CVE-2018-0749; → ADR-023 terima residual R-5 + hardening lapisan-app, native addon ditolak). Mengoreksi klaim keamanan ADR-015. Dari verifikasi web sumber primer saat spec M5 (I-26).
 | 2026-07-17 (sesi otonom, M5.3) | **G-42** baru (`acca status` CLI baca DB langsung `openDb()`, BUKAN lewat IPC; handler IPC `status` = jalur terpisah nol konsumen produksi → data-minimize `toSessionStatusView` T-L1 nol breakage; jangan asumsikan mengubah satu = mengubah lain). Dari slice M5.3 T-L1.

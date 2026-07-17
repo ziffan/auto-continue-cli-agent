@@ -555,6 +555,16 @@ Elemen ADR-014 lain tak berubah.
 error 1053. Kontradiksi dgn Alternatives Rejected ADR ini sendiri ("node bukan native service host; butuh wrapper apa
 pun"). **Pin final = WinSW v2.12.0 + SHA256**, lihat ADR-025). Keputusan inti (Windows Service + auto-restart, template
 + skrip manual, nol dep npm runtime) TETAP; isi di bawah tak diedit (immutable). Baca bersama ADR-025.*
+**⚠ REALISASI DITUNDA — BLOCKER I-33 (17 Jul, bukti empiris):** keputusan ADR ini **TIDAK dibalik** (bila Windows kelak
+jadi service, itu **Windows Service**, bukan Task Scheduler), tapi **belum bisa direalisasikan**: ADR ini tak memeriksa
+**identitas akun** service, dan premisnya **bentrok dengan ADR-005** ("mewarisi sesi login mesin"). Probe 17 Jul
+membuktikan Windows Service default = **LocalSystem** → `os.homedir()`=`…\systemprofile`, `dataDir()` resolve ke
+**`acca.db` BERBEDA** (`sameDbAsUser:false`, DB kosong baru dibuat) + `.claude/.credentials.json` **tak ada** → daemon
+jalan, `sc query` RUNNING, **produk mati SENYAP**. **JANGAN install daemon sebagai service Windows sebelum I-33 selesai.**
+**Keputusan owner 17 Jul: Windows = `acca daemon` manual dulu** (M5.5 ditunda; ADR-021 tetap target). Opsi + 4
+ketidakpastian jalur "service as-user" (password, `SeServiceLogonRight`/`secedit`, profile-load, session-0 PTY) → **I-33**.
+*(Klausa `sc.exe` fallback juga sudah VOID — ADR-025. Klausa systemd/Linux ADR-007 tak terpengaruh: `systemd --user` +
+linger jalan sebagai user → nol masalah ini.)*
 **Men-supersede sebagian ADR-007** (hanya klausa "Task Scheduler (Windows)"; klausa systemd/Linux ADR-007 TETAP berlaku).
 **Context:** ADR-007 (3 Jul) memilih "systemd (Linux) / Task Scheduler (Windows)" tanpa membandingkan Task Scheduler
 dengan Windows Service secara serius. Verifikasi 17 Jul (web, sumber primer + praktisi) menemukan Task Scheduler ONSTART
