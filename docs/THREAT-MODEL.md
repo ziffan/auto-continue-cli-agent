@@ -165,9 +165,12 @@ Sebelum menulis kode tier B/C (M-remote):
 
 - **R-5 (diterima, terdokumentasi — single-user desktop).** DACL named pipe Windows terbuka by Node design (Everybody+
   Anonymous read; Node tak punya API set-DACL — issues nodejs/node #47086/#30823/#17743). User lokal lain bisa connect+read
-  pipe (`status` cwd leak) + memicu perintah whitelist (dibatasi injection firewall — tak bisa suntik teks arbitrer).
-  **Diterima** untuk single-user desktop. **Node headless multi-akun (ADR-007):** relevan → mitigasi deploy = akun OS khusus
-  daemon (isolasi user-level), bukan native addon. Revisit ADR-023 hanya bila kebutuhan multi-akun host konkret.
+  pipe + memicu perintah whitelist (dibatasi injection firewall — tak bisa suntik teks arbitrer).
+  **Hardening M5.3 (T-L1):** payload IPC `status` kini di-**data-minimize** (`toSessionStatusView` — TANPA `cli_session_id`/
+  `cwd`/field audit) → connect+read pipe **tak lagi** membocorkan id resume-capability maupun path proyek; sisa residual =
+  pipe tetap bisa di-connect (metadata `ping` + perintah whitelist), bukan lagi data sensitif. **Diterima** untuk single-user
+  desktop. **Node headless multi-akun (ADR-007):** relevan → mitigasi deploy = akun OS khusus daemon (isolasi user-level),
+  bukan native addon. Revisit ADR-023 hanya bila kebutuhan multi-akun host konkret.
 - **R-6 (diterima).** Backup RPO = interval snapshot (bukan continuous, ADR-022) → job/event antara snapshot terakhir &
   korupsi bisa hilang. Diterima single-user (kehilangan ≤1 interval; sesi LIMIT_HIT recover manual dari CLI agent asli).
 
@@ -175,6 +178,24 @@ Sebelum menulis kode tier B/C (M-remote):
 
 Security-review gate M5 (skill `milestone-wrapup`, persona security-review) HARUS memverifikasi T-L1..T-L8 tertutup atau
 tercatat residual (R-5/R-6) **sebelum** M5 dinyatakan selesai — dan **sebelum** M-remote menambah permukaan §1–§7 di atas fondasi ini.
+
+### 8.4 Close-out M5.3 (security pass 5-permukaan)
+
+> Diverifikasi 2026-07-17 (slice M5.3, persona security-review Opus + suite `test/security-*.test.ts`). Verdict per-item.
+> Permukaan yang butuh slice `[LIVE]` (service/restore) belum bisa ditutup di sini — ditandai eksplisit.
+
+| ID | Verdict | Bukti / alasan |
+|---|---|---|
+| T-L1 | **TUTUP (hardened) + residual R-5** | GAP nyata dikonfirmasi (handler `status` lama dump `cli_session_id`+`cwd` ke pipe DACL-terbuka, nol konsumen produksi) → `toSessionStatusView` proyeksi minimal 8-field. `test/security-ipc-status.test.ts` (properti + serialisasi JSON kabel). Pipe tetap terbuka = residual R-5 diterima. |
+| T-L2 | **TUTUP (verified)** | Injection firewall struktural dua-lapis: handler `inject` abaikan args; `requestInject` tak punya parameter args. `test/security-inject-firewall.test.ts` termasuk uji **wire-level** (`sendCommand` payload jahat → hanya `CONTINUE_TOKEN` sampai PTY). |
+| T-L3 | **N/A (kandidat ditolak)** | Cek-PID sbg enforcement DITOLAK (ADR-023, PID spoofable) — tak ada kode, tak ada permukaan baru. |
+| T-L4 | **TUTUP (verified)** | Kredensial hanya-baca; tiap cabang error `ClaudeCredentialsError`/`extractClaudeToken` (8 bentuk) tak membocorkan nilai token; modul tak punya jalur tulis/network. `test/security-credential.test.ts`. |
+| T-L5 | **TUTUP (verified)** | Egress whitelist exact-hostname (`Set.has`, bukan substring); domain-confusion/typosquat + URL malformed → `EgressBlockedError`; insecure-TLS hanya loopback. `test/security-egress.test.ts` + `test/http-egress.test.ts`. |
+| T-L6 | **PARSIAL — engine ✅, restore/jadwal menunggu M5.2 [LIVE]** | Engine backup (`wal_checkpoint(TRUNCATE)`+copy+prune) ✅ M5.1 (`test/backup.test.ts`); restore terdokumentasi + jadwal + 1× live = M5.2 (belum). Residual R-6 (RPO interval) diterima. |
+| T-L7 | **MENUNGGU M5.4/M5.5 [LIVE]** | Least-privilege runtime service (admin hanya saat install) diverifikasi saat registrasi service di mesin asli — bukan permukaan SANDBOX. |
+| T-L8 | **TUTUP (verified)** | `events` repo hanya `append`/`listRecent`/`listBySession` — nol method update/delete (struktural). `test/security-audit-append-only.test.ts`. |
+
+**Kesimpulan M5.3:** 5 permukaan SANDBOX-verifiable (T-L1/T-L2/T-L4/T-L5/T-L8) **tertutup**; T-L3 N/A; T-L6/T-L7 menunggu slice `[LIVE]` (M5.2/M5.4/M5.5). Gate security-review §8.3 belum lengkap sampai slice LIVE itu selesai — jangan nyatakan M5 selesai atau mulai M-remote sebelum T-L6/T-L7 ditutup dengan bukti mesin asli.
 
 ---
 
@@ -184,3 +205,4 @@ tercatat residual (R-5/R-6) **sebelum** M5 dinyatakan selesai — dan **sebelum*
 |---|---|---|
 | 2026-07-03 | Draft awal — aset, trust boundary, STRIDE 4 vektor (spoof/authz, egress, injection→aksi, DoS/repudiation), matriks kontrol→AC, residual risk, gate. Gate ADR-013 §5 untuk implementasi tier B/C. | Ziffan × Claude |
 | 2026-07-17 | **§8 baru — permukaan lokal fondasi (M5 security pass).** T-L1..T-L8 (DACL named pipe I-26/ADR-023, credential-read, egress whitelist, state korup, service privilege, audit tampering) + residual R-5 (DACL terbuka diterima single-user) / R-6 (backup RPO). Gate security-review M5 sebelum M-remote. Basis: verifikasi web DACL (Node tak bisa set-DACL; PID spoofable) → ADR-023. | Ziffan × Claude |
+| 2026-07-17 | **§8.4 close-out M5.3.** Verdict per-item: T-L1 hardened (IPC `status` data-minimize `toSessionStatusView` — buang `cli_session_id`/`cwd`, GAP nyata ditutup) + T-L2/T-L4/T-L5/T-L8 verified via `test/security-*.test.ts` (30 test). T-L3 N/A. T-L6 parsial (engine M5.1 ✅, restore=M5.2 LIVE) / T-L7 menunggu M5.4-5 LIVE. R-5 diperbarui (payload `status` tak lagi bocor sensitif). | Ziffan × Claude |

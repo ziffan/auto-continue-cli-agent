@@ -208,3 +208,33 @@ export function createSessionsRepo(db: DatabaseInstance) {
 }
 
 export type SessionsRepo = ReturnType<typeof createSessionsRepo>;
+
+/** Proyeksi minimal `Session` untuk keluar lewat IPC status (T-L1/R-5, M5.3): pipe kontrol daemon
+ *  ber-DACL terbuka (I-26) bukan tempat aman untuk `cli_session_id` (id berkapabilitas-resume) atau
+ *  `cwd` (path proyek) — tak ada konsumen produksi yang butuh field itu lewat IPC (`acca status` baca
+ *  DB langsung). 8 field ini cukup untuk gambaran status ringkas. */
+export interface SessionStatusView {
+  id: string;
+  tool: Tool;
+  status: SessionStatus;
+  proc_state: ProcState;
+  pid: number | null;
+  reset_at: number | null;
+  reset_source: ResetSource | null;
+  updated_at: number;
+}
+
+/** Proyeksi minimal `Session` untuk keluar lewat IPC (data-minimize T-L1/R-5): TANPA `cli_session_id`
+ *  (id resume-capability), `cwd` (path proyek), maupun field audit internal — pipe ber-DACL terbuka. */
+export function toSessionStatusView(s: Session): SessionStatusView {
+  return {
+    id: s.id,
+    tool: s.tool,
+    status: s.status,
+    proc_state: s.proc_state,
+    pid: s.pid,
+    reset_at: s.reset_at,
+    reset_source: s.reset_source,
+    updated_at: s.updated_at,
+  };
+}

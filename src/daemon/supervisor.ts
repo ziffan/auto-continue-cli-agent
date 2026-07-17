@@ -14,7 +14,7 @@ import type { DatabaseInstance } from '../store/db.js';
 import { createEventsRepo } from '../store/repositories/events.js';
 import { createMetaRepo } from '../store/repositories/meta.js';
 import { createScheduledJobsRepo } from '../store/repositories/scheduled-jobs.js';
-import { createSessionsRepo } from '../store/repositories/sessions.js';
+import { createSessionsRepo, toSessionStatusView } from '../store/repositories/sessions.js';
 import { requestInject, type InjectRequestResult } from './inject-continue.js';
 import { stderrDeliver, withNotifications, type NotificationDeliver } from '../notify/notifier.js';
 import { createIpcServer } from './ipc-server.js';
@@ -541,7 +541,9 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
   // mengirim `rearm` → daemon HIDUP memuat ulang pending & arm timer tanpa menunggu restart.
   const ipcServer = createIpcServer({
     ping: () => ({ pong: true, pid: process.pid, at: deps.now() }),
-    status: () => sessions.listActive(),
+    // T-L1/R-5 (M5.3): data-minimize — pipe kontrol ber-DACL terbuka tak boleh dump `cli_session_id`/
+    // `cwd` (I-26). `listActive()` sendiri TAK diubah (CLI `acca status` masih memakainya utuh).
+    status: () => sessions.listActive().map(toSessionStatusView),
     rearm: () => {
       scheduler.rearm();
       return { rearmed: true };
