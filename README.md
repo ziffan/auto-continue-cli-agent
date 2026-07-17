@@ -3,19 +3,14 @@
 Supervisor lokal yang **memonitor usage** dan **melanjutkan otomatis sesi yang terputus karena limit**
 untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 
-> **Status:** Implementasi berjalan — **loop auto-continue (M1–M3d) + monitoring & UX (M4 inti) bertes**
-> (deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup / resume-by-id sesi mati; `acca status`
-> usage-view, `acca log`, notifikasi transisi). Sedang di **M3e — koreksi loop** (audit 11 Jul menemukan 4 P1 di jalur
-> resume/continue; R1–R4 + R6/I-23 [deteksi limit CC primer + capture id CC, live-verified 2.1.207] ✅ — **R4 ditutup
-> via ADR-019 optimistic resume, pivot dari ADR-018 setelah live-verify buktikan probe OAuth baca pool kuota salah**;
-> R7/I-25 [gate resume per-adapter] + idle-tracker-agy ✅. **Audit menyeluruh ketiga (13 Jul) menemukan P1 C-1
-> [resume-by-id memuat percakapan tapi tak melanjutkan kerja] → DITUTUP (RC-1: inject continue ke sesi hasil-resume)
-> + C-2/C-3 pengeras kanal data.** Live-verify token (16 Jul, ADR-020: kata `"continue"` telanjang tak me-resume agy →
-> token = instruksi NL eksplisit, terbukti resume agy+CC di limit asli) ✅ — **sisa gate = HANYA live-verify literal
-> English pasca-reset agy nyata, opportunistik**).
-> 406 test hijau (2 skip POSIX-only
-> di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan; M-remote (kontrol Telegram) & M5 (deploy sebagai
-> service) menyusul setelah gate M3e hijau. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
+> **Status:** Implementasi berjalan — **loop auto-continue (M1–M3d) + monitoring & UX (M4 inti) bertes & gate M3e
+> ✅ hijau** (deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup / resume-by-id sesi mati;
+> `acca status` usage-view, `acca log`, notifikasi transisi). Deteksi limit CC primer + inject-continue otomatis
+> sudah **live-verified pada limit Claude Code ASLI** (16 Jul).
+> Sekarang di **M5 — hardening + deploy sebagai service**: backup/restore state + security pass ✅; **service Linux
+> (systemd `--user`) menyusul**; **service Windows DITUNDA** atas blocker terbukti — lihat [Menjalankan daemon](#menjalankan-daemon).
+> **451 test hijau** (2 skip POSIX-only di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
+> M-remote (kontrol Telegram) menyusul setelah M5. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
 ---
 
@@ -39,9 +34,35 @@ Detail (untuk siapa, biaya masalah terukur, batasan) → [`docs/PROJECT.md`](doc
 3. **Auto-continue** — jadwalkan resume (`claude --resume <id>` / padanan Antigravity) begitu limit pulih,
    di working directory yang benar.
 
-## Perintah (yang sudah ada)
+## Instalasi (dari source)
 
-Jalankan dari source (`npm install && npm run build`; belum ada paket/installer rilis). Cross-OS (Linux + Windows).
+Belum ada paket/installer rilis — jalankan dari source. Cross-OS (Linux + Windows).
+
+**Linux / macOS / Git Bash:**
+
+```bash
+npm install && npm run build
+npm link                        # sekali — bikin perintah `acca` tersedia di PATH
+```
+
+**Windows PowerShell** — `&&` **tidak ada** di Windows PowerShell 5.1 (bawaan Windows 11; baru ada di PowerShell 7),
+jadi pisahkan perintahnya:
+
+```powershell
+npm install
+npm run build
+npm link                        # sekali — bikin perintah `acca` tersedia di PATH
+```
+
+`npm link` memasang shim global (`bin.acca` → `dist/cli/index.js`). Cabut kapan saja: `npm unlink -g auto-continue-cli-agent`.
+
+**Tanpa `npm link`** (kalau tak mau shim global) — semua perintah di bawah tetap jalan dengan memanggil entrypoint langsung.
+Ganti `acca` dengan `node dist/cli/index.js`, mis. `node dist/cli/index.js daemon`.
+
+> Perintah `acca` **hanya** ada setelah `npm link` (atau `npm i -g .`). Kalau muncul `'acca' is not recognized` /
+> `command not found`, itu sebabnya — bukan build yang gagal.
+
+## Perintah (yang sudah ada)
 
 | Perintah                            | Fungsi                                                                                 |
 | ----------------------------------- | -------------------------------------------------------------------------------------- |
@@ -60,7 +81,8 @@ memakai `acca.db` di profil kamu dan mewarisi sesi login `claude`/`agy` kamu (AD
 **Sekarang (semua OS) — manual:**
 
 ```bash
-acca daemon      # biarkan terminal ini terbuka
+acca daemon                      # biarkan terminal ini terbuka
+# tanpa npm link: node dist/cli/index.js daemon
 ```
 
 **Linux — service (systemd `--user` + lingering):** ini jalur always-on yang didukung; jalan sebagai user kamu dan
@@ -108,11 +130,11 @@ template.
 
 **Restore (langkah manual):**
 
-1. **Stop service** acca (nama service placeholder — isi sesuai instalasi M5.4/M5.5):
-   `systemctl --user stop acca-daemon` (Linux) / `sc stop acca-daemon` (Windows).
+1. **Hentikan daemon.** Linux (setelah M5.4): `systemctl --user stop acca-daemon`. **Windows: Ctrl+C di terminal
+   `acca daemon`** — service Windows ditunda (I-33), jadi tak ada service untuk di-`sc stop`.
 2. **Ganti** `<dataDir>/acca.db` dengan snapshot pilihan:
    `cp <snapshot> <dataDir>/acca.db` — hapus sisa `<dataDir>/acca.db-wal` / `-shm` bila ada.
-3. **Start** service kembali.
+3. **Jalankan daemon lagi** (`acca daemon`, atau `systemctl --user start acca-daemon` di Linux pasca-M5.4).
 4. **Verifikasi**: `acca status` menunjukkan daemon hidup + sesi termonitor sesuai snapshot.
 
 > **[LIVE] butuh user** — alur restore end-to-end (backup asli → restore → daemon start bersih)

@@ -651,8 +651,20 @@ Akibat: em-dash **di dalam string** menutup string itu lebih awal → **parse er
 = gate bocor persis di tempat kerja paling sering. Cek byte = deterministik, lintas-OS, nol dep. **Negative control
 terbukti** (satu em-dash dikembalikan → gate gagal + tunjuk baris tepat).
 **Pelajaran proses (lebih penting dari fakta encoding-nya):** artefak yang **tak pernah dieksekusi** di gate mana pun
-(`.ps1`, template unit, XML) = titik buta review. `npm run check` tak menyentuhnya; mata reviewer tak menjalankan parser.
-Tiap artefak shippable butuh **minimal satu gate yang mengeksekusi/memvalidasinya**, walau cuma cek byte.
+(`.ps1`, template unit, XML, **dan instruksi README**) = titik buta review. `npm run check` tak menyentuhnya; mata
+reviewer tak menjalankan parser. Tiap artefak shippable butuh **minimal satu gate yang mengeksekusi/memvalidasinya**,
+walau cuma cek byte.
+**Instansi kedua kelas yang sama (17 Jul, sesi yang sama):** README menyuruh `npm install && npm run build` lalu
+`acca run claude` — **dua-duanya gagal di Windows**: (a) `&&` **tak ada** di Windows PowerShell 5.1 (bawaan Win 11;
+baru di PS 7 — mesin owner: 5.1.26100, `pwsh` tak terpasang); (b) **`acca` tak pernah ada di PATH** — `package.json`
+mendeklarasikan `bin.acca`, tapi itu hanya jadi perintah setelah `npm link`/`npm i -g .`, dan README tak pernah
+menyuruhnya. **Sudah diketahui sejak 16 Jul** (CONTEXT mencatat "`acca` tak di PATH") tapi tak pernah diperbaiki di
+README → menggigit owner dua kali. Diperbaiki 17 Jul + **diverifikasi dengan benar-benar menjalankannya** (`npm link`
+→ `acca --version` → `0.1.0` → `acca status` render nyata). **Pelajaran:** instruksi di README = kode yang dieksekusi
+manusia; kalau tak pernah dijalankan sekali pun, ia tak lebih dipercaya dari kode tak-ter-test.
+**Jebakan sampingan saat verifikasi:** `native.exe | Select-Object -First N` di PowerShell **memutus pipeline lebih
+awal → native command dibunuh → exit code 255** walau perintahnya sukses. Jangan simpulkan "exit non-nol = bug" dari
+perintah yang di-pipe ke `Select-Object -First`; cek exit code tanpa pipe (`acca status` langsung = exit 0).
 **Sumber:** M5.5 17 Jul — parse error nyata di mesin owner + `[Parser]::ParseFile()` atas file ter-commit + verifikasi
 byte `E2 80 94` → CP1252 → U+201D.
 
