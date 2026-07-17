@@ -190,7 +190,17 @@ konkret** (CRLF, `sh -n` sintaks, baris-tanpa-`=`, placeholder bocor, Restart sa
 sendiri DITUNDA (I-33)**, jadi bukan hutang aktif. Saat M5.5 dibuka: XML = well-formed + assert `<onfailure action=
 "restart">` + placeholder tersubstitusi (pola sama). Gate harus lintas-OS. **Sumber:** M5.4 17 Jul (kelas dari G-44, `d080f70`/`13da025`).
 
-### I-33 — Windows Service ≠ sesi user: daemon-as-service pakai DB & kredensial BERBEDA → produk mati SENYAP [P1, BLOCKER M5.5 — premis ADR-021 bentrok ADR-005]
+### I-33 — Windows Service ≠ sesi user: daemon-as-service pakai DB & kredensial BERBEDA → produk mati SENYAP [P1 blocker MVP → RESOLVED-BY-PATH-CHANGE (ADR-026, 17 Jul); residual jalur-Service = deferred/P3]
+**✅ RESOLUSI (ADR-026, 17 Jul — ganti jalur, bukan pecahkan mismatch):** deployment Windows MVP **tak lagi lewat Windows
+Service** → **autostart per-user (Task Scheduler @logon, run-hidden, restart-on-failure)** yang jalan **sebagai user login**
+→ mismatch identitas akun (akar seluruh issue ini) **lenyap by construction**: `acca.db` + `.credentials.json` = milik user,
+`session-0` PTY tak relevan (daemon di sesi interaktif user, spawn `claude` persis seperti `acca daemon` manual). **4
+ketidakpastian jalur "service as-user" (password / `SeServiceLogonRight`+`secedit` / profile-load / session-0 PTY) semua
+GUGUR** untuk MVP. **Residual yang tersisa (di-defer, P3):** hanya relevan bila kelak ada host Windows **non-laptop
+selalu-login** yang butuh always-on lintas-logout via Windows Service — di situ probe stage-2 di bawah masih berlaku.
+Untuk profil laptop (target proyek), always-on lintas-logout **sudah direlakan** (opsi c di bawah, ADR-007); tak ada yang
+perlu dikejar. **Blocker MVP DITUTUP.** Sisa bagian di bawah = konteks historis + residual jalur-Service.
+
 **Ditemukan 17 Jul (slice M5.5, probe empiris di Win 11 owner) — SEBELUM kode ditulis.** ADR-021 menetapkan deployment
 Windows = Windows Service, tapi tak memeriksa **identitas akun** service. Windows Service default (WinSW tanpa
 `<serviceaccount>`) jalan sebagai **LocalSystem**, dan itu **bukan** sesi user. Ini bertabrakan langsung dengan **ADR-005**

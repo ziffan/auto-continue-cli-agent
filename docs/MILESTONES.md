@@ -273,10 +273,11 @@ di-LOCK** (3 Jul malam); butuh Notifier (M4). Sisa yang di-tune saat M-remote: r
 > **STATUS: ✅ DITUTUP PARSIAL 2026-07-17 (Linux track lengkap & LIVE-verified; Windows ditunda).** Slice: **M5.1/M5.2
 > backup ✅** (engine SANDBOX + **restore LIVE-verified M5.6** — `tl6x` ter-revert = bukti restore genuine) · **M5.3
 > security pass ✅** (T-L1/2/4/5/8 tutup, T-L7 Linux tutup via M5.4, **T-L6 tutup via M5.6 restore LIVE**) · **M5.4 systemd
-> `--user` ✅ LIVE** (AC-M5-1 penuh + AC-M5-3 Linux) · **M5.5 Windows Service ⛔ DITUNDA (I-33)** — LocalSystem split-brain,
-> owner: `acca daemon` manual dulu · **M5.6 wrap-up ✅** (checklist di bawah). **585 test hijau.** **Gate security-review
-> ke M-remote BERSIH** (semua T-L lokal Linux tutup; T-L3 N/A). AC-M5-2 + paruh Windows AC-M5-3 = terbawa ke M5.5 saat I-33
-> dibuka. Penutupan **jujur** (bukan "dengan catatan"): tak ada kegagalan disembunyikan — Windows deferral tercatat eksplisit + trigger/owner.
+> `--user` ✅ LIVE** (AC-M5-1 penuh + AC-M5-3 Linux) · **M5.5 Windows ♻ RE-SCOPED (ADR-026, 17 Jul)** — dari Windows Service
+> (⛔ I-33 LocalSystem split-brain) ke **autostart per-user (Task Scheduler @logon)** yang menyelesaikan I-33 by construction;
+> **belum diimplementasi** (butuh owner+Windows, LIVE-only) · **M5.6 wrap-up ✅** (checklist di bawah). **585 test hijau.**
+> **Gate security-review ke M-remote BERSIH** (semua T-L lokal Linux tutup; T-L3 N/A). AC-M5-2 (diperkuat: DB-sama + spawn
+> terautentikasi) + paruh Windows AC-M5-3 = terbawa ke M5.5 re-scoped. Penutupan **jujur**: Windows deferral tercatat eksplisit + trigger/owner.
 
 > **PRD+TRD di-lock 2026-07-17** (doc-first, skill `docs-first-spec` mode modul). ADR pengikat: **ADR-021**
 > (Windows Service), **ADR-022** (backup/DR minimal), **ADR-023** (IPC DACL residual + hardening I-26), di atas
@@ -335,7 +336,7 @@ Audit 5 permukaan fondasi; tiap temuan → tutup atau catat residual di THREAT-M
 
 ### Acceptance criteria M5 (checklist test milestone)
 - [x] **AC-M5-1** Service Linux (systemd --user + linger) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Ubuntu)* — **✅ PENUH 17 Jul (Ubuntu, systemd 255):** install→`active (running)` · **auto-restart on-crash** (SIGKILL→restart PID baru ~5s, `NRestarts=1`, <30s; G-47) · same-DB (`acca status`→daemon HIDUP, kontras I-33) · **logout→login survive** (owner) · **reboot→auto-start** (owner + korroborasi: `up 1min`, daemon `active since` +6s pasca-boot, PID baru 2642, `enabled`+`Linger=yes` bertahan).
-- [ ] **AC-M5-2** Service Windows (WinSW/sc.exe) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Windows)*
+- [ ] **AC-M5-2** *(DI-REVISI ADR-026 — jalur autostart per-user, bukan Windows Service)* Autostart Windows per-user (Task Scheduler @logon, run-hidden) **auto-start saat login** + **auto-restart on-crash <30s** (SIGKILL, bukan exit-bersih). **Bukti WAJIB (diperkuat — "task RUNNING" TAK cukup, kelas kegagalan I-33):** (a) daemon baca `acca.db` **yang SAMA** dengan CLI user (`acca status` konsisten, bukan DB kosong baru) **DAN** (b) `claude`/`agy` ter-spawn **TERAUTENTIKASI** (resume nyata jalan, bukan gagal-auth senyap) **DAN** (c) nol jendela konsol (run-hidden terverifikasi). **Scope jujur:** logon-scoped — **tak** dituntut survive-logout / at-boot-pra-login (direlakan untuk profil laptop, ADR-026/ADR-007; truly always-on = Linux M5.4). *(live-verify Windows asli — sandbox tak bisa registrasi Task Scheduler)*
 - [x] **AC-M5-3** Reboot host saat ada job LIMIT_HIT pending → job tetap fire pasca-boot (recovery AC-7 end-to-end). *(live-verify)* — **✅ Linux 17 Jul:** job `probe` pending di-stage (sesi EXITED → guard I-35 = no-op aman, nol resume), daemon di-stop, host reboot → daemon **auto-start** → recovery-on-start fire job **7s pasca-boot** (`job_dispatch_done skipped:probe_stale_status`, created_at > boot) + job **terkonsumsi**. Paruh Windows menunggu M5.5 (ditunda/I-33).
 - [x] **AC-M5-4** Security pass 5-permukaan selesai; tiap temuan ditutup atau tercatat residual di THREAT-MODEL.md. — **✅ M5.3** (T-L1 hardened + T-L2/4/5/8 verified, T-L3 N/A, T-L6/T-L7 kelak LIVE → keduanya kini ✅); THREAT-MODEL §8.4 close-out per-item.
 - [x] **AC-M5-5** Egress ke host non-allowlist → `EgressBlockedError` (test); credential-read tak bocor ke log/DB (test/grep). — **✅ M5.3** `test/security-egress.test.ts` (exact-hostname `Set.has`, typosquat/malformed→blocked) + `test/security-credential.test.ts` (8 bentuk error tak bocor token).
@@ -424,38 +425,29 @@ di-verify survive logout+reboot+auto-restart di Ubuntu asli.
 **Bukti verifikasi**: assert render (sandbox) + **[LIVE]** paste `systemctl --user status` pasca-reboot + log recovery job.
 **Tier review**: **1** (service privilege + lifecycle; least-privilege runtime).
 
-#### M5.5 — Service Windows (Windows Service via WinSW) template + skrip + LIVE **[DITUNDA — BLOCKER I-33]**
-> **⛔ DITUNDA 17 Jul (keputusan owner Ziffan), SEBELUM kode ditulis — bukan dibatalkan.** Probe empiris membuktikan
-> **Windows Service ≠ sesi user**: default LocalSystem → `acca.db` BERBEDA (`sameDbAsUser:false`, DB kosong baru dibuat)
-> + `.claude/.credentials.json` tak ada → **produk mati SENYAP** sementara `sc query` RUNNING (**I-33**, bukti tabel di
-> ISSUES). Premis ADR-021 bentrok **ADR-005**. **Windows sementara = `acca daemon` manual di terminal** (batasan selaras
-> ADR-007). Pin WinSW (ADR-025) **tetap sah & tetap terpakai** saat slice ini dibuka lagi.
-> **Syarat buka lagi:** I-33 selesai — probe stage-2 (service as-user: profil ter-load? creds kebaca? butuh `secedit`?),
-> lalu verifikasi **session-0 PTY** dgn spawn `claude` sungguhan. Keduanya butuh owner + mesin Windows asli.
-> **AC-M5-2 WAJIB DIPERKUAT saat dibuka** — "service RUNNING" TAK cukup (ia lulus sambil produk mati). Bukti wajib:
-> daemon-service baca `acca.db` **yang SAMA** dgn CLI user **DAN** CLI ter-spawn **TERAUTENTIKASI**.
-> **DILARANG** jalur LocalSystem+`<env>` pin (ditolak atas dasar keamanan: spawn agent CLI sbg SYSTEM = eskalasi
-> privilege sbg fitur) dan **DILARANG** `<serviceaccount>` WinSW (menuntut password plaintext di XML).
+#### M5.5 — Autostart Windows per-user (Task Scheduler @logon) template + skrip + LIVE **[RE-SCOPED ADR-026 — belum diimplementasi]**
+> **♻ RE-SCOPED 17 Jul (ADR-026, owner Ziffan) — dari "Windows Service via WinSW" ke "autostart per-user via Task
+> Scheduler @logon".** Probe empiris (17 Jul) membuktikan **Windows Service ≠ sesi user**: default LocalSystem → `acca.db`
+> BERBEDA + `.claude/.credentials.json` tak ada → **produk mati SENYAP** (**I-33**). Ganti jalur menyelesaikan I-33 **by
+> construction**: Task Scheduler trigger "At log on" (current user) jalan **sebagai user login** → DB + kredensial benar,
+> session-0 PTY tak relevan. **Windows Service = jalur dorman** (opsi host non-laptop, tetap ter-blok I-33; pin WinSW
+> ADR-025 disimpan sah bila dibuka lagi — spec WinSW lama diarsipkan di bawah `<details>`/riwayat git).
+> **DILARANG** Task Scheduler "run whether user is logged on or not" (butuh password/S4U → reintroduce I-33). **DILARANG**
+> Startup-folder/`Run`-key polos sbg primary (nol restart + flash konsol). **Butuh owner + mesin Windows asli** (LIVE-only).
 
-**Slice (saat dibuka lagi)**: Template WinSW XML + skrip install (unduh WinSW + **verifikasi hash** + register), di-verify survive
-logout+reboot+auto-restart di Windows asli.
-**⚠ Di-update 17 Jul (ADR-025 — gate pin DITUTUP sebelum slice mulai):** (a) **dokumentasi `sc.exe` fallback DIHAPUS dari
-scope** — klausa itu **VOID**: `sc.exe` tak bisa host `node` (registrasi sukses tapi service tak start, **error 1053** —
-G-43). Wrapper wajib; tak ada jalur nol-wrapper. (b) **Pin sudah selesai** (bukan lagi pekerjaan slice ini): **WinSW
-v2.12.0 `WinSW.NET461.exe`, SHA256 `b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f`**, entri +
-pengecualian kesegaran sudah tertulis di DEPENDENCY-POLICY. Slice ini tinggal **memakai** pin itu.
-**Scope file**: `deploy/windows/acca-daemon.xml` (WinSW template), `scripts/install-windows.ps1` (baru), `docs` bagian install Windows.
-**Di luar scope**: Linux (M5.4), backup. DILARANG dep npm baru (WinSW = binary vendored, ADR-021/025). DILARANG commit
-binary WinSW ke repo (unduh-saat-install + verifikasi hash — ADR-025).
+**Slice**: Template Task Scheduler XML (trigger LogonTrigger current-user + Settings restart-on-failure + `<Hidden>true</Hidden>`)
++ skrip install `.ps1` (`Register-ScheduledTask`/`schtasks /create /xml` + idempotensi + uninstall), di-verify auto-start-saat-login
++ auto-restart + hidden di Windows asli.
+**Scope file**: `deploy/windows/acca-daemon.task.xml` (Task Scheduler template), `scripts/install-windows.ps1` + `scripts/uninstall-windows.ps1` (baru), `docs` bagian install Windows.
+**Di luar scope**: Linux (M5.4), backup, jalur Windows Service/WinSW (dorman — ADR-026). DILARANG dep npm baru.
 **Kriteria selesai (testable)**:
-- Template WinSW XML render dengan path `node ...\dist\cli\index.js daemon`, auto-restart (`<onfailure action="restart" delay="10 sec"/>`), log redirect (sandbox: assert isi XML).
-- **Skrip install verifikasi hash** unduhan terhadap konstanta pin ADR-025 → **mismatch = abort** (jangan lanjut register). Sandbox-testable: umpankan file salah → abort.
-- **Konvensi penamaan ditegakkan (G-43):** exe di-rename `acca-daemon.exe` berpasangan `acca-daemon.xml` (WinSW cari config senama exe; salah nama = FATAL menyesatkan karena config dimuat sebelum parse perintah).
-- Idempotensi: pakai `acca-daemon.exe status` → `NonExistent` exit 0 sbg cek "sudah terpasang?" (G-43).
-- **[LIVE Windows]** install (admin sekali) → service running; logout→login → hidup; **reboot** → auto-start; kill → auto-restart <30s. (AC-M5-2)
-- **[LIVE]** reboot saat job pending → fire pasca-boot (AC-M5-3 paruh Windows).
-**Bukti verifikasi**: assert render (sandbox) + entri DEPENDENCY-POLICY + **[LIVE]** paste `sc query`/WinSW status pasca-reboot + log recovery.
-**Tier review**: **1** (service privilege + supply-chain WinSW).
+- **Gate artefak lintas-OS DULU (I-34, sebelum render):** `.ps1` ter-gate `test/ps1-encoding.test.ts` (pure-ASCII/BOM — G-44); XML template ter-gate (well-formed + assert `LogonTrigger` + `<UserId>` current-user + restart-on-failure settings + `<Hidden>true`). Desain gate **sebelum** template di-render (pelajaran I-34).
+- Template Task Scheduler XML render dengan `Actions/Exec/Command` = `node`, `Arguments` = path `...\dist\cli\index.js daemon`, **trigger @logon current-user**, **restart-on-failure** (`RestartCount`/`RestartInterval`), **`<Hidden>true</Hidden>`** (sandbox: assert isi XML).
+- Skrip install idempoten (task sudah ada → update, bukan gagal) + uninstall bersih (round-trip, ala `uninstall-linux.sh`).
+- **[LIVE Windows]** install (nol admin, task per-user) → **logout→login** → daemon auto-start di sesi user; **kill (SIGKILL)** → auto-restart <30s; **nol jendela konsol**. **Bukti I-33-proof:** `acca status` tunjuk `acca.db` **SAMA** (bukan DB kosong) + `claude` ter-spawn **TERAUTENTIKASI** (resume nyata). (AC-M5-2)
+- **[LIVE]** reboot→login saat job pending → fire pasca-login (AC-M5-3 paruh Windows). *(Catatan: at-boot-pra-login TIDAK dituntut — logon-scoped, ADR-026.)*
+**Bukti verifikasi**: assert render + gate XML/`.ps1` (sandbox) + **[LIVE]** paste `Get-ScheduledTask`/`schtasks /query` pasca-login + `acca status` (DB sama) + log resume terautentikasi + log recovery.
+**Tier review**: **1** (autostart privilege boundary + spawn-agent path).
 
 #### M5.6 — Quick-start install/uninstall + integration + milestone-wrapup gate **[SANDBOX + LIVE + GATE]**
 **Slice**: Quick-start lengkap (install/backup/restore/uninstall per-OS) + integration test M5 + security-review gate
