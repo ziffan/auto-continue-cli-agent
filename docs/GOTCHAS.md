@@ -606,6 +606,12 @@ wrapper, ADR-014/020) → connect-pipe tak bisa suntik teks arbitrer; (d) audit 
 **Sumber:** verifikasi web spec M5 17 Jul (nodejs/node #47086/#30823/#17743, Microsoft Learn named-pipe-security,
 Google Project Zero PID-spoofing), ADR-023, I-26.
 
+### G-42 — `acca status` (CLI) ≠ handler IPC `status` — CLI baca DB LANGSUNG, handler IPC nol konsumen produksi
+**Jebakan (M5.3, 17 Jul):** ada DUA jalur "status" yang mudah dikira satu:
+- **CLI `acca status`** (`cli/commands/status.ts`) membuka DB **langsung** (`openDb()` + `sessions.listActive()`), me-render tabel — **TIDAK** lewat IPC/daemon sama sekali (jalan walau daemon mati).
+- **Handler IPC `status`** (`supervisor.ts`, `createIpcServer({status})`) = jalur TERPISAH; **tak ada pengirim `cmd:'status'` di `src/`** (nol konsumen produksi — kandidat untuk M-remote/health kelak).
+**Dampak:** (a) mengubah satu **tak** otomatis mengubah lain — jangan asumsikan. (b) Sebelum M5.3, handler IPC me-return SELURUH kolom Session (`cli_session_id`, `cwd`) ke pipe DACL-terbuka (G-41) padahal tak ada yang butuh → data-minimize `toSessionStatusView` (T-L1) nol breakage justru karena nol konsumen. **Pelajaran:** saat menyentuh "status", pastikan jalur mana (CLI-direct-DB vs IPC-projected); data yang keluar pipe ≠ data yang dilihat CLI. **Sumber:** M5.3 T-L1 (Opus), THREAT-MODEL §8.4.
+
 ---
 
 ## Change Log
@@ -613,6 +619,7 @@ Google Project Zero PID-spoofing), ADR-023, I-26.
 | Tanggal | Perubahan |
 |---|---|
 | 2026-07-17 (spec M5, verifikasi web) | **G-41** baru (DACL named pipe Windows Node = terbuka by design [Everybody+Anonymous read], Node tak punya API set-DACL — issues #47086/#30823/#17743; kandidat "cek PID client" gugur = spoofable, Project Zero/CVE-2018-0749; → ADR-023 terima residual R-5 + hardening lapisan-app, native addon ditolak). Mengoreksi klaim keamanan ADR-015. Dari verifikasi web sumber primer saat spec M5 (I-26).
+| 2026-07-17 (sesi otonom, M5.3) | **G-42** baru (`acca status` CLI baca DB langsung `openDb()`, BUKAN lewat IPC; handler IPC `status` = jalur terpisah nol konsumen produksi → data-minimize `toSessionStatusView` T-L1 nol breakage; jangan asumsikan mengubah satu = mengubah lain). Dari slice M5.3 T-L1.
 
 | Tanggal | Perubahan |
 |---|---|
