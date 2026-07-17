@@ -326,7 +326,7 @@ Audit 5 permukaan fondasi; tiap temuan → tutup atau catat residual di THREAT-M
   `deploy/`). DILARANG: dokumentasi yang mengklaim "service hijau" tanpa bukti verifikasi live di mesin asli.
 
 ### Acceptance criteria M5 (checklist test milestone)
-- [~] **AC-M5-1** Service Linux (systemd --user + linger) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Ubuntu)* — **PARSIAL 17 Jul:** install→`active (running)` ✅, **auto-restart on-crash** (SIGKILL→restart PID baru ~5s, `NRestarts=1`, <30s) ✅, same-DB (`acca status`→daemon HIDUP, kontras I-33) ✅, `Linger=yes` ✅. **Residual (butuh tangan owner):** logout→login + **reboot** auto-start.
+- [x] **AC-M5-1** Service Linux (systemd --user + linger) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Ubuntu)* — **✅ PENUH 17 Jul (Ubuntu, systemd 255):** install→`active (running)` · **auto-restart on-crash** (SIGKILL→restart PID baru ~5s, `NRestarts=1`, <30s; G-47) · same-DB (`acca status`→daemon HIDUP, kontras I-33) · **logout→login survive** (owner) · **reboot→auto-start** (owner + korroborasi: `up 1min`, daemon `active since` +6s pasca-boot, PID baru 2642, `enabled`+`Linger=yes` bertahan).
 - [ ] **AC-M5-2** Service Windows (WinSW/sc.exe) survive **logout** + **reboot**; auto-restart on-crash. *(live-verify Windows)*
 - [ ] **AC-M5-3** Reboot host saat ada job LIMIT_HIT pending → job tetap fire pasca-boot (recovery AC-7 end-to-end). *(live-verify)*
 - [ ] **AC-M5-4** Security pass 5-permukaan selesai; tiap temuan ditutup atau tercatat residual di THREAT-MODEL.md.
@@ -401,8 +401,9 @@ temuan ditutup (kode/test) atau tercatat residual di THREAT-MODEL §8; verifikas
 > (struktur unit + render placeholder→assert `<…>` nol + Restart/RestartSec/Type/WantedBy + **install-sh menyubstitusi tiap
 > placeholder** = celah I-34 ditutup) + `test/shell-script.test.ts` (LF/shebang/BOM floor lintas-OS + `sh -n` depth) +
 > `deploy/linux/acca-daemon.service` + `scripts/install-linux.sh`. **585 test** (+15), 3 negative control terbukti konkret.
-> **LIVE (mesin Ubuntu):** install→active, **auto-restart SIGKILL ~5s** (AC-M5-1 sebagian), same-DB (kontras I-33), linger.
-> Residual: logout/reboot survival + AC-M5-3 (job pending pasca-boot) = butuh tangan owner.
+> **LIVE (mesin Ubuntu) — AC-M5-1 PENUH:** install→active, **auto-restart SIGKILL ~5s** (G-47), same-DB (kontras I-33),
+> linger, **logout + reboot auto-start terverifikasi owner** (daemon `active` +6s pasca-boot, PID baru). Residual: **AC-M5-3**
+> (reboot saat job LIMIT_HIT pending → fire pasca-boot; mekanisme recovery-on-start sudah unit-tested/AC-7, sisa = LIVE e2e).
 **Slice**: Template unit `acca-daemon.service` + skrip install (`systemctl --user enable --now` + `loginctl enable-linger`),
 di-verify survive logout+reboot+auto-restart di Ubuntu asli.
 **Scope file**: `deploy/linux/acca-daemon.service` (template), `scripts/install-linux.sh` (baru), `docs` bagian install Linux.
