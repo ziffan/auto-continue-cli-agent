@@ -39,6 +39,7 @@ const template = readFileSync(xmlPath, 'utf8');
 
 /** Substitusi placeholder dgn nilai contoh - persis peran install-windows.ps1. */
 const sample: Record<string, string> = {
+  '{{CONHOST}}': 'C:\\Windows\\System32\\conhost.exe',
   '{{NODE}}': 'C:\\Program Files\\nodejs\\node.exe',
   '{{ENTRYPOINT}}': 'D:\\PROYEK\\auto-continue-cli-agent\\dist\\cli\\index.js',
   '{{WORKDIR}}': 'D:\\PROYEK\\auto-continue-cli-agent',
@@ -168,11 +169,15 @@ describe('gate artefak Task Scheduler XML (M5.5, I-34)', () => {
       expect(Number(count![1])).toBeGreaterThanOrEqual(1);
     });
 
-    it('Actions/Exec menjalankan node + entrypoint + `daemon`', () => {
-      expect(template).toMatch(/<Command>\{\{NODE\}\}<\/Command>/);
+    it('Actions/Exec: node via conhost headless (nol jendela konsol, G-52) + entrypoint + `daemon`', () => {
+      // conhost.exe --headless = daemon tanpa jendela konsol; Hidden=true saja TAK cukup di @logon
+      // (node dapat PseudoConsoleWindow terlihat, LIVE 18 Jul). conhost = induk -> IgnoreNew tetap sah.
+      expect(template).toMatch(/<Command>\{\{CONHOST\}\}<\/Command>/);
       const args = template.match(/<Arguments>([\s\S]*?)<\/Arguments>/);
       expect(args, 'Arguments wajib ada').not.toBeNull();
       const body = args![1] as string;
+      expect(body).toContain('--headless');
+      expect(body).toContain('{{NODE}}');
       expect(body).toContain('{{ENTRYPOINT}}');
       expect(body.trimEnd().endsWith('daemon')).toBe(true);
     });
@@ -193,7 +198,8 @@ describe('gate artefak Task Scheduler XML (M5.5, I-34)', () => {
     });
 
     it('render: Command + Arguments memuat nilai tersubstitusi', () => {
-      expect(rendered).toContain(`<Command>${sample['{{NODE}}']}</Command>`);
+      expect(rendered).toContain(`<Command>${sample['{{CONHOST}}']}</Command>`);
+      expect(rendered).toContain(sample['{{NODE}}'] as string);
       expect(rendered).toContain(sample['{{ENTRYPOINT}}'] as string);
     });
   });

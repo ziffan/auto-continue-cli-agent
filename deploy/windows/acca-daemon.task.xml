@@ -19,8 +19,10 @@
       bawah = SEKUNDER (LIVE 18 Jul membuktikan ia TAK andal me-restart proses yang di-kill; watchdog
       repetisi = mekanisme yang benar-benar menyembuhkan).
     - ExecutionTimeLimit=PT0S WAJIB - default 72 jam akan menghentikan daemon long-running.
-    - Hidden=true menyembunyikan task dari daftar default; apakah konsol node berkedip saat logon =
-      diverifikasi LIVE. Bila berkedip, install-windows.ps1 punya jalur peluncur tersembunyi.
+    - Nol jendela konsol: node dijalankan via `conhost.exe` headless-mode (bukan node langsung). LIVE
+      18 Jul membuktikan Task Scheduler @logon memberi node PseudoConsoleWindow TERLIHAT walau Hidden=true
+      (Hidden cuma sembunyikan task dari UI Scheduler, bukan jendela proses). conhost tetap jadi INDUK
+      selama daemon hidup -> task instance "running" -> IgnoreNew (watchdog anti-double-start) tetap sah.
 -->
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
@@ -69,8 +71,8 @@
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>{{NODE}}</Command>
-      <Arguments>"{{ENTRYPOINT}}" daemon</Arguments>
+      <Command>{{CONHOST}}</Command>
+      <Arguments>--headless "{{NODE}}" "{{ENTRYPOINT}}" daemon</Arguments>
       <WorkingDirectory>{{WORKDIR}}</WorkingDirectory>
     </Exec>
   </Actions>
