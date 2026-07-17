@@ -408,14 +408,22 @@ di-verify survive logout+reboot+auto-restart di Ubuntu asli.
 **Bukti verifikasi**: assert render (sandbox) + **[LIVE]** paste `systemctl --user status` pasca-reboot + log recovery job.
 **Tier review**: **1** (service privilege + lifecycle; least-privilege runtime).
 
-#### M5.5 — Service Windows (Windows Service via WinSW/sc.exe) template + skrip + LIVE **[SANDBOX render + LIVE]**
-**Slice**: Template WinSW XML (primary) + dokumentasi `sc.exe` (fallback) + skrip install, di-verify survive
-logout+reboot+auto-restart di Windows asli. Pin WinSW versi/hash (gate DEPENDENCY-POLICY).
-**Scope file**: `deploy/windows/acca-daemon.xml` (WinSW template), `scripts/install-windows.ps1` (baru), `docs/DEPENDENCY-POLICY.md` (entri WinSW), `docs` bagian install Windows.
-**Di luar scope**: Linux (M5.4), backup. DILARANG dep npm baru (WinSW = binary vendored, ADR-021).
+#### M5.5 — Service Windows (Windows Service via WinSW) template + skrip + LIVE **[SANDBOX render + LIVE]**
+**Slice**: Template WinSW XML + skrip install (unduh WinSW + **verifikasi hash** + register), di-verify survive
+logout+reboot+auto-restart di Windows asli.
+**⚠ Di-update 17 Jul (ADR-025 — gate pin DITUTUP sebelum slice mulai):** (a) **dokumentasi `sc.exe` fallback DIHAPUS dari
+scope** — klausa itu **VOID**: `sc.exe` tak bisa host `node` (registrasi sukses tapi service tak start, **error 1053** —
+G-43). Wrapper wajib; tak ada jalur nol-wrapper. (b) **Pin sudah selesai** (bukan lagi pekerjaan slice ini): **WinSW
+v2.12.0 `WinSW.NET461.exe`, SHA256 `b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f`**, entri +
+pengecualian kesegaran sudah tertulis di DEPENDENCY-POLICY. Slice ini tinggal **memakai** pin itu.
+**Scope file**: `deploy/windows/acca-daemon.xml` (WinSW template), `scripts/install-windows.ps1` (baru), `docs` bagian install Windows.
+**Di luar scope**: Linux (M5.4), backup. DILARANG dep npm baru (WinSW = binary vendored, ADR-021/025). DILARANG commit
+binary WinSW ke repo (unduh-saat-install + verifikasi hash — ADR-025).
 **Kriteria selesai (testable)**:
-- Template WinSW XML render dengan path `node ...\dist\cli\index.js daemon`, auto-restart, log redirect (sandbox: assert isi XML).
-- Pin WinSW versi+hash di DEPENDENCY-POLICY (gate: verifikasi sumber+hash).
+- Template WinSW XML render dengan path `node ...\dist\cli\index.js daemon`, auto-restart (`<onfailure action="restart" delay="10 sec"/>`), log redirect (sandbox: assert isi XML).
+- **Skrip install verifikasi hash** unduhan terhadap konstanta pin ADR-025 → **mismatch = abort** (jangan lanjut register). Sandbox-testable: umpankan file salah → abort.
+- **Konvensi penamaan ditegakkan (G-43):** exe di-rename `acca-daemon.exe` berpasangan `acca-daemon.xml` (WinSW cari config senama exe; salah nama = FATAL menyesatkan karena config dimuat sebelum parse perintah).
+- Idempotensi: pakai `acca-daemon.exe status` → `NonExistent` exit 0 sbg cek "sudah terpasang?" (G-43).
 - **[LIVE Windows]** install (admin sekali) → service running; logout→login → hidup; **reboot** → auto-start; kill → auto-restart <30s. (AC-M5-2)
 - **[LIVE]** reboot saat job pending → fire pasca-boot (AC-M5-3 paruh Windows).
 **Bukti verifikasi**: assert render (sandbox) + entri DEPENDENCY-POLICY + **[LIVE]** paste `sc query`/WinSW status pasca-reboot + log recovery.

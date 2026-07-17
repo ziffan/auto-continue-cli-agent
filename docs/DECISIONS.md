@@ -2,8 +2,12 @@
 
 > Format Nygard. ADR *Accepted* immutable — revisi = ADR baru yang men-supersede.
 > Status per ADR: **Proposed** (masih bisa berubah) / Accepted / Deprecated / Superseded.
-> Status per 2026-07-17: **ADR-001…017 + ADR-019…024 Accepted (locked); ADR-018 Superseded by ADR-019** (12 Jul —
+> Status per 2026-07-17: **ADR-001…017 + ADR-019…025 Accepted (locked); ADR-018 Superseded by ADR-019** (12 Jul —
 > premis probe OAuth standalone terbukti baca pool kuota salah saat live-verify → optimistic resume + detect).
+> (**ADR-025, 17 Jul — slice M5.5:** amandemen ADR-021 — klausa "`sc.exe` = fallback nol-tool" **VOID** (node tak lapor SCM
+> → error 1053; wrapper wajib) + **pin WinSW v2.12.0 `WinSW.NET461.exe` SHA256 `b5066b7b…`** (unduh-saat-install +
+> verifikasi hash) + pengecualian kesegaran DEPENDENCY-POLICY tercatat. **Punya REVISIT TRIGGER eksplisit** (nabrak bug
+> WinSW / proyek ditinggalkan / NET461 tak jalan → servy = kandidat pertama). Meng-amandemen, TIDAK men-supersede ADR-021.)
 > (**ADR-024, 17 Jul — slice M5.2:** amandemen klausa retensi ADR-022(3) → tiered GFS-lite 24 hourly + 30 daily; interval
 > hourly, owner Ziffan. Meng-amandemen, TIDAK men-supersede ADR-022.)
 > (**ADR-021/022/023, 17 Jul — spec M5:** ADR-021 deployment Windows = Windows Service, men-**supersede sebagian** klausa
@@ -545,7 +549,12 @@ Elemen ADR-014 lain tak berubah.
   workspace); tetap kandidat cadangan bila English gagal live-verify.
 
 ## ADR-021: Deployment Windows = Windows Service (bukan Task Scheduler) — men-supersede sebagian ADR-007
-**Status:** **Accepted** (locked 2026-07-17) — *immutable; revisi = ADR baru yang men-supersede.*
+**Status:** **Accepted** (locked 2026-07-17) — *immutable; revisi = ADR baru yang men-supersede. **Klausa "`sc.exe`
+(built-in Windows) didokumentasikan sebagai fallback nol-tool" DI-AMANDEMEN oleh ADR-025** (17 Jul: klausa **VOID** —
+`sc.exe` bisa mendaftarkan tapi service tak start; binary wajib lapor `SERVICE_RUNNING` ke SCM, `node …` tak pernah →
+error 1053. Kontradiksi dgn Alternatives Rejected ADR ini sendiri ("node bukan native service host; butuh wrapper apa
+pun"). **Pin final = WinSW v2.12.0 + SHA256**, lihat ADR-025). Keputusan inti (Windows Service + auto-restart, template
++ skrip manual, nol dep npm runtime) TETAP; isi di bawah tak diedit (immutable). Baca bersama ADR-025.*
 **Men-supersede sebagian ADR-007** (hanya klausa "Task Scheduler (Windows)"; klausa systemd/Linux ADR-007 TETAP berlaku).
 **Context:** ADR-007 (3 Jul) memilih "systemd (Linux) / Task Scheduler (Windows)" tanpa membandingkan Task Scheduler
 dengan Windows Service secara serius. Verifikasi 17 Jul (web, sumber primer + praktisi) menemukan Task Scheduler ONSTART
@@ -690,6 +699,98 @@ disk ter-cap ~54× ukuran DB. Konsisten no-hard-delete (ADR-004): yang di-prune 
 - **Retensi berbasis mtime file OS** — ditolak: mtime bisa berubah saat copy/restore/rsync → tak deterministik; epoch di
   nama file (`acca-backup-<epochMs>.db`) = sumber waktu stabil, konsisten M5.1.
 
+## ADR-025: Pin service wrapper Windows = WinSW v2.12.0 (`WinSW.NET461.exe`, hash-pinned, unduh-saat-install) — amandemen klausa fallback `sc.exe` ADR-021
+**Status:** **Accepted** (locked 2026-07-17) — *immutable; revisi = ADR baru yang men-supersede.*
+**Meng-amandemen** klausa ADR-021 yang menyebut **`sc.exe` sebagai "fallback nol-tool"** (terbukti keliru — void);
+TIDAK men-supersede ADR-021 — keputusan intinya (Windows Service + auto-restart, registrasi via template+skrip manual,
+nol dep npm runtime) TETAP. Sejalan presedensi ADR-020 (amandemen token ADR-014 §1) & ADR-024 (amandemen retensi ADR-022(3)).
+**Menutup Pending** "Pin WinSW vs `sc.exe` final + versi/hash WinSW" (gate DEPENDENCY-POLICY, owner Ziffan).
+**Context:** ADR-021 (17 Jul) memilih Windows Service dgn **WinSW primary / `sc.exe` fallback**, menunda pin versi+hash
+ke slice service (M5.5). Verifikasi 17 Jul (sumber primer + empiris di mesin Windows 11 owner) menemukan tiga fakta yang
+mengubah bentuk keputusan:
+1. **Fallback `sc.exe` = ILUSI (klausa void).** `sc.exe` bisa *mendaftarkan* exe apa pun, tapi service-nya **tak akan
+   start**: binary wajib memanggil `StartServiceCtrlDispatcher` + lapor `SERVICE_RUNNING` via `SetServiceStatus` ke SCM.
+   `node dist/cli/index.js daemon` tak pernah melakukannya → **error 1053** ("did not respond to the start or control
+   request in a timely fashion"). ADR-021 sebenarnya sudah setengah tahu ini (Alternatives Rejected: "node bukan native
+   service host; butuh wrapper apa pun") tapi tetap mencatat `sc.exe` sbg fallback → **kontradiksi internal, dikoreksi di sini.**
+   Konsekuensi: pilihan bukan lagi "WinSW vs sc.exe" — **wrapper WAJIB**, yang dipilih adalah wrapper mana.
+2. **WinSW stabil melanggar syarat kesegaran DEPENDENCY-POLICY.** Rilis stabil terakhir **v2.12.0 (28 Jan 2023)** = 3,5
+   tahun; cabang default sudah `v3` tapi 3.x mentok `v3.0.0-alpha.11` (29 Jan 2023). Repo **hidup** (commit Apr & Mei 2026,
+   push 16 Jul 2026; 14.142 bintang; MIT; tak diarsipkan) → ini masalah **kadens rilis**, bukan proyek mati. Tapi
+   `DEPENDENCY-POLICY.md` mensyaratkan "rilis terakhir < ~6 bulan" → **dilanggar telak** → butuh pengecualian tertulis,
+   bukan diam-diam. Efek samping nyata: commit 2026 tak pernah sampai ke binary stabil (bug yang sudah di-fix tak ter-rilis).
+3. **Kandidat lebih segar ADA dan dibandingkan serius** (owner minta, 17 Jul): **servy** (MIT, C#, rilis v8.6 12 Jul 2026)
+   dan **shawl** (MIT, Rust, v1.9.0 3 Mei 2026) — keduanya lolos syarat <6 bulan. Ditolak, alasan di bawah.
+**Verifikasi provenance (empiris, 17 Jul — binary tak ber-Authenticode signature, jadi rantai bukti dibangun berlapis):**
+- Unduh dari URL rilis resmi; **ukuran 655.872 byte cocok persis** metadata aset GitHub API.
+- Binary menanam `ProductVersion = 2.12.0+eef5bade59fca0254e387ac73ed7625ba6aa7147`; tag `v2.12.0` di `winsw/winsw`
+  menunjuk **persis commit itu** (diverifikasi via GitHub API) → binary ↔ commit ↔ tag terikat.
+- **SHA256 dikonfirmasi ≥3 pihak ketiga independen** yang mem-pin nilai sama di kode publik GitHub (bucket scoop pihak-3,
+  skrip install proyek lain) → hash yang kita hitung = yang dilihat dunia, bukan artefak MITM unduhan kita.
+- **`Status: NotSigned`** (tak ada Authenticode) → **residual tercatat**: provenance bertumpu pada rilis GitHub + hash pin.
+- Dijalankan di Windows 11 owner: .NET Framework **4.8.09221** (Release 533509) inbox → target 4.6.1 **jalan** (teruji).
+- **Jebakan supply-chain:** ada repo mirip-nama `WinSW-Windows/winsw-windows` (0 bintang, dibuat Des 2024, bukan fork,
+  tanpa deskripsi). **BUKAN** WinSW asli → URL + hash di-pin justru untuk menutup kelas ini.
+**Decision:**
+1. **Klausa `sc.exe` fallback ADR-021 = VOID** (error 1053). Wrapper Windows **wajib**; tak ada jalur nol-wrapper yang
+   memenuhi ADR-021. *(Jalur nol-wrapper satu-satunya = Task Scheduler, yang ADR-021 sendiri sudah tolak atas bukti.)*
+2. **Pin: WinSW `v2.12.0`, aset `WinSW.NET461.exe`** (655.872 byte),
+   **SHA256 `b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f`**,
+   URL `https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW.NET461.exe`.
+   Varian NET461 (655 KB) dipilih atas self-contained `WinSW-x64.exe` (18 MB): Windows 11 membawa .NET Framework 4.8 inbox
+   (terverifikasi), jadi keunggulan self-contained tak relevan; 28× lebih kecil + hash-nya justru punya korroborasi pihak-3.
+3. **Mekanisme vendoring = unduh-saat-install + verifikasi hash** (skrip install `Get-FileHash` → cocokkan konstanta pin →
+   gagal = abort), **bukan** commit binary ke repo. Konsisten DEPENDENCY-POLICY §"Egress build" ("install boleh tarik
+   prebuild dari registry resmi"); repo tetap bersih dari binary; hash = gate supply-chain.
+4. **Pengecualian DEPENDENCY-POLICY dicatat eksplisit** (syarat "rilis <6 bulan" dilanggar) + justifikasinya (bawah).
+**Justifikasi pengecualian kesegaran (kenapa proxy "<6 bulan" salah tembak di sini):** aturan itu ada karena dep basi =
+CVE tak ter-patch **di kode yang jalan di dalam proses kita** + risiko ditinggalkan. WinSW dalam pemakaian kita: (a) jalan
+**di luar proses** — Windows SCM yang meluncurkannya, kita tak pernah `require()`/link; (b) **nol permukaan jaringan** (ia
+hanya spawn `node` + restart-on-failure + rotate log — tak tunduk/tak menyentuh egress NFR); (c) **hash-pinned**, tak
+pernah auto-update; (d) menyelesaikan masalah **beku** — semantik shim SCM tak berubah sejak Windows NT; (e) eksposur
+adversarial besar (427.807 unduhan aset x64 v2.12.0; lineage Jenkins/CloudBees, ratusan ribu agent Windows) → jalur
+"spawn + restart" yang kita pakai sudah lama diuji orang lain. Staleness WinSW **selaras** dengan yang kita inginkan dari
+artefak ini: membosankan, beku, pin-sekali-lupakan.
+**Consequences:**
+- (+) Menutup Pending pin + mengoreksi kontradiksi internal ADR-021 secara jujur (klausa `sc.exe` tak dibiarkan salah).
+- (+) AC-M5-2 + paruh Windows AC-M5-3 jadi bisa dikerjakan (survive reboot + auto-restart on-crash).
+- (+) Biaya nyata kecil & terkurung: 1 file 655 KB di luar `node_modules`, 1 baris hash, disentuh hanya saat install.
+  Nol dep npm runtime (mandat ADR-021 utuh); daemon tak tahu WinSW ada.
+- (+) Hash-pin + URL-pin menutup jebakan repo mirip-nama.
+- (−) **Kita mem-pin binary tanpa Authenticode + tanpa hash resmi dari vendor** → provenance bertumpu rilis GitHub + hash
+  kita + korroborasi pihak-3. Diterima; residual tercatat.
+- (−) **Bug WinSW v2.12.0 tak akan ter-rilis fix-nya** (repo commit tapi tak merilis sejak 2023) → bila kita menabraknya,
+  opsi = build-from-source (menambah toolchain .NET) / pakai alpha 3.x / ganti wrapper. **Ini trigger revisit (bawah).**
+- (−) Pengecualian tertulis di DEPENDENCY-POLICY = preseden yang bisa disalahgunakan sesi berikutnya ("kan WinSW boleh") →
+  dimitigasi: pengecualian **di-scope ketat** ke kelas artefak "binary out-of-process, nol jaringan, hash-pinned,
+  domain beku" — **bukan** lisensi umum untuk dep npm basi.
+- (−) Windows 11 dgn .NET Framework dicopot/Server Core stripped → NET461 tak jalan; mitigasi = fallback `WinSW-x64.exe`
+  self-contained (hash terpisah, di-pin bila kasusnya muncul; scoop Main mem-pin `05b82d46ad331cc16bdc00de5c6332c1ef818df8ceefcd49c726553209b3a0da`).
+**REVISIT TRIGGER (eksplisit, permintaan owner Ziffan 17 Jul):** ADR ini **boleh dibuka ulang tanpa dianggap
+me-relitigasi keputusan locked** bila salah satu terjadi: (a) kita **menabrak bug WinSW v2.12.0** yang mengganggu jalur
+spawn/restart/log daemon; (b) WinSW terbukti ditinggalkan (repo arsip / nol commit >12 bulan); (c) Windows berubah
+sehingga NET461 tak lagi jalan. Saat itu **servy = kandidat pertama** yang dievaluasi ulang (lihat Alternatives Rejected).
+**Alternatives Rejected:**
+- **`sc.exe` telanjang (fallback ADR-021)** — **void**, bukan ditolak-karena-preferensi: error 1053, node tak lapor SCM.
+- **servy v8.6** (MIT, C#, 1.875 bintang) — ditolak **untuk sekarang**, dgn revisit trigger di atas. Ia **menang** pada:
+  lolos syarat <6 bulan (rilis 12 Jul 2026, kadens ~2 minggu), **menerbitkan SBOM**, CLI headless (`servy-cli install
+  --path=node.exe …` — contoh README-nya justru node). Ditolak karena: **bus factor 1** (aelassas 3.430 commit; manusia
+  lain 2 dan 1 commit) pada proyek berumur **11 bulan** (dibuat Agu 2025); **189 issue terbuka dalam 11 bulan**;
+  **v8.6 dalam <1 tahun** = mem-pin sasaran bergerak (velocity = liability untuk artefak yang kita mau beku); **eksposur
+  adversarial tipis** (845 unduhan v8.6 vs 427.807 WinSW) → jalur kritis belum teruji pihak luar; footprint multi-komponen
+  (app desktop + CLI + modul PowerShell, portable = `.7z`) vs 1 exe 655 KB. Revisit bila track record >1 tahun + bus factor >1.
+- **shawl v1.9.0** (MIT, Rust, 908 bintang, rilis 3 Mei 2026) — ditolak: lolos kesegaran & nol runtime .NET, tapi eksposur
+  lebih tipis lagi (908 bintang) **dan** memaksa amandemen ADR-021 ("WinSW primary") + tulis-ulang spec slice M5.5
+  (XML → flag CLI) — biaya disiplin+kerja tanpa keunggulan yang mengalahkan lineage WinSW.
+- **Varian `WinSW-x64.exe` self-contained (18 MB)** — tak dipilih sbg primary: 28× lebih besar demi menghindari dep .NET
+  Framework yang Windows 11 **sudah** bawa (4.8 inbox, terverifikasi). Disimpan sbg fallback host-stripped.
+- **Commit binary WinSW ke repo** — ditolak: bloat repo + membekukan supply-chain di titik commit tanpa jalur verifikasi
+  ulang; unduh+verifikasi-hash saat install lebih jujur (gate hash eksplisit, tiap install) & konsisten §"Egress build".
+- **Task Scheduler (nol wrapper)** — tetap ditolak (ADR-021, bukti 17 Jul): gagal-senyap saat boot + tanpa auto-restart
+  on-crash = persis mode kegagalan yang produk ini ada untuk mencegah. Owner sempat menimbang jalur nol-dependensi ini
+  (17 Jul) → ditahan setelah biaya sesungguhnya dijelaskan; tak ada ADR baru.
+- **node-windows / NSSM / native addon SCM** — sudah ditolak ADR-021, tak dibuka ulang (node-windows justru membundel WinSW).
+
 ## Pending decisions (belum diputuskan)
 
 | Keputusan | Owner | Target |
@@ -699,7 +800,7 @@ disk ter-cap ~54× ukuran DB. Konsisten no-hard-delete (ADR-004): yang di-prune 
 | ~~TUI library final (Ink vs blessed) untuk `acca status`~~ → **diputuskan 11 Jul (Ziffan): TANPA TUI lib — plain ANSI render.** `acca status` = snapshot sekali-cetak (extend `status.ts` yg ada + karakter bar `▓▓░` + warna ANSI), `watch acca status` utk refresh; footer aksi = command terpisah (`resume-now`/`cancel`/`log`). Nol dependency baru (paling selaras DEPENDENCY-POLICY + cross-platform). Ink/blessed ditolak: dep berat/tua vs kebutuhan monitor sederhana. Live-refresh TUI = backlog bila kelak perlu. | — | ✅ selesai |
 | ~~**Kebijakan resume agy sesi MATI** (I-22/A-4)~~ → 11 Jul (Ziffan): ADR-018 (opsi #3 OAuth). **→ REVISI 12 Jul: ADR-018 di-SUPERSEDE ADR-019** — opsi #3 terbukti baca pool kuota SALAH (gemini-cli harian ≠ grup agy weekly+5h; live-verify) → **optimistic resume + detect**; `oauth2.googleapis.com` dibatalkan. | — | ✅ selesai (ADR-019) |
 | Lisensi repo (MIT vs proprietary) — terkait rencana komersialisasi | Ziffan | sebelum publik |
-| **Pin WinSW vs `sc.exe` final + versi/hash WinSW** (ADR-021) — gate DEPENDENCY-POLICY | Ziffan | saat slice service M5 |
+| ~~**Pin WinSW vs `sc.exe` final + versi/hash WinSW** (ADR-021) — gate DEPENDENCY-POLICY~~ → **diputuskan 17 Jul (Ziffan, slice M5.5):** framing "WinSW vs `sc.exe`" **gugur** — `sc.exe` tak bisa host node (error 1053) → klausa fallback ADR-021 VOID. **Pin = WinSW v2.12.0 `WinSW.NET461.exe`, SHA256 `b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f`**, unduh-saat-install + verifikasi hash (bukan commit binary). Kandidat lebih segar (servy v8.6, shawl v1.9.0) dibandingkan serius & ditolak — **servy dgn revisit trigger eksplisit**. Pengecualian kesegaran DEPENDENCY-POLICY tercatat → **ADR-025**. | Ziffan | ✅ selesai (ADR-025) |
 | ~~**Interval + lokasi + jumlah-retensi backup `acca.db`** (ADR-022)~~ → **diputuskan 17 Jul (Ziffan, slice M5.2):** interval **hourly**, lokasi `<dataDir>/backups` (override `ACCA_BACKUP_DIR`), retensi **tiered 24 hourly + 30 daily** → **ADR-024** (amandemen retensi ADR-022; engine M5.1 di-amandemen ke config `{hourly,daily}`). | Ziffan | ✅ selesai (ADR-024) |
 | ~~Mekanisme probe usage Antigravity~~ → **ADR-010 (hybrid) LOCKED 3 Jul malam** (opsi #2 terbukti; residual #3/#1 = impl-tuning M3) | — | ✅ selesai |
 | ~~**Strategi continue sesi interaktif yang masih hidup** (inject "continue" ke PTY vs kill→resume-by-id; kebijakan default + gating)~~ → **diputuskan: ADR-014** (inject-ke-PTY preferred + gating ketat; fallback resume-by-id; gating-gagal = manual) | — | ✅ selesai (3 Jul malam) |
@@ -711,6 +812,7 @@ disk ter-cap ~54× ukuran DB. Konsisten no-hard-delete (ADR-004): yang di-prune 
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-17 (sesi Windows, slice M5.5 — **ADR-025 baru**) | **ADR-025 + di-LOCK (Accepted, owner Ziffan): amandemen ADR-021 + tutup Pending pin wrapper.** Verifikasi 17 Jul (sumber primer + empiris di Win 11 owner) menemukan **kontradiksi internal ADR-021**: klausa "`sc.exe` = fallback nol-tool" **KELIRU** — `sc.exe` bisa *mendaftarkan* exe apa pun tapi service **tak start** (binary wajib `StartServiceCtrlDispatcher`+`SetServiceStatus`; `node …` tak pernah → **error 1053**), padahal Alternatives Rejected ADR-021 sendiri sudah bilang "node bukan native service host; butuh wrapper apa pun" → **klausa VOID**; pilihan bukan lagi "WinSW vs sc.exe" tapi "wrapper mana". **Pin: WinSW v2.12.0 `WinSW.NET461.exe` (655.872 byte), SHA256 `b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f`**, mekanisme **unduh-saat-install + verifikasi hash** (bukan commit binary — konsisten §"Egress build"). Varian NET461 (655 KB) atas self-contained x64 (18 MB): Win 11 bawa .NET Framework **4.8.09221 inbox** (terverifikasi jalan). **Provenance berlapis** (binary **tak ber-Authenticode** → residual): ukuran cocok metadata GitHub API + binary menanam commit `eef5bade…` yang tag `v2.12.0` tunjuk persis + **SHA256 dikonfirmasi ≥3 pihak-3 independen** di kode publik. **Jebakan supply-chain dicatat:** repo mirip-nama `WinSW-Windows/winsw-windows` (0 bintang, Des 2024) BUKAN WinSW asli → URL+hash di-pin. **Pengecualian DEPENDENCY-POLICY tertulis** (syarat "rilis <6 bulan" dilanggar: v2.12.0 = Jan 2023, 3,5 th) + justifikasi: proxy "<6 bulan" salah tembak untuk artefak **out-of-process + nol jaringan + hash-pinned + domain beku + eksposur 427k unduhan**; pengecualian **di-scope ketat** ke kelas artefak itu, bukan lisensi dep npm basi. **Kandidat lebih segar dibandingkan serius atas permintaan owner** → **servy v8.6** (menang: lolos <6 bulan, SBOM, CLI headless; ditolak: **bus factor 1**, umur 11 bulan, 189 issue/11 bln, v8.6 dalam <1 th = sasaran bergerak, 845 unduhan vs 427k = eksposur tipis) + **shawl v1.9.0** (ditolak: eksposur 908 bintang + paksa amandemen ADR-021 & tulis-ulang spec M5.5). **REVISIT TRIGGER eksplisit (permintaan owner):** nabrak bug WinSW v2.12.0 / proyek ditinggalkan / NET461 tak jalan → boleh dibuka tanpa dianggap relitigasi; **servy = kandidat pertama**. Owner sempat menimbang jalur **nol-wrapper** (Task Scheduler) → ditahan setelah biaya dijelaskan (ADR-021 tetap, tak ada ADR baru). Gotcha impl tertangkap (→ GOTCHAS): exe **wajib** senama XML-nya; WinSW v2 muat config **sebelum** parse perintah (salah nama = FATAL menyesatkan); `status` service tak-terdaftar → `NonExistent` exit 0 (kontrak idempotensi installer). Anotasi status ADR-021 (isi immutable tak diedit) + header + Pending ditutup. **Belum ada kode** (slice M5.5 menyusul). Dampak docs lanjut: DEPENDENCY-POLICY (entri WinSW + pengecualian), GOTCHAS (G-43), MILESTONES M5.5, CONTEXT. |
 | 2026-07-17 (sesi otonom, slice M5.2 — **ADR-024 baru**) | **ADR-024 + di-LOCK (Accepted, owner Ziffan): amandemen klausa retensi ADR-022(3) → tiered GFS-lite.** Slice M5.2, owner memilih **interval hourly** (RPO ≤1 jam) → rolling-N sederhana ADR-022 memaksa trade-off buruk (coverage panjang = disk linear, hourly×30hari naif = 720 snapshot). **Keputusan:** retensi **tiered** = 24 hourly terbaru + 1 representatif/hari-lokal untuk 30 hari (GFS-lite) → RPO-pendek + coverage 1 bulan, disk ter-cap ~54× DB. Config `{hourly,daily}` (env `ACCA_BACKUP_RETENTION_HOURLY/_DAILY`). **Meng-amandemen, TIDAK men-supersede ADR-022** (mekanisme WAL-checkpoint/copy/skrip tetap; pola ADR-020). Engine M5.1 `backup.ts` di-amandemen `retention:number`→`{hourly,daily}` (hari-yang-sama, nol konsumen eksternal). **Menutup Pending "interval/lokasi/retensi backup"** (interval hourly, lokasi `<dataDir>/backups`, retensi 24+30). Klausa sidecar ADR-022(2) diklarifikasi = file-utama-saja (salinan `-wal` basi=korupsi). Keep-forever ditolak (challenge Opus: disk tak terbatas), GFS-penuh (+weekly/monthly) ditunda, retensi-by-mtime ditolak (tak deterministik). Alternatif ditolak: rolling-N (owner pilih tiered). Anotasi ADR-022 status (immutable, isi tak diedit) + header + Pending diperbarui. Dampak docs lanjut: amandemen engine `backup.ts`+test (M5.2 slice), MILESTONES M5.1/M5.2 (retensi tiered), CONTEXT. |
 | 2026-07-17 (sesi, spec M5 doc-first — **ADR-021/022/023 baru**) | **Tiga ADR baru + di-LOCK (Accepted, owner Ziffan) untuk fase perencanaan M5.** Diputuskan pasca-verifikasi web (sumber primer). **ADR-021 (deployment Windows):** Task Scheduler ONSTART terbukti rapuh untuk daemon (gagal-senyap + tanpa auto-restart on-crash — persis mode kegagalan yang produk cegah) → **Windows Service** (auto-restart on failure), registrasi via **template + skrip manual** (WinSW primary / `sc.exe` fallback, **nol dep npm baru** — simetris systemd Linux). **Men-supersede SEBAGIAN klausa Task Scheduler ADR-007** (systemd/Linux tetap). Pin WinSW/sc.exe + hash = Pending (gate DEPENDENCY-POLICY, slice service). **ADR-022 (backup/DR):** minimal — **WAL checkpoint (TRUNCATE) + file copy `acca.db`+sidecar + retensi N** via skrip+doc (bukan fitur daemon MVP); RPO=interval snapshot (diterima single-user); DR penuh/nol-backup ditolak. Interval/lokasi/retensi = Pending (nilai config, slice backup). **ADR-023 (IPC DACL / I-26):** verifikasi web membantah klaim ADR-015 "ACL default owner Windows" — Node/libuv named pipe **terbuka by design** (Everybody+Anonymous read; Node tak punya API set-DACL; issues #47086/#30823/#17743) + kandidat "cek PID client" **gugur** (PID spoofable — Project Zero/CVE-2018-0749, Microsoft anti-PID-enforcement). **Keputusan:** terima DACL terbuka sbg **residual risk terdokumentasi + hardening lapisan-app** (minimalkan data sensitif lewat pipe, hanya daemon mutasi state, injection firewall `inject`-tanpa-payload utuh, audit events); **native addon set-DACL DITOLAK** (over-engineering solo-user). **Men-scope-ulang klausa keamanan ADR-015** (transport tetap). **Disiplin supersede:** status ADR-007 & ADR-015 dianotasi (isi immutable tak diedit) + pointer ke ADR baru; header status + Pending diperbarui. Belum ada kode (fase spec). Dampak docs lanjut (sesi ini): PRD/TRD M5 di MILESTONES + NFR (availability service + backup RPO) + THREAT-MODEL (permukaan service + DACL) + FAILURE-MODES (baru) + vertical slices + SPEC LOCK. |
 | 2026-07-16 (sesi Windows, gate M3e + C-4) | **Keputusan MINOR reversible (bukan ADR)** — tutup gate keluar M3e + hardening pra-M5. **F-1 (Opsi B, keputusan owner):** guard `resumed_from!=null && detected_at==null` → BLOCKED di cabang exited `supervisor.ts` (tanpa migrasi) memutus loop re-spawn RC-1 (continue-job landing di sesi hasil-resume yang exit cepat); semantik dua kolom (`markLimitHit` isi `detected_at` vs `markRunningAfterInject` NULL-kan hanya di jalur alive) menjamin siklus SEHAT lolos. **I-31 (CC-only, owner):** grace-window OUTPUT-CC 5s pasca-`unlatch()` di `limit-watcher` → repaint banner limit lama CC tak re-fire LIMIT_HIT palsu (G-37 ditutup); hook `feedSignal` + agy tak disuppress (ADR-019 immediate detect utuh). **I-30 (guard estimator, owner):** `resolveClockTime` recent-past ≤2h → probe near-now (`heuristic`), bukan wrap +24 jam. **C-4/RC-4:** `reconcileDispatchLiveness` di awal dispatch (alive+pid-mati → `markOrphanExited` → cabang exited auto-recovery) + attempts-cap catch generik → tutup keluarga terakhir retry-senyap. Semua dalam ADR-013/014/017/019 (bukan ADR baru); reversible. Opus inline Tier-1 self-review PASS. **+PTY-integration test I-31 (live TANPA limit, negative-control terbukti).** **406 test** (392→406). Dampak docs: ISSUES (F-1/F-2/I-30/I-31/C-4 Tertutup + gate header hijau), GOTCHAS (G-37 ditutup, G-39 anotasi), CONTEXT, CLAUDE.md §2/README test count. |
