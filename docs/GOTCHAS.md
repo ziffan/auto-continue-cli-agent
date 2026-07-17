@@ -583,9 +583,36 @@ re-limit CC SAH via hook `feedSignal` (StopFailure PRIMER) tak disuppress; agy t
 genuine cycle-2 CC via output selalu > window → fire. Clock di-inject (purity engine utuh). Clock-wrap penyerta = I-30
 (guard estimator recent-past ≤2h → probe near-now, bukan +24 jam). Konfirmasi live sejati = opportunistik I-15.
 
+## Keamanan / IPC (spec M5)
+
+### G-41 — DACL named pipe Windows Node = TERBUKA by design + tak bisa di-set dari Node; "cek PID client" = mitigasi PALSU (spoofable)
+**Jebakan/Fakta (verifikasi web 17 Jul, sumber primer, spec M5 — mengoreksi klaim ADR-015 "ACL default owner"):**
+Named pipe yang dibuat Node.js/libuv (`net.createServer(path)`) di Windows memakai **DACL default Windows**, **BUKAN**
+owner-only seperti anggapan chmod-0600. Konkret: **Everybody + Anonymous Logon** dapat generic read; user non-elevated
+saat ini dapat read+write. Artinya **user lokal lain bisa connect+read** pipe daemon (`status` bocorkan cwd) + memicu
+perintah whitelist. **Node TAK menyediakan API** untuk set permission named pipe — mengubah DACL **mustahil tanpa native
+addon** (`CreateNamedPipe`+SDDL, bypass libuv). Isu terbuka bertahun: nodejs/node **#47086, #30823, #17743** (per 2026
+belum ada API).
+**Jebakan kedua (mitigasi palsu):** kandidat "verifikasi **PID client** same-session-user" (yang dulu dicatat I-26)
+**TIDAK aman** — PID named pipe **bisa di-spoof** (Google Project Zero "Spoofing Named Pipe Client PID"; kelas CVE-2018-0749).
+Microsoft sendiri menyarankan **jangan** pakai PID sbagai enforcement keamanan. Memakainya = **rasa aman palsu** tanpa
+keamanan nyata.
+**Dampak:** klaim keamanan ADR-015 keliru; verifikasi DACL "apakah terbuka" = tak perlu (sudah pasti terbuka).
+**Cara benar (ADR-023):** TERIMA DACL terbuka sbg **residual risk terdokumentasi (R-5, THREAT-MODEL §8)** + **hardening
+lapisan-aplikasi** yang bisa dikontrol: (a) minimalkan data sensitif lewat pipe (`status` tak dump cwd tak perlu);
+(b) hanya daemon mutasi state (ADR-017); (c) **injection firewall struktural** — `inject` tanpa payload (token literal
+wrapper, ADR-014/020) → connect-pipe tak bisa suntik teks arbitrer; (d) audit `events`. **JANGAN** native addon
+(over-engineering solo-user) atau cek-PID (spoofable). Node headless multi-akun → mitigasi = akun OS khusus daemon.
+**Sumber:** verifikasi web spec M5 17 Jul (nodejs/node #47086/#30823/#17743, Microsoft Learn named-pipe-security,
+Google Project Zero PID-spoofing), ADR-023, I-26.
+
 ---
 
 ## Change Log
+
+| Tanggal | Perubahan |
+|---|---|
+| 2026-07-17 (spec M5, verifikasi web) | **G-41** baru (DACL named pipe Windows Node = terbuka by design [Everybody+Anonymous read], Node tak punya API set-DACL — issues #47086/#30823/#17743; kandidat "cek PID client" gugur = spoofable, Project Zero/CVE-2018-0749; → ADR-023 terima residual R-5 + hardening lapisan-app, native addon ditolak). Mengoreksi klaim keamanan ADR-015. Dari verifikasi web sumber primer saat spec M5 (I-26).
 
 | Tanggal | Perubahan |
 |---|---|
