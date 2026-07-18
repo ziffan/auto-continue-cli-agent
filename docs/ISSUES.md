@@ -45,6 +45,36 @@
 > ter-escape (prefiks `\b` mematahkan word-boundary → string tak cocok dirinya sendiri). Alasan: mencetak frasa itu
 > ke terminal sesi yang di-supervise = memicu detektor. Lihat I-35/I-36.
 
+> **Audit menyeluruh KEEMPAT 18 Jul (`docs/audit/AUDIT-2026-07-18-MENYELURUH.md`) → D-1..D-5.**
+> Verifikasi independen Linux: typecheck+lint+**623/623 test** hijau; semua remedi A-/B-/C-/F- terpasang,
+> tak ada regresi remedi lama. **1 P1 baru (D-1)** di interaksi `markExited` × guard I-35 + 1 P2 + 3 P3.
+
+### D-1 — `markExited` clobber `LIMIT_HIT` + guard status probe (I-35) ⇒ auto-resume sesi "limit lalu exit BERSIH" mati senyap; jalur agy-exited ADR-019 praktis tak terjangkau [P1, butuh keputusan owner]
+Bukti runtime + baris kode di audit keempat §2. Rantai: `markExited` (`sessions.ts:73`) tanpa guard status
+(kontras `markOrphanExited` yang SENGAJA mempertahankan `LIMIT_HIT`) → sesi limit yang exit bersih (Ctrl-C/quit)
+jadi `EXITED` → job probe pending di-skip `skipped:probe_stale_status` (guard `3031e54`) → **nol resume, nol
+notifikasi**. Pra-guard (≤17 Jul) jalur ini auto-resume. Dampak terberat agy: id resume agy HANYA tertangkap
+saat exit bersih (G-36), sesi mati keras tak punya id (BLOCKED) → **optimistic resume ADR-019 tak punya jalur
+produksi yang tercapai**. Remedi = **RD-1** (Opsi A: preserve `LIMIT_HIT` di `markExited` [rekomendasi auditor] vs
+Opsi B: dokumentasikan "exit bersih = batal resume" + hapus job pending + notif) + 2 test komposisi lifecycle.
+
+### D-2 — Limit ASLI hasil konfirmasi job `verify` di-latch TANPA `status_change`/notifikasi (gap AC-5) [P2]
+`supervisor.ts:374-397` menulis hanya `job_dispatch_done verify_latched_real_limit` — tak dipetakan Notifier &
+tak ada event `status_change {to:LIMIT_HIT}` (satu-satunya jalur latch yang bisu + audit-trail transisi bolong).
+Remedi = **RD-2**: append `status_change` pasca-latch (dekorator notifier otomatis surface) + 1 test.
+
+### D-3 — DATA-MODEL.md belum mencatat `kind='verify'`/migrasi 0003 (drift sumber-kebenaran skema) [P3]
+`DATA-MODEL.md:60` masih `CHECK(probe|resume)`. Remedi = **RD-3** (docs-only).
+
+### D-4 — `api.telegram.org` di allowlist egress dengan NOL konsumen produksi [P3, least-privilege]
+`shared/http.ts:12-18`. Inkonsisten preseden ADR-019 (cloudcode-pa dihapus krn tak dipanggil produksi);
+M-remote kini ditunda tak-tentu (keputusan owner 18 Jul). Remedi = **RD-4**: hapus sampai slice M-remote dibuka
+(+ sesuaikan `security-egress.test.ts` + NFR §Security).
+
+### D-5 — Klaim jumlah test bergantung-mesin & drift antar-doc (626 CLAUDE/README vs 615 MILESTONES vs 623 audit-Linux) [P3, higiene klaim]
+Gate per-file (literal/artefak) men-generate test atas working tree → angka beda per mesin (file untracked ikut).
+Remedi = **RD-5**: pin angka dari checkout bersih di SATU lokasi / berhenti pin angka eksak.
+
 ### I-35 — Deteksi limit dari OUTPUT false-positive pada PROSA yang mengutip pesan kanonik → inject token ke sesi SEHAT [P1 — ✅ DITUTUP PENUH 18 Jul: korroborasi (17 Jul) + guard-status (17 Jul) + probe verifikasi eksplisit `kind:'verify'` (18 Jul)]
 **Ditemukan live 17 Jul di sesi ini sendiri** (`acca run claude` — dogfood tak sengaja, sesi `z36i`). **DUA FP nyata
 dalam ~8 menit**, keduanya siklus penuh sampai actuation.
