@@ -741,6 +741,30 @@ list" yang bisa basi; marker `gate:allow-canonical-literal` untuk pengecualian s
 string user-facing yang sengaja meniru bahasa kanonik).
 **Sumber:** membangun gate I-36, 17 Jul.
 
+### G-55 — Callback yang menyala PER BARIS output → enqueue job berulang dalam satu episode (butuh dedup)
+**Jebakan:** `onUsageContradiction` (I-35 suppress) menyala **sekali per baris limit** yang di-suppress — bukan sekali
+per episode. `classifyLine` yang men-suppress **tidak melatch** (`latched` tetap false, by design: sinyal berikutnya
+harus tetap dievaluasi) → baris limit berikutnya lewat lagi → callback nyala lagi. Menambahkan `jobs.enqueue({kind:'verify'})`
+polos di callback → **N job verify dalam satu episode** justru pada skenario inti I-35/I-36: prosa **multi-literal** (Read
+`patterns.ts`/docs yang dulu punya 61 baris literal → banyak match berturut). Latch men-dedup sisi habis (verify ke-2 dst
+`skipped:verify_stale`) tapi FP → N probe redundan + spam log.
+**Cara benar:** guard idempoten sebelum enqueue — `jobs.hasPendingKind(sessionId,'verify')` → satu verify per episode
+(job pending yang ada sudah mem-probe realita yang sama). **Pelajaran umum (kelas G-54):** sinyal engine yang di-drive
+sumber berulang (tick periodik ATAU baris-per-baris) butuh dedup di titik AKSI, bukan hanya di titik deteksi — dan test
+wajib memberi **>1 pemicu** (di sini: 2 banner) untuk menyingkapnya. Negative control terbukti (bypass guard → 2 job).
+**Sumber:** I-35 residual (job `verify`), sesi 18 Jul.
+
+### G-56 — `git checkout <tracked-file>` untuk membuang edit NC sementara MENGHAPUS SEMUA perubahan uncommitted file itu
+**Jebakan:** setelah menjalankan negative-control (edit sementara pada file untuk membuktikan test menangkapnya), kebiasaan
+"`git checkout src/x.ts` untuk revert" **membuang seluruh perubahan uncommitted** file itu — bukan hanya baris NC. Bila file
+itu memuat kerja sesi yang **belum di-commit** (di sini: `process-wrapper.ts` dengan const + enqueue baru), kerja itu lenyap
+senyap; test lain lolos karena diff-nya di file LAIN. Beda dari G-51 (checkout tak revert file **untracked**) — ini kebalikan:
+checkout **over-revert** file **tracked** yang punya kerja tak-tersimpan.
+**Cara benar:** untuk NC, revert **hanya baris NC** (Edit balik string spesifik, bukan `git checkout`), ATAU commit/stash kerja
+dulu sebelum NC. Bila terlanjur: re-apply dari konteks (di sini semua edit masih ada di transcript → di-apply ulang + verifikasi
+marker `grep -c` + full check hijau). Verifikasi `git status` + `grep` marker setelah operasi git destruktif apa pun mid-sesi.
+**Sumber:** NC dedup I-35, sesi 18 Jul (kerja `process-wrapper.ts` sempat hilang, di-re-apply penuh).
+
 ---
 
 ## Deploy / systemd (M5.4)
@@ -845,6 +869,7 @@ per-call" tak menjamin perilaku waktu-nyata. Negative control terbukti (bypass g
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-18 (I-35, job `verify`) | **G-55** baru (callback `onUsageContradiction` menyala PER BARIS output → enqueue `verify` polos = N job/episode pada prosa multi-literal [skenario inti I-35/I-36]; fix = guard `hasPendingKind` idempoten, satu verify/episode; test wajib >1 pemicu; kelas G-54 = dedup di titik AKSI bukan deteksi). **G-56** baru (`git checkout <tracked-file>` untuk buang edit NC sementara MENGHAPUS semua perubahan uncommitted file itu — bukan cuma baris NC; beda G-51 [untracked tak ter-revert] = ini over-revert tracked; fix = Edit-balik baris NC saja / stash dulu; verifikasi `git status`+`grep` marker pasca-git destruktif). Dari penutupan residual I-35 (probe verifikasi eksplisit), 18 Jul. |
 | 2026-07-18 (backlog, I-32/I-8) | **G-53** baru (SQLite online backup API `db.backup()`: koneksi sumber wajib tetap terbuka saat transfer, dir tujuan harus ada [else TypeError], API async → caller ikut; race korupsi copy-vs-checkpoint yang di-fix = nondeterministik → test concurrency = scenario/kapabilitas, BUKAN negative-control keras — jangan overclaim). **G-54** baru (engine notifikasi stateless `proximityNotifications` lolos unit-test [dipanggil 1×] tapi caller periodik usage-monitor menyingkap spam [fire tiap ~2mnt di atas ambang]; fix = gate stateful rising-edge `createProximityGate`, clear per-tool; pelajaran: engine yang di-drive loop periodik butuh test multi-tick). Dari backlog I-32 + wiring I-8 (18 Jul). |
 | 2026-07-18 (M5.5 LIVE, no-flash) | **G-52** baru (`<Hidden>true>` Task Scheduler cuma sembunyikan task dari UI, BUKAN jendela proses; LIVE @logon nyata: `node` langsung dapat `PseudoConsoleWindow` TERLIHAT walau Hidden=true [mata owner + `EnumWindows`; `MainWindowHandle` naif lolos-palsu]. Fix: `conhost.exe --headless "<node>" "<entry>" daemon` → nol jendela + conhost=induk → IgnoreNew tetap sah + restart ~65s; `Start-ScheduledTask` on-demand mereproduksi jendela → iterasi murah tanpa logout berulang. VBScript+wscript ditolak [deprecated]). Dari M5.5 LIVE 18 Jul (logon nyata). |
 | 2026-07-18 (M5.5 LIVE, Task Scheduler) | **G-49** baru (`RestartOnFailure` Task Scheduler TAK andal me-restart daemon di-kill — LIVE: `taskkill /F` → nol restart 100s walau `Interval=PT1M Count=3`; pakai **watchdog repetisi** `LogonTrigger`+`Repetition PT1M`+`IgnoreNew` → restart ~61s; `<Repetition>` WAJIB sebelum `<Enabled>`). **G-50** baru (XML comment tak boleh muat `--`; naive tag-balance lolos, `System.Xml`/`Register-ScheduledTask` menolak → task gagal register; gate diperkuat cek `--`-in-comment; ketahuan hanya saat jalankan parser sungguhan = I-34). **G-51** baru (`git checkout -- <file>` tak bisa revert file untracked → negative-control break menumpuk; pakai backup `.bak` atau tulis-ulang). Dari M5.5 LIVE 18 Jul (Win 11). |

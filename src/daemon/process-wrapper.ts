@@ -22,6 +22,12 @@ import type { EventsRepo } from '../store/repositories/events.js';
 import type { ScheduledJobsRepo } from '../store/repositories/scheduled-jobs.js';
 import type { SessionsRepo } from '../store/repositories/sessions.js';
 
+/** I-35: jeda sebelum job `verify` fire setelah sinyal limit OUTPUT-CC di-suppress korroborasi.
+ *  2,5 mnt — di atas lag probe terukur ~2 mnt (T-6, live-verify 16 Jul) supaya snapshot usage sempat
+ *  menyusul realita sebelum verify mem-probe (kalau tidak, verify baca angka basi yang sama → tautologi).
+ *  Cukup cepat agar limit ASLI yang ter-suppress tak menggantung lama; self-correcting (bounded). */
+const VERIFY_DELAY_MS = 150_000;
+
 export interface RunSessionSpec {
   file: string;
   args: string[];
@@ -263,6 +269,7 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
     // membacanya dari store. Engine tetap murni (tak menyentuh store/IPC, ADR-008/013).
     usageSnapshot: () => readUsageCorroboration(spec.tool, deps.usageSnapshotJson),
     onUsageContradiction: (result, corroboration) => {
+      const at = nowMs();
       deps.events.append({
         session_id: id,
         type: 'limit_suppressed',
@@ -271,9 +278,28 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
           source: result.source,
           evidence: result.evidence?.slice(0, 200),
           maxBindingUsedFraction: corroboration.maxBindingUsedFraction,
-          snapshotAgeMs: nowMs() - corroboration.capturedAt,
+          snapshotAgeMs: at - corroboration.capturedAt,
         },
       });
+      // I-35 residual: suppress hanya MEMBUANG sinyal (pasif). Jaring FN aktif — jadwalkan `verify`:
+      // probe usage susulan (~2,5 mnt) yang, bila kuota ternyata BENAR habis (snapshot tadi segar-tapi-
+      // basi menutupi limit asli), me-LATCH sesi → mesin reset/probe normal ambil alih. Bila kuota
+      // tersedia → FP terkonfirmasi (no-op). Firewall ADR-013 MENGUAT: verify menambah gerbang
+      // verifikasi, keputusan latch murni dari probe usage (bukan isi output). CC-only by construction
+      // (onUsageContradiction hanya menyala untuk `tool==='claude'` via readUsageCorroboration).
+      // Dedup: sinyal limit OUTPUT-CC yang di-suppress bisa datang per-baris (prosa multi-literal, mis.
+      // membaca `patterns.ts`/docs → banyak match dalam satu episode) → satu verify per episode cukup.
+      if (!deps.jobs.hasPendingKind(id, 'verify')) {
+        const job = deps.jobs.enqueue({ session_id: id, run_at: at + VERIFY_DELAY_MS, kind: 'verify', next_backoff_ms: null });
+        deps.events.append({
+          session_id: id,
+          type: 'verify_scheduled',
+          payload: { runAt: at + VERIFY_DELAY_MS, jobId: job.id },
+        });
+        // I-10: job baru ditulis dari proses wrapper INI (bukan daemon) → beri tahu daemon hidup agar
+        // re-arm seketika (best-effort; fire-and-forget), sama pola onLimit.
+        void notifyDaemonRearm();
+      }
     },
     onLimit: (result) => {
       const at = nowMs();

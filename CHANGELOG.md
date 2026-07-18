@@ -20,7 +20,7 @@ versi mengikuti [SemVer](https://semver.org/). Belum ada rilis publik (`0.1.0`, 
 ### Changed
 
 - **Engine backup → SQLite online backup API (I-32)** — `backupDatabase` kini async (`db.backup`), concurrency-safe by design: menghapus race `wal_checkpoint`+`copyFileSync` yang bisa hasilkan salinan half-written saat daemon menulis konkuren. Caller (`scripts/backup.js`) pakai top-level await.
-- **Deteksi limit CC dari OUTPUT dikorroborasi snapshot usage (I-35)** — sinyal `source:'output'` CC di-suppress bila kuota jelas longgar (≥0.85 free, snapshot ≤5mnt) → firewall ADR-013 menguat; hook `StopFailure` bypass.
+- **Deteksi limit CC dari OUTPUT dikorroborasi snapshot usage (I-35)** — sinyal `source:'output'` CC di-suppress bila kuota jelas longgar (≥0.85 free, snapshot ≤5mnt) → firewall ADR-013 menguat; hook `StopFailure` bypass. **Jaring FN aktif (job `kind:'verify'`, migrasi 0003):** suppress kini menjadwalkan probe verifikasi susulan (~2,5mnt) → kuota ternyata habis (snapshot basi menutupi limit asli) = latch (mesin reset/probe normal ambil alih, tak langsung resume); kuota tersedia = FP terkonfirmasi (no-op). Dedup satu verify per-episode (`hasPendingKind`) — prosa multi-literal tak memicu storm probe.
 - Gate higiene: frasa kanonik pesan limit dilarang di repo di luar `test/fixtures/**` (`test/no-canonical-limit-literals.test.ts`, I-36).
 
 ### Deferred

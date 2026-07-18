@@ -45,7 +45,7 @@
 > ter-escape (prefiks `\b` mematahkan word-boundary → string tak cocok dirinya sendiri). Alasan: mencetak frasa itu
 > ke terminal sesi yang di-supervise = memicu detektor. Lihat I-35/I-36.
 
-### I-35 — Deteksi limit dari OUTPUT false-positive pada PROSA yang mengutip pesan kanonik → inject token ke sesi SEHAT [P1 — korroborasi ✅ DITUTUP 17 Jul; probe verifikasi eksplisit MASIH TERBUKA]
+### I-35 — Deteksi limit dari OUTPUT false-positive pada PROSA yang mengutip pesan kanonik → inject token ke sesi SEHAT [P1 — ✅ DITUTUP PENUH 18 Jul: korroborasi (17 Jul) + guard-status (17 Jul) + probe verifikasi eksplisit `kind:'verify'` (18 Jul)]
 **Ditemukan live 17 Jul di sesi ini sendiri** (`acca run claude` — dogfood tak sengaja, sesi `z36i`). **DUA FP nyata
 dalam ~8 menit**, keduanya siklus penuh sampai actuation.
 **BUKTI (tabel `events`, evidence teredaksi — harness read-only di scratchpad):**
@@ -104,20 +104,27 @@ awal Opus KELIRU):
    control TERBUKTI:** guard dihapus sementara → test gagal (`probeUsage` terpanggil 1×) → dikembalikan, 475 hijau.
    Ini **perbaikan korektness berdiri sendiri** (melindungi SEMUA job `probe` stale, bukan cuma yang dari I-35) —
    **bukan** implementasi "probe verifikasi eksplisit" (poin 2 di bawah, masih butuh keputusan desain terpisah).
-2. **⚠ MASIH TERBUKA — "probe verifikasi eksplisit" (enqueue dari `onUsageContradiction`) BELUM dibangun.** Guard di
-   atas hanya membuat job `probe` **stale** jadi no-op; ia **tidak** menambahkan mekanisme baru yang secara AKTIF
-   men-verifikasi FP (mis. men-jadwalkan probe susulan begitu korroborasi mendeteksi kontradiksi, lalu memutuskan
-   "kuota habis → latch (limit asli); tersedia → FP terkonfirmasi, jangan resume"). Itu butuh **keputusan desain**:
-   overload semantik job `probe` yang ada (kini sudah tervalidasi status — bisa dipakai kalau job itu ditulis dengan
-   status tetap LIMIT_HIT) vs job `kind:'verify'` baru (= migrasi `scheduled_jobs`, skema lebih jelas). **Belum
-   diputuskan owner** — guard status hari ini adalah *prasyarat* aman untuk opsi mana pun, bukan penggantinya.
-3. **Jaring FN sebagian sudah GRATIS:** suppress **tak membuang** sinyal — baris limit berikutnya tetap diklasifikasi, jadi
-   saat snapshot menyusul (~2 menit) repaint banner CC melatch. Ada test-nya.
-   **TAPI — asumsi yang belum dibuktikan:** bukti repaint (G-37) berasal dari skenario **pasca-inject**, BUKAN dari sesi
-   yang limit-asli-dan-diam. Kalau CC mencetak banner **sekali** lalu bungkam, dan snapshot kebetulan basi <0.85, sesi
-   menggantung SENYAP. **Residual ini nyata, kecil, dan belum tertutup.**
-**Next:** keputusan owner (overload `probe` vs job `verify` baru) untuk membangun poin 2. Atau: buktikan perilaku
-repaint CC saat limit-asli-dan-diam → kalau repaint terkonfirmasi, residual poin 3 gugur tanpa kode.
+2. **✅ DITUTUP 18 Jul (Opus inline, Tier-1, 626 test) — "probe verifikasi eksplisit" via job `kind:'verify'`.**
+   Keputusan desain owner (sesi 18 Jul): **job `kind:'verify'` baru** (BUKAN overload `probe` — semantik `probe` sudah
+   di-guard `status==='LIMIT_HIT'`, kebalikan dari verify yang justru menjalankan sesi RUNNING-belum-di-latch → overload
+   mekanis buntu). Semantik latch owner: **verify → habis → latch SAJA** (markLimitHit source `verify` + `scheduleProbeForLimit`,
+   mesin normal ambil alih; TIDAK langsung resume) · **delay 2,5 mnt** (>lag probe ~2 mnt/T-6 supaya snapshot menyusul).
+   - **Trigger** (`process-wrapper.ts` `onUsageContradiction`): selain emit `limit_suppressed`, enqueue `verify` @ +150s +
+     `notifyDaemonRearm`. **Dedup `hasPendingKind(id,'verify')`** — suppress menyala PER BARIS (prosa multi-literal, mis.
+     membaca `patterns.ts`/docs) → satu verify per episode cukup (blind-spot penulis=reviewer di-flag & ditutup).
+   - **Dispatch** (`supervisor.ts` cabang `verify`): guard tool CC-only + guard status (skip bila bukan RUNNING-alive:
+     hook primer melatch di antara suppress&fire, atau exited) → `probeUsage` → **tersedia = `verify_fp_confirmed`** (no-op) /
+     **habis = `verify_latched_real_limit`** (latch+probe) / **tak terbaca di cap = `verify_unreadable`** (menyerah TANPA
+     markBlocked — beda kritis dari cabang `probe`: sesi RUNNING sehat tak boleh di-BLOCKED).
+   - **Migrasi `0003-scheduled-jobs-kind-verify.sql`:** widen `CHECK(kind IN('probe','resume','verify'))` via table-rebuild;
+     **upgrade v2→v3 diuji konkret** (baris lama utuh, verify diterima, bogus ditolak, FK tegak).
+   - **+5 test** (4 dispatch + 1 integrasi PTY-nyata wiring+dedup). **3 NC terbukti konkret:** (a) enqueue dimatikan →
+     wiring merah; (b) paksa `hasAvailable=true` → hanya test latch merah (isolasi); (c) bypass dedup → 2 verify job.
+3. **Jaring FN — kini AKTIF (poin 2) + pasif (repaint) sebagai cadangan.** Suppress tak membuang sinyal (repaint melatch
+   saat snapshot menyusul) DAN verify aktif memverifikasi. Sisa opportunistik (kelas I-15, butuh limit CC asli + user):
+   latch-vs-FP decision path end-to-end di limit NYATA — teruji di sini via probe ter-stub + wiring PTY-nyata, tapi
+   verify-under-real-limit sejati menunggu episode limit asli (sama batas I-31/I-15).
+**Next:** nihil (I-35 tutup). Verifikasi LIVE verify-under-real-limit = opportunistik saat limit CC berikutnya (dogfood).
 
 ### I-36 — Repo ini sendiri = korpus yang memicu detektornya sendiri; `/session-start` = ranjau di bawah acca [P2, higiene dev ✅ DITUTUP 17 Jul — TIDAK menggantikan I-35]
 **✅ DITUTUP 17 Jul (Opus inline, Tier-1, 95+570 test).** 61 baris (bukan 103 literal — angka 103 dari korpus mentah

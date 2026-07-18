@@ -56,6 +56,17 @@ export function createScheduledJobsRepo(db: DatabaseInstance) {
       return db.prepare<[number], ScheduledJob>('SELECT * FROM scheduled_jobs WHERE id = ?').get(id);
     },
 
+    /** I-35: apakah ada job `kind` yang masih pending untuk sesi ini? Dipakai men-dedup enqueue `verify`
+     *  — sinyal limit OUTPUT-CC yang di-suppress bisa datang PER BARIS (prosa multi-literal, mis. membaca
+     *  `patterns.ts`/docs → banyak match dalam satu episode), tanpa guard ini tiap baris meng-enqueue satu
+     *  verify (storm N probe redundan). Satu verify per episode cukup. */
+    hasPendingKind(sessionId: string, kind: JobKind): boolean {
+      const row = db
+        .prepare<[string, JobKind], { n: number }>('SELECT COUNT(*) AS n FROM scheduled_jobs WHERE session_id = ? AND kind = ?')
+        .get(sessionId, kind);
+      return (row?.n ?? 0) > 0;
+    },
+
     remove(id: number): void {
       db.prepare('DELETE FROM scheduled_jobs WHERE id = ?').run(id);
     },
