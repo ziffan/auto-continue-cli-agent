@@ -70,10 +70,19 @@ export function createSessionsRepo(db: DatabaseInstance) {
       });
     },
 
+    /** Exit BERSIH yang diamati wrapper (`onExit`). D-1 (audit keempat, 18 Jul — RD-1 Opsi A, keputusan
+     *  owner): status HANYA transisi RUNNING→EXITED; `LIMIT_HIT` (dan status lain, mis. BLOCKED)
+     *  DIPERTAHANKAN — sesi yang kena limit lalu ditutup bersih (Ctrl-C/quit) harus tetap terbaca
+     *  "menunggu reset" supaya job `probe` di `reset_at` men-resume-by-id (flow §4 langkah 9 / US-3 /
+     *  ADR-019; id agy justru HANYA tertangkap di exit bersih, G-36). Sebelumnya clobber tanpa guard →
+     *  guard status probe (I-35) men-skip job → auto-resume mati senyap. Semantik kini identik
+     *  `markOrphanExited` (satu kebenaran utk "proses mati": bersih maupun keras). */
     markExited(id: string): void {
       db.prepare(
         `UPDATE sessions
-         SET status = 'EXITED', proc_state = 'exited', updated_at = @updated_at
+         SET proc_state = 'exited',
+             status = CASE WHEN status = 'RUNNING' THEN 'EXITED' ELSE status END,
+             updated_at = @updated_at
          WHERE id = @id`,
       ).run({ id, updated_at: nowMs() });
     },

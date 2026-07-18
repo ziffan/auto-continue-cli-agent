@@ -47,21 +47,26 @@
 
 > **Audit menyeluruh KEEMPAT 18 Jul (`docs/audit/AUDIT-2026-07-18-MENYELURUH.md`) → D-1..D-5.**
 > Verifikasi independen Linux: typecheck+lint+**623/623 test** hijau; semua remedi A-/B-/C-/F- terpasang,
-> tak ada regresi remedi lama. **1 P1 baru (D-1)** di interaksi `markExited` × guard I-35 + 1 P2 + 3 P3.
+> tak ada regresi remedi lama. **D-1 (P1) + D-2 (P2) DITUTUP hari yang sama** (RD-1 Opsi A + RD-2, keputusan
+> owner; 629 test). Terbuka: D-3/D-4/D-5 (P3).
 
-### D-1 — `markExited` clobber `LIMIT_HIT` + guard status probe (I-35) ⇒ auto-resume sesi "limit lalu exit BERSIH" mati senyap; jalur agy-exited ADR-019 praktis tak terjangkau [P1, butuh keputusan owner]
-Bukti runtime + baris kode di audit keempat §2. Rantai: `markExited` (`sessions.ts:73`) tanpa guard status
-(kontras `markOrphanExited` yang SENGAJA mempertahankan `LIMIT_HIT`) → sesi limit yang exit bersih (Ctrl-C/quit)
-jadi `EXITED` → job probe pending di-skip `skipped:probe_stale_status` (guard `3031e54`) → **nol resume, nol
-notifikasi**. Pra-guard (≤17 Jul) jalur ini auto-resume. Dampak terberat agy: id resume agy HANYA tertangkap
-saat exit bersih (G-36), sesi mati keras tak punya id (BLOCKED) → **optimistic resume ADR-019 tak punya jalur
-produksi yang tercapai**. Remedi = **RD-1** (Opsi A: preserve `LIMIT_HIT` di `markExited` [rekomendasi auditor] vs
-Opsi B: dokumentasikan "exit bersih = batal resume" + hapus job pending + notif) + 2 test komposisi lifecycle.
+### D-1 — `markExited` clobber `LIMIT_HIT` + guard status probe (I-35) ⇒ auto-resume sesi "limit lalu exit BERSIH" mati senyap [P1] ✅ (18 Jul, RD-1 Opsi A — keputusan owner)
+**Solusi (Opsi A):** `markExited` kini meniru `markOrphanExited` — `status` hanya transisi `RUNNING→EXITED`;
+`LIMIT_HIT`/`BLOCKED` **dipertahankan** (`CASE WHEN`), `proc_state` selalu `exited` (`sessions.ts`). Satu semantik
+untuk "proses mati" (bersih maupun keras) → sesi limit yang ditutup bersih tetap terbaca "menunggu reset" → job
+`probe` di `reset_at` berjalan → agy optimistic resume (ADR-019, id-nya memang HANYA tertangkap di exit bersih
+G-36) / CC probeUsage → resume-by-id. **Bukti:** +3 unit test (`sessions-limithit.test.ts` — LIMIT_HIT & BLOCKED
+preserved, RUNNING tetap EXITED) + **2 test KOMPOSISI lifecycle** (`supervisor-dispatch.test.ts` — transisi repo
+nyata `markLimitHit→markExited→probe-fire`, agy → `optimistic_resume_agy_exited`, CC → probeUsage jalan + enqueue
+resume; kelas gap yang melahirkan D-1). **NC terbukti:** clobber lama dikembalikan sementara → tepat 4 test D-1
+merah, 40 lain hijau (isolasi). Detail: audit keempat §2 + G-57.
 
-### D-2 — Limit ASLI hasil konfirmasi job `verify` di-latch TANPA `status_change`/notifikasi (gap AC-5) [P2]
-`supervisor.ts:374-397` menulis hanya `job_dispatch_done verify_latched_real_limit` — tak dipetakan Notifier &
-tak ada event `status_change {to:LIMIT_HIT}` (satu-satunya jalur latch yang bisu + audit-trail transisi bolong).
-Remedi = **RD-2**: append `status_change` pasca-latch (dekorator notifier otomatis surface) + 1 test.
+### D-2 — Limit ASLI hasil konfirmasi job `verify` di-latch TANPA `status_change`/notifikasi (gap AC-5) [P2] ✅ (18 Jul, RD-2)
+**Solusi:** cabang verify (`supervisor.ts`) kini meng-append `status_change {to:'LIMIT_HIT', source:'verify'}`
+pasca-latch (payload = label terkontrol; `events` ter-wrap `withNotifications` → user otomatis dinotifikasi via
+mapping LIMIT_HIT yang sudah ada — nol mapping baru). Audit-trail transisi kini konsisten di SEMUA jalur latch.
+**Bukti:** test verify-latch diperluas assert `status_change`; NC terbukti (append dihapus sementara → tepat 1
+test merah).
 
 ### D-3 — DATA-MODEL.md belum mencatat `kind='verify'`/migrasi 0003 (drift sumber-kebenaran skema) [P3]
 `DATA-MODEL.md:60` masih `CHECK(probe|resume)`. Remedi = **RD-3** (docs-only).
