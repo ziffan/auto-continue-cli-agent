@@ -5,6 +5,7 @@ import { registerHookCommand } from './commands/hook.js';
 import { registerLogCommand } from './commands/log.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerStatusCommand } from './commands/status.js';
+import { registerWebCommand } from './commands/web.js';
 import { renderSplash, resolveBannerCaps } from '../shared/banner.js';
 
 const program = new Command();
@@ -23,6 +24,7 @@ registerStatusCommand(program);
 registerDaemonCommand(program);
 registerLogCommand(program);
 registerHookCommand(program);
+registerWebCommand(program);
 
 // `acca` tanpa subcommand = momen kenalan (ADR-027 §4): splash penuh lalu help. Root action hanya
 // menyala saat tak ada subcommand cocok; `--help`/`--version` di-handle commander lebih dulu (exit).
