@@ -36,11 +36,11 @@ afterAll(() => {
 });
 
 describe('backupDatabase', () => {
-  it('T1: menghasilkan snapshot konsisten (integrity_check ok, data cocok, tanpa -wal sisa)', () => {
+  it('T1: menghasilkan snapshot konsisten (integrity_check ok, data cocok, tanpa -wal sisa)', async () => {
     const backupDirPath = join(tempDir, 'backups-t1');
     const dbFilePath = join(tempDir, 'acca.db');
 
-    const result = backupDatabase({
+    const result = await backupDatabase({
       dbPath: dbFilePath,
       backupDir: backupDirPath,
       retention: { hourly: 24, daily: 30 },
@@ -64,7 +64,7 @@ describe('backupDatabase', () => {
     expect(existsSync(`${result.path}-wal`)).toBe(false);
   });
 
-  it('T2: retensi memangkas ke N terbaru, file asing di backupDir tak tersentuh', () => {
+  it('T2: retensi memangkas ke N terbaru, file asing di backupDir tak tersentuh', async () => {
     const backupDirPath = join(tempDir, 'backups-t2');
     const dbFilePath = join(tempDir, 'acca.db');
     mkdirSync(backupDirPath, { recursive: true });
@@ -81,7 +81,7 @@ describe('backupDatabase', () => {
     // begitu jumlah snapshot lewat retensi, yang tertua langsung terpangkas panggilan itu juga.
     const paths: string[] = [];
     for (let i = 0; i < hourly + 1; i += 1) {
-      const r = backupDatabase({ dbPath: dbFilePath, backupDir: backupDirPath, retention, clock });
+      const r = await backupDatabase({ dbPath: dbFilePath, backupDir: backupDirPath, retention, clock });
       paths.push(r.path);
       clockMs += 1000;
     }
@@ -90,7 +90,7 @@ describe('backupDatabase', () => {
     expect(existsSync(paths[0] as string)).toBe(false);
 
     // Backup ke-(N+2): memangkas snapshot tertua BERIKUTNYA yang masih tersisa (epoch 2000).
-    const finalResult = backupDatabase({ dbPath: dbFilePath, backupDir: backupDirPath, retention, clock });
+    const finalResult = await backupDatabase({ dbPath: dbFilePath, backupDir: backupDirPath, retention, clock });
 
     expect(finalResult.pruned.length).toBeGreaterThan(0);
     expect(finalResult.pruned).toContain(paths[1]);
@@ -103,16 +103,16 @@ describe('backupDatabase', () => {
     expect(existsSync(foreignFile)).toBe(true);
   });
 
-  it('T3: dbPath tidak ada → BackupError', () => {
+  it('T3: dbPath tidak ada → BackupError', async () => {
     const backupDirPath = join(tempDir, 'backups-t3');
     const missingDbPath = join(tempDir, 'tidak-ada.db');
 
-    expect(() =>
+    await expect(
       backupDatabase({ dbPath: missingDbPath, backupDir: backupDirPath, retention: { hourly: 3, daily: 0 } }),
-    ).toThrow(BackupError);
+    ).rejects.toThrow(BackupError);
   });
 
-  it('T4: backupDir tak bisa ditulis (parent adalah file) → BackupError', () => {
+  it('T4: backupDir tak bisa ditulis (parent adalah file) → BackupError', async () => {
     const dbFilePath = join(tempDir, 'acca.db');
     const blockerFile = join(tempDir, 'blocker-t4.txt');
     writeFileSync(blockerFile, 'aku file, bukan direktori');
@@ -120,27 +120,71 @@ describe('backupDatabase', () => {
     // mkdirSync recursive di bawah sebuah FILE mustahil (ENOTDIR) — jalan lintas-OS termasuk Windows.
     const unwritableBackupDir = join(blockerFile, 'sub', 'backups');
 
-    expect(() =>
+    await expect(
       backupDatabase({ dbPath: dbFilePath, backupDir: unwritableBackupDir, retention: { hourly: 3, daily: 0 } }),
-    ).toThrow(BackupError);
+    ).rejects.toThrow(BackupError);
   });
 
-  it('validasi retention.hourly < 1 → BackupError', () => {
+  it('validasi retention.hourly < 1 → BackupError', async () => {
     const backupDirPath = join(tempDir, 'backups-invalid-hourly');
     const dbFilePath = join(tempDir, 'acca.db');
 
-    expect(() =>
+    await expect(
       backupDatabase({ dbPath: dbFilePath, backupDir: backupDirPath, retention: { hourly: 0, daily: 30 } }),
-    ).toThrow(BackupError);
+    ).rejects.toThrow(BackupError);
   });
 
-  it('validasi retention.daily < 0 → BackupError', () => {
+  it('validasi retention.daily < 0 → BackupError', async () => {
     const backupDirPath = join(tempDir, 'backups-invalid-daily');
     const dbFilePath = join(tempDir, 'acca.db');
 
-    expect(() =>
+    await expect(
       backupDatabase({ dbPath: dbFilePath, backupDir: backupDirPath, retention: { hourly: 1, daily: -1 } }),
-    ).toThrow(BackupError);
+    ).rejects.toThrow(BackupError);
+  });
+
+  it('T5 (I-32): online-backup konsisten saat koneksi WAL kedua aktif menulis (concurrency-safe)', async () => {
+    // Bukti I-32: dengan writer konkuren memegang koneksi WAL-nya sendiri (analog daemon LIVE),
+    // online backup API tetap menghasilkan salinan integrity-ok yang memuat SEMUA baris ter-commit —
+    // termasuk yang di-commit lewat koneksi LAIN & belum di-checkpoint ke file utama. Pendekatan lama
+    // (checkpoint di koneksi sendiri + copyFileSync) rawan half-write di skenario ini.
+    const backupDirPath = join(tempDir, 'backups-t5');
+    const concurrentDbPath = join(tempDir, 'acca-t5.db');
+
+    // Koneksi #1 (WAL) — tulis baris ter-commit, biarkan TETAP TERBUKA (tak di-checkpoint eksplisit).
+    const writer = openDb(concurrentDbPath);
+    const writerSessions = createSessionsRepo(writer);
+    try {
+      for (let i = 0; i < 12; i += 1) {
+        writerSessions.createSession({
+          id: `t5-${i}`,
+          tool: 'claude',
+          cwd: `/tmp/t5-${i}`,
+          status: 'RUNNING',
+          proc_state: 'alive',
+        });
+      }
+
+      // Backup dijalankan SELAGI `writer` masih memegang koneksi WAL-nya.
+      const result = await backupDatabase({
+        dbPath: concurrentDbPath,
+        backupDir: backupDirPath,
+        retention: { hourly: 24, daily: 30 },
+      });
+
+      const copy = new DatabaseCtor(result.path);
+      try {
+        const integrity = copy.pragma('integrity_check') as Array<{ integrity_check: string }>;
+        expect(integrity[0]?.integrity_check).toBe('ok');
+        // Semua 12 baris ter-commit tertangkap walau belum di-checkpoint manual ke file utama.
+        const count = copy.prepare('SELECT COUNT(*) AS n FROM sessions').get() as { n: number };
+        expect(count.n).toBe(12);
+      } finally {
+        copy.close();
+      }
+    } finally {
+      closeDb(writer);
+    }
   });
 });
 

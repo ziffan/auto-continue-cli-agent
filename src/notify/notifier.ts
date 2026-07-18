@@ -156,13 +156,12 @@ export function notificationForEvent(input: AppendEventInput): Notification | nu
   return null;
 }
 
-// ── Proximity monitor (I-8) — engine murni, BELUM di-wire ──────────────────────────────────────
+// ── Proximity monitor (I-8) ──────────────────────────────────────────────────────────────────
 // Ambang "mendekati limit" dari snapshot usage-probe (bukan transisi event). Meniru default Claude
 // Code sendiri: ~90% window 5-jam / ~75% window mingguan (G-15). agy = per-bucket weekly+5h
-// (`parseAgyQuotaSummary`, G-31) atau per-model 5-jam (`parseAgyUserStatus`). CATATAN wiring (belum
-// dilakukan, slice terpisah): proximity baru bermakna saat sesi AKTIF dipakai → butuh loop probe
-// PERIODIK saat RUNNING; probe yang ada hanya berjalan saat reset (usedFraction rendah di sana).
-// I-8 = "engine ready, wiring deferred".
+// (`parseAgyQuotaSummary`, G-31) atau per-model 5-jam (`parseAgyUserStatus`). WIRING: `usage-monitor.ts`
+// (I-17) memanggil ini dari loop probe PERIODIK saat sesi RUNNING. Dedup rising-edge (`createProximityGate`)
+// mencegah spam — tanpanya proximity ter-deliver TIAP tick (~2 mnt) selama sesi bertahan di atas ambang.
 
 export interface ProximityThresholds {
   /** Ambang window jangka-pendek (5-jam/session). Default 0.90 (meniru Claude Code). */
@@ -179,17 +178,16 @@ function isWeeklyKind(kind: string): boolean {
   return /week/i.test(kind) || kind === 'seven_day';
 }
 
-/**
- * Pure: dari `UsageSnapshot` (hasil usage-probe), hasilkan notifikasi "mendekati limit" untuk tiap
- * window yang `usedFraction` sudah menembus ambang tapi belum penuh. `usedFraction === 1` (exhausted)
- * = wilayah LIMIT_HIT (di-surface jalur lain) → dilewati. Body hanya dari field terkontrol (tool,
- * kind/window, persen) — tak ada PII (G-9). Tak menyentuh I/O; caller yang mengirim ke `deliver`.
- */
-export function proximityNotifications(
-  snapshot: UsageSnapshot,
-  thresholds: ProximityThresholds = DEFAULT_PROXIMITY_THRESHOLDS,
-): Notification[] {
-  const out: Notification[] = [];
+/** Kandidat proximity (window yang menembus ambang & belum penuh) + kunci stabil per (tool, kind)
+ *  untuk dedup rising-edge. Threshold logic tinggal SATU tempat di sini — dipakai fungsi stateless
+ *  `proximityNotifications` DAN `createProximityGate` (jangan duplikasi kalibrasi ambang). */
+interface ProximityCandidate {
+  key: string;
+  notification: Notification;
+}
+
+function proximityCandidates(snapshot: UsageSnapshot, thresholds: ProximityThresholds): ProximityCandidate[] {
+  const out: ProximityCandidate[] = [];
   for (const limit of snapshot.limits) {
     if (limit.usedFraction >= 1) continue; // exhausted = LIMIT_HIT, bukan proximity.
     const weekly = isWeeklyKind(limit.kind);
@@ -197,14 +195,64 @@ export function proximityNotifications(
     if (limit.usedFraction < threshold) continue;
     const pct = Math.round(limit.usedFraction * 100);
     out.push({
-      event: 'PROXIMITY',
-      level: 'warn',
-      title: 'Approaching usage limit',
-      body: `${snapshot.tool} ${weekly ? 'weekly' : '5h'} usage at ${pct}% (${limit.kind}).`,
-      sessionId: null,
+      key: `${snapshot.tool}::${limit.kind}`,
+      notification: {
+        event: 'PROXIMITY',
+        level: 'warn',
+        title: 'Approaching usage limit',
+        body: `${snapshot.tool} ${weekly ? 'weekly' : '5h'} usage at ${pct}% (${limit.kind}).`,
+        sessionId: null,
+      },
     });
   }
   return out;
+}
+
+/**
+ * Pure & STATELESS: dari `UsageSnapshot` (hasil usage-probe), hasilkan notifikasi "mendekati limit"
+ * untuk tiap window yang `usedFraction` sudah menembus ambang tapi belum penuh. `usedFraction === 1`
+ * (exhausted) = wilayah LIMIT_HIT (di-surface jalur lain) → dilewati. Body hanya dari field terkontrol
+ * (tool, kind/window, persen) — tak ada PII (G-9). Tak menyentuh I/O. **Tanpa dedup** — pemanggil
+ * periodik (usage-monitor) HARUS pakai `createProximityGate` supaya tak spam tiap tick.
+ */
+export function proximityNotifications(
+  snapshot: UsageSnapshot,
+  thresholds: ProximityThresholds = DEFAULT_PROXIMITY_THRESHOLDS,
+): Notification[] {
+  return proximityCandidates(snapshot, thresholds).map((c) => c.notification);
+}
+
+/** Gate proximity STATEFUL (rising-edge dedup, I-8): `evaluate(snapshot)` hanya mengembalikan
+ *  notifikasi untuk window yang BARU melewati ambang sejak terakhir di-report. Window yang turun di
+ *  bawah ambang / reset / menjadi exhausted → state-nya di-clear sehingga crossing berikutnya
+ *  re-notify. Dipakai `usage-monitor.ts` (satu gate hidup lintas-tick). State per (tool, kind). */
+export interface ProximityGate {
+  evaluate(snapshot: UsageSnapshot): Notification[];
+}
+
+export function createProximityGate(
+  thresholds: ProximityThresholds = DEFAULT_PROXIMITY_THRESHOLDS,
+): ProximityGate {
+  const notified = new Set<string>(); // key `${tool}::${kind}` yang sedang di atas ambang & sudah di-report.
+  return {
+    evaluate(snapshot: UsageSnapshot): Notification[] {
+      const candidates = proximityCandidates(snapshot, thresholds);
+      const currentKeys = new Set(candidates.map((c) => c.key));
+      const out: Notification[] = [];
+      for (const c of candidates) {
+        if (notified.has(c.key)) continue; // sudah di-report pada episode crossing ini → suppress (anti-spam).
+        notified.add(c.key);
+        out.push(c.notification);
+      }
+      // Clear key milik TOOL ini yang tak lagi di atas ambang → crossing berikutnya re-notify.
+      // Scope per-tool: snapshot per-tool; jangan sentuh state tool lain.
+      const prefix = `${snapshot.tool}::`;
+      for (const key of [...notified]) {
+        if (key.startsWith(prefix) && !currentKeys.has(key)) notified.delete(key);
+      }
+      return out;
+    },
+  };
 }
 
 /** Format satu baris out-of-band untuk sink stderr. */

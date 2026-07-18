@@ -124,6 +124,28 @@ describe('usage-monitor', () => {
     expect(deliver.mock.calls[0]?.[0]?.event).toBe('PROXIMITY');
   });
 
+  it('proximity dedup (I-8): sesi bertahan di atas ambang lintas TICK → deliver hanya SEKALI (bukan tiap tick)', async () => {
+    // Regresi anti-spam: sebelum gate, tiap runOnce (tiap ~2 mnt) men-deliver PROXIMITY selama sesi
+    // masih di atas ambang → puluhan notif identik. Gate persists lintas-tick di monitor.
+    const snap = snapshot('claude', 0.95);
+    const deliver = vi.fn<(n: Notification) => void>();
+    const monitor = createUsageMonitor(
+      baseDeps({
+        listRunning: () => [makeSession({ id: 's1', tool: 'claude', pid: 1 })],
+        probeFor: () => Promise.resolve(snap),
+        deliver,
+      }),
+    );
+
+    await monitor.runOnce();
+    await monitor.runOnce();
+    await monitor.runOnce();
+
+    // Tiga tick di atas ambang, hanya satu notif PROXIMITY (crossing pertama).
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(deliver.mock.calls[0]?.[0]?.event).toBe('PROXIMITY');
+  });
+
   it('proximity: usedFraction 0.5 (below threshold) does not deliver, but still saves the snapshot', async () => {
     const snap = snapshot('claude', 0.5);
     const saveSnapshot = vi.fn();

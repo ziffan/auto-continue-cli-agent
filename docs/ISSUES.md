@@ -257,12 +257,25 @@ lulus, verifikasi **session-0 PTY** dgn spawn `claude` sungguhan. Keduanya butuh
 **Sumber:** probe sekali-pakai 17 Jul (`scratchpad/probe/`, di luar repo, read-only tanpa mutasi sistem — dibuktikan
 `resolvedDbExists:false`); `sample-allOptions.xml` WinSW v2.12.0; Microsoft Learn `LoadUserProfile`.
 
-### I-32 — Backup one-shot vs daemon LIVE: race `wal_checkpoint(TRUNCATE)`+`copyFileSync` bisa hasilkan salinan korup [P2, tutup saat M5.2 LIVE / wiring backup]
+### I-32 — Backup one-shot vs daemon LIVE: race `wal_checkpoint(TRUNCATE)`+`copyFileSync` bisa hasilkan salinan korup [P2 ✅ DITUTUP 18 Jul — online backup API]
+**✅ RESOLVED (18 Jul, Opus inline Tier-1, 621 test).** `backupDatabase` diubah dari sinkron
+(`wal_checkpoint(TRUNCATE)`+`copyFileSync` file-utama) ke **async SQLite online backup API** (`db.backup(dest)`,
+better-sqlite3 12.11.1) — salinan page-by-page dengan lock benar, **concurrency-safe by design** → race copy-vs-checkpoint
+(risiko b) lenyap **by construction**. Koneksi sumber tetap terbuka selama transfer, ditutup di `finally`; `integrity_check`
+fail-safe dipertahankan; `pruneSnapshots` tak berubah (tetap sinkron, pure fs). Caller diperbarui: `scripts/backup.js`
+(top-level await ESM), `test/backup.test.ts` (semua call `await`; error-path `rejects.toThrow`). **+1 test** (T5: backup saat
+koneksi WAL kedua aktif → salinan integrity-ok memuat semua baris ter-commit). **Catatan verifikasi jujur (G-53):** race
+korupsi lama = nondeterministik → **tak bisa jadi negative-control keras**; uji empiris menunjukkan pendekatan lama pun
+lolos T5 di kasus writer-idle (checkpoint sempat flush) → T5 = **scenario/kapabilitas** (bukti path baru jalan), bukan bukti
+path lama gagal. Nilai fix tetap nyata (menghapus race by construction). **Sumber:** tier-1 review M5.1/M5.2; implementasi 18 Jul.
+
+<details><summary>Konteks temuan asli</summary>
 **Konteks:** M5.1/M5.2 engine `backupDatabase` membuka **koneksi kedua** ke `acca.db`, `wal_checkpoint(TRUNCATE)`, lalu `copyFileSync` file utama. Aman untuk **koneksi tunggal** (sandbox test, CLI one-shot tanpa daemon). Tapi `scripts/backup.js` dijadwalkan jalan **saat daemon HIDUP** memegang koneksinya sendiri (mode WAL) → dua risiko:
 - (a) Committed-but-not-checkpointed frames di WAL daemon tak masuk salinan → salinan sedikit basi (RPO gap, ≤beberapa txn — diterima R-6).
 - (b) **Lebih serius:** bila checkpoint daemon menulis ke file utama SAAT `copyFileSync` membaca → salinan bisa **korup** (half-written).
 **Fail-safe yang ADA:** `integrity_check` pada salinan → korup → `BackupError` → cycle backup itu GAGAL (ter-log, exit 1), **tak ada file korup menyamar sebagai backup baik**. Jadi bukan silent-corrupt; dampak = occasional missed cycle di bawah beban tulis konkuren.
 **Remedi (saat M5.2 LIVE / wiring backup):** upgrade mekanisme salin ke **SQLite online backup API** (`better-sqlite3` `db.backup(dest)`) — concurrency-safe by design (page-by-page dengan lock benar), hilangkan race. Sudah di-flag komentar `backup.ts` sejak M5.1. Butuh `backupDatabase` async (atau varian async terpisah untuk jalur daemon). **Verifikasi LIVE:** jalankan backup berulang saat daemon aktif menulis → integrity_check konsisten OK. **Sumber:** tier-1 review M5.1/M5.2 (Opus), 17 Jul.
+</details>
 
 ### F-1 — RC-1 memperkenalkan loop re-spawn (continue-job landing di sesi hasil-resume yang exit cepat) [P2] ✅ (16 Jul, Opsi B guard)
 **RESOLVED (16 Jul, Opus inline Tier-1, keputusan owner = Opsi B tanpa migrasi).** Guard di cabang exited
@@ -499,7 +512,22 @@ state/jadwal, bukan blok bukti): **G-37 re-fire palsu → sesi ter-LIMIT_HIT pal
 → probe salah +24 jam (I-30)**. `cli_session_id` CC via `hook_sessionstart` (I-20/I-23) juga re-confirmed live.
 **Sumber:** live-verify full-loop 16 Jul.
 
-### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2, target M4/US-13] — ENGINE READY (10 Jul), wiring→I-17
+### I-8 — Monitor proaktif "mendekati limit" (proximity) dari usage-probe [P2 ✅ DITUTUP 18 Jul — wiring I-17 + dedup rising-edge]
+**✅ RESOLVED (18 Jul, Opus inline Tier-1, 621 test).** Dua bagian: **(1) Wiring (I-17) sudah ada** — `usage-monitor.ts`
+(engine loop probe periodik) + `createUsageMonitor` di `supervisor.ts` (opt-in `startUsageMonitor`) + `daemon.ts` menyalakan
+(`startUsageMonitor: true`, interval `DEFAULT_USAGE_PROBE_INTERVAL_MS`=120s) + 2 file test (`usage-monitor.test.ts` engine,
+`usage-monitor-wiring.test.ts` integrasi supervisor↔probe↔meta↔notify). Ini **sudah ter-commit** sebelum sesi ini; ISSUES
+belum ditandai (docs drift) → dikoreksi sekarang. **(2) Gap nyata ditutup — spam notif (G-54):** `proximityNotifications`
+stateless di-deliver **tiap tick** selama sesi bertahan di atas ambang (sesi 1 jam @95% → ~30 notif identik). Fix:
+**`createProximityGate`** (rising-edge dedup, state per `(tool, kind)`) — notif hanya saat window BARU melewati ambang;
+turun/reset/exhausted → clear key (per-tool scoped) → crossing berikutnya re-notify. Satu gate hidup lintas-tick di monitor.
+Threshold logic tetap SATU tempat (`proximityCandidates`, dipakai fungsi stateless & gate). **+5 test** (4 gate: crossing→notif,
+repeat→suppress, drop-recross→re-notify, exhausted-clear, per-tool/kind independensi; 1 monitor multi-tick dedup). **Negative
+control terbukti** (bypass gate → deliver 3× di test multi-tick). Firewall G-9 utuh (body tetap tool/kind/persen). US-13
+(prediksi proaktif) + indikator proximity di `acca status` tetap backlog terpisah (bukan bagian I-8). **Sumber:** wiring I-17
+(ter-commit) + gap spam ditutup 18 Jul.
+
+<details><summary>Konteks temuan asli</summary>
 Claude Code menampilkan warning ~90% (window 5-jam) & ~75% (mingguan) di terminal, tapi itu **UI-only,
 tak di-persist** (G-15) → jangan scrape. Sinyalnya sudah tersedia via usage-probe: `usedFraction` (parser
 M3c). **ENGINE SELESAI (10 Jul, `src/notify/notifier.ts`):** `proximityNotifications(snapshot, thresholds)`
@@ -508,6 +536,7 @@ MURNI — ambang default **0.90 five_hour / 0.75 weekly** (meniru CC), klasifika
 body tanpa PII (G-9). 6 test cabang hijau. **WIRING DITUNDA → I-17:** proximity baru bermakna saat sesi AKTIF
 dipakai; probe yang ada hanya jalan saat reset (usedFraction rendah di sana) → butuh loop probe periodik saat
 RUNNING. Basis fitur US-13 (prediksi proaktif, backlog) + indikator proximity di `acca status` (M4 status-UX).
+</details>
 
 ### I-7 — Skema agy `GetUserStatus` direkonsiliasi ke respons LIVE Ubuntu (5 Jul) [P3] ✅ (live-verify)
 **RESOLVED (5 Jul, live Ubuntu 24.04 / agy 1.0.16):** GetUserStatus ditembak dari sesi agy NYATA ber-PTY → HTTP 200.

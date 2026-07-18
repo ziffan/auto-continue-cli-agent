@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AppendEventInput, EventsRepo } from '../src/store/repositories/events.js';
 import type { UsageSnapshot } from '../src/shared/types.js';
 import {
+  createProximityGate,
   DEFAULT_PROXIMITY_THRESHOLDS,
   formatNotification,
   notificationForEvent,
@@ -188,6 +189,66 @@ describe('proximityNotifications (I-8) — engine murni', () => {
 
   it('default threshold = 90/75 (meniru Claude Code, G-15)', () => {
     expect(DEFAULT_PROXIMITY_THRESHOLDS).toEqual({ fiveHour: 0.9, weekly: 0.75 });
+  });
+});
+
+describe('createProximityGate (I-8) — dedup rising-edge', () => {
+  const snap = (limits: UsageSnapshot['limits'], tool: UsageSnapshot['tool'] = 'claude'): UsageSnapshot => ({
+    tool,
+    limits,
+    capturedAt: 0,
+  });
+
+  it('crossing pertama → notif; tetap di atas ambang di tick berikutnya → SUPPRESS (anti-spam)', () => {
+    const gate = createProximityGate();
+    const first = gate.evaluate(snap([{ kind: 'five_hour', usedFraction: 0.92, resetAt: null }]));
+    expect(first).toHaveLength(1);
+    expect(first[0]?.event).toBe('PROXIMITY');
+    // Tick berikutnya, masih 0.92 (bahkan naik ke 0.95) → tak di-report lagi.
+    expect(gate.evaluate(snap([{ kind: 'five_hour', usedFraction: 0.92, resetAt: null }]))).toHaveLength(0);
+    expect(gate.evaluate(snap([{ kind: 'five_hour', usedFraction: 0.95, resetAt: null }]))).toHaveLength(0);
+  });
+
+  it('turun di bawah ambang lalu naik lagi → re-notify (state di-clear saat drop)', () => {
+    const gate = createProximityGate();
+    expect(gate.evaluate(snap([{ kind: 'five_hour', usedFraction: 0.92, resetAt: null }]))).toHaveLength(1);
+    // Drop di bawah ambang (reset window) → clear state.
+    expect(gate.evaluate(snap([{ kind: 'five_hour', usedFraction: 0.3, resetAt: null }]))).toHaveLength(0);
+    // Naik lagi menembus ambang → crossing BARU → notif lagi.
+    expect(gate.evaluate(snap([{ kind: 'five_hour', usedFraction: 0.91, resetAt: null }]))).toHaveLength(1);
+  });
+
+  it('exhausted (usedFraction=1) meng-clear state → setelah reset & naik lagi, re-notify', () => {
+    const gate = createProximityGate();
+    expect(gate.evaluate(snap([{ kind: 'five_hour', usedFraction: 0.92, resetAt: null }]))).toHaveLength(1);
+    // Menembus 1 (exhausted, wilayah LIMIT_HIT) → bukan kandidat → state ter-clear.
+    expect(gate.evaluate(snap([{ kind: 'five_hour', usedFraction: 1, resetAt: null }]))).toHaveLength(0);
+    // Reset lalu naik lagi → crossing baru.
+    expect(gate.evaluate(snap([{ kind: 'five_hour', usedFraction: 0.93, resetAt: null }]))).toHaveLength(1);
+  });
+
+  it('window & tool independen: dedup per (tool, kind), tak saling menutup', () => {
+    const gate = createProximityGate();
+    // Dua window claude sekaligus (5h + weekly) → 2 notif pada crossing pertama.
+    const both = gate.evaluate(
+      snap([
+        { kind: 'five_hour', usedFraction: 0.92, resetAt: null },
+        { kind: 'weekly_all', usedFraction: 0.8, resetAt: null },
+      ]),
+    );
+    expect(both).toHaveLength(2);
+    // Ulang keduanya → suppress; TAPI tool berbeda (agy) yang menembus → notif independen.
+    expect(
+      gate.evaluate(
+        snap([
+          { kind: 'five_hour', usedFraction: 0.92, resetAt: null },
+          { kind: 'weekly_all', usedFraction: 0.8, resetAt: null },
+        ]),
+      ),
+    ).toHaveLength(0);
+    expect(gate.evaluate(snap([{ kind: '5h', usedFraction: 0.95, resetAt: null }], 'antigravity'))).toHaveLength(1);
+    // Evaluate agy TAK meng-clear state claude (snapshot per-tool; claude tetap ter-suppress).
+    expect(gate.evaluate(snap([{ kind: 'five_hour', usedFraction: 0.92, resetAt: null }]))).toHaveLength(0);
   });
 });
 

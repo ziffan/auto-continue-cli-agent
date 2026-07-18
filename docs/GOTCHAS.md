@@ -812,12 +812,40 @@ exit → repetisi restart. **Terverifikasi LIVE:** parent=conhost, `EnumWindows`
 berulang. **Alternatif ditolak:** VBScript+`wscript.exe` (GUI-subsystem, proven no-flash) — **VBScript deprecated** Win11 FoD;
 conhost native + tak-deprecated dipilih. **Revisit bila** `--headless` hilang/berubah di Windows mendatang. **Sumber:** M5.5 LIVE 18 Jul.
 
+## Backup / Notifier (I-32 / I-8)
+
+### G-53 — SQLite online backup API (`db.backup()`): koneksi sumber WAJIB tetap terbuka saat transfer + dir tujuan harus ada; race korupsi lama tak bisa jadi negative-control deterministik
+**Konteks (I-32):** upgrade `backupDatabase` dari `wal_checkpoint(TRUNCATE)`+`copyFileSync` (rawan salinan half-written
+saat daemon menulis konkuren) ke online backup API async `db.backup(dest)` (page-by-page, concurrency-safe).
+**Jebakan mekanis better-sqlite3 12.x:** (a) `db.backup()` membaca dari **koneksi sumber yang harus TETAP TERBUKA** selama
+`await`-nya berjalan — "optimasi" menutup sumber lebih awal mematahkan backup. Tutup sumber di `finally` **setelah** await
+resolve. (b) `db.backup()` **melempar `TypeError`** bila direktori tujuan belum ada (`fsAccess(dirname)` gagal) → `mkdirSync`
+target **sebelum** memanggil. (c) API-nya `async` → mengubah `backupDatabase` jadi Promise; caller ikut (`scripts/backup.js`
+top-level await ESM; test `await expect(...).rejects.toThrow`).
+**Jebakan verifikasi (jujur):** kegagalan yang di-fix (korupsi copy-vs-checkpoint) = **race nondeterministik** → **tak bisa
+dibikin negative-control keras**. Uji empiris: dgn writer WAL idle, pendekatan LAMA pun menangkap semua baris (checkpoint
+sempat flush; `log:0`). Jadi test concurrency (T5) = **scenario/kapabilitas** (bukti path baru jalan dgn koneksi WAL kedua
+aktif + integrity ok), **bukan** bukti path lama gagal. Jangan klaim "negative-control terbukti" untuk fix race semacam ini.
+**Sumber:** I-32, sesi 18 Jul.
+
+### G-54 — Engine notifikasi STATELESS lolos unit-test (dipanggil 1×) tapi caller PERIODIK menyingkap spam (fire tiap tick)
+**Jebakan:** `proximityNotifications` (pure, stateless) lolos semua unit-test karena tiap test memanggilnya **sekali**. Tapi
+`usage-monitor` memanggilnya **tiap tick (~2 mnt)** selama sesi RUNNING → selama `usedFraction` bertahan di atas ambang,
+notifikasi **identik ter-deliver tiap tick** (sesi 1 jam di 95% → ~30 notif). Test per-panggilan **tak pernah** melihat ini —
+perilaku muncul hanya dari **wiring periodik**. **Fix:** gate STATEFUL `createProximityGate` (rising-edge dedup, state per
+`(tool, kind)`): notif hanya saat window **BARU** melewati ambang; turun di bawah / reset / exhausted → clear key → crossing
+berikutnya re-notify. Satu gate hidup lintas-tick di monitor. Clear di-scope **per-tool** (snapshot per-tool; jangan wipe
+state tool lain). **Pelajaran umum:** engine murni yang di-drive loop periodik butuh test **multi-tick** — "pure + lolos
+per-call" tak menjamin perilaku waktu-nyata. Negative control terbukti (bypass gate → deliver 3× di test multi-tick).
+**Sumber:** I-8 wiring, sesi 18 Jul.
+
 ---
 
 ## Change Log
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-18 (backlog, I-32/I-8) | **G-53** baru (SQLite online backup API `db.backup()`: koneksi sumber wajib tetap terbuka saat transfer, dir tujuan harus ada [else TypeError], API async → caller ikut; race korupsi copy-vs-checkpoint yang di-fix = nondeterministik → test concurrency = scenario/kapabilitas, BUKAN negative-control keras — jangan overclaim). **G-54** baru (engine notifikasi stateless `proximityNotifications` lolos unit-test [dipanggil 1×] tapi caller periodik usage-monitor menyingkap spam [fire tiap ~2mnt di atas ambang]; fix = gate stateful rising-edge `createProximityGate`, clear per-tool; pelajaran: engine yang di-drive loop periodik butuh test multi-tick). Dari backlog I-32 + wiring I-8 (18 Jul). |
 | 2026-07-18 (M5.5 LIVE, no-flash) | **G-52** baru (`<Hidden>true>` Task Scheduler cuma sembunyikan task dari UI, BUKAN jendela proses; LIVE @logon nyata: `node` langsung dapat `PseudoConsoleWindow` TERLIHAT walau Hidden=true [mata owner + `EnumWindows`; `MainWindowHandle` naif lolos-palsu]. Fix: `conhost.exe --headless "<node>" "<entry>" daemon` → nol jendela + conhost=induk → IgnoreNew tetap sah + restart ~65s; `Start-ScheduledTask` on-demand mereproduksi jendela → iterasi murah tanpa logout berulang. VBScript+wscript ditolak [deprecated]). Dari M5.5 LIVE 18 Jul (logon nyata). |
 | 2026-07-18 (M5.5 LIVE, Task Scheduler) | **G-49** baru (`RestartOnFailure` Task Scheduler TAK andal me-restart daemon di-kill — LIVE: `taskkill /F` → nol restart 100s walau `Interval=PT1M Count=3`; pakai **watchdog repetisi** `LogonTrigger`+`Repetition PT1M`+`IgnoreNew` → restart ~61s; `<Repetition>` WAJIB sebelum `<Enabled>`). **G-50** baru (XML comment tak boleh muat `--`; naive tag-balance lolos, `System.Xml`/`Register-ScheduledTask` menolak → task gagal register; gate diperkuat cek `--`-in-comment; ketahuan hanya saat jalankan parser sungguhan = I-34). **G-51** baru (`git checkout -- <file>` tak bisa revert file untracked → negative-control break menumpuk; pakai backup `.bak` atau tulis-ulang). Dari M5.5 LIVE 18 Jul (Win 11). |
 | 2026-07-17 (M5.4 LIVE, systemd) | **G-47** baru (`Restart=on-failure` TAK restart pada exit bersih SIGTERM→exit 0; systemd anggap SIGTERM/SIGINT/SIGHUP/SIGPIPE + exit0 = sukses → uji auto-restart WAJIB SIGKILL, verifikasi `NRestarts`+PID baru; `Restart=always` bukan "fix" — melawan stop manual). **G-48** baru (`sed s\|<NODE>\|…\|g` global juga menggarabl token placeholder yang muncul di komentar prosa template → token `<X>` hanya di baris nilai, jangan di komentar; gate render tetap hijau krn tersubstitusi → tak ketahuan). Dari M5.4 LIVE 17 Jul (Ubuntu, systemd 255). |
