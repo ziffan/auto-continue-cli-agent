@@ -2,14 +2,15 @@
 // per-tool secara berkala, menyimpan snapshot terbaru & meneruskan notifikasi proximity (I-8).
 // Engine MURNI-INJECTABLE: timer (`setTimer`/`clearTimer`), sumber sesi aktif (`listRunning`), probe
 // (`probeFor`), penyimpanan snapshot (`saveSnapshot`), sink notifikasi (`deliver`) — semua DISUNTIK
-// dari luar (supervisor.ts men-wire di slice terpisah). Pola timer/re-entry-guard meniru
-// `scheduler.ts` (M3b) 1:1 supaya konsisten & fake-timer-testable tanpa vitest fake timers global.
+// dari luar (supervisor.ts men-wire; produksi `acca daemon` menyalakan via `startUsageMonitor`).
+// Pola timer/re-entry-guard meniru `scheduler.ts` (M3b) 1:1 supaya konsisten & fake-timer-testable.
+// Dedup proximity (rising-edge) lewat `createProximityGate` yang hidup LINTAS-tick (anti-spam I-8).
 //
 // FIREWALL (G-9, ADR-008/013): monitor TAK PERNAH menyurface field lain dari respons probe selain
-// lewat `proximityNotifications` (body sudah PII-safe: tool/kind/persen) dan `saveSnapshot`
-// (`UsageSnapshot` terstruktur). Tak ada log/echo field mentah probe di modul ini.
+// lewat gate proximity (body sudah PII-safe: tool/kind/persen) dan `saveSnapshot` (`UsageSnapshot`
+// terstruktur). Tak ada log/echo field mentah probe di modul ini.
 
-import { DEFAULT_PROXIMITY_THRESHOLDS, proximityNotifications, type NotificationDeliver, type ProximityThresholds } from '../notify/notifier.js';
+import { createProximityGate, DEFAULT_PROXIMITY_THRESHOLDS, type NotificationDeliver, type ProximityThresholds } from '../notify/notifier.js';
 import type { Session, Tool, UsageSnapshot } from '../shared/types.js';
 import type { TimerHandle } from './scheduler.js';
 
@@ -56,6 +57,10 @@ function pickRepresentatives(sessions: Session[]): Map<Tool, Session> {
 export function createUsageMonitor(deps: UsageMonitorDeps): UsageMonitor {
   const { intervalMs, setTimer, clearTimer, listRunning, probeFor, saveSnapshot, deliver, onError, thresholds } = deps;
 
+  // Satu gate proximity hidup LINTAS-tick (I-8): dedup rising-edge — tanpa ini proximity ter-deliver
+  // tiap tick (~2 mnt) selama sesi bertahan di atas ambang → spam notif.
+  const proximityGate = createProximityGate(thresholds ?? DEFAULT_PROXIMITY_THRESHOLDS);
+
   let current: TimerHandle | undefined;
   let started = false; // arm state: true selama monitor "hidup" (di antara start()/stop()).
   let running = false; // re-entry guard: satu runOnce/tick in-flight pada satu waktu.
@@ -67,7 +72,7 @@ export function createUsageMonitor(deps: UsageMonitorDeps): UsageMonitor {
         const snap = await probeFor(tool, session.pid ?? undefined);
         if (snap === null) continue; // tool tak punya kemampuan probe → skip diam.
         saveSnapshot(snap);
-        for (const n of proximityNotifications(snap, thresholds ?? DEFAULT_PROXIMITY_THRESHOLDS)) {
+        for (const n of proximityGate.evaluate(snap)) {
           deliver(n);
         }
       } catch (err) {

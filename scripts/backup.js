@@ -13,8 +13,9 @@
 //   ACCA_BACKUP_RETENTION_DAILY    representatif harian yang dipertahankan (default 30)
 import { backupDatabase } from '../dist/store/backup.js';
 
+// backupDatabase kini async (online backup API, I-32). Top-level await sah di ESM (Node 14.8+).
 try {
-  const result = backupDatabase();
+  const result = await backupDatabase();
   console.log(`acca backup ok: ${result.path} (pruned ${result.pruned.length})`);
 } catch (err) {
   console.error(`acca backup GAGAL: ${err instanceof Error ? err.message : String(err)}`);

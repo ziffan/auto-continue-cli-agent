@@ -1,5 +1,5 @@
 import DatabaseCtor from 'better-sqlite3';
-import { existsSync, mkdirSync, readdirSync, unlinkSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseInstance } from './db.js';
 import { backupDir as defaultBackupDir, dbPath as defaultDbPath } from '../shared/paths.js';
@@ -83,16 +83,18 @@ export function resolveBackupConfig(overrides?: Partial<BackupConfig>): BackupCo
   };
 }
 
-/** Checkpoint WAL DB sumber, salin ke snapshot ber-timestamp di `backupDir`, verifikasi
- * integritas salinan, lalu pangkas snapshot lama ke `retention` teratas.
+/** Salin DB sumber ke snapshot ber-timestamp di `backupDir` lewat **SQLite Online Backup API**
+ * (`db.backup()`), verifikasi integritas salinan, lalu pangkas snapshot lama ke `retention` teratas.
  *
- * CATATAN reviewer: DB disalin lewat `wal_checkpoint(TRUNCATE)` + `copyFileSync` sinkron —
- * konsisten untuk koneksi tunggal (sandbox test / CLI one-shot). Untuk daemon LIVE dengan
- * writer konkuren, upgrade ke online backup API async (`db.backup()`) adalah langkah lanjut
- * di M5.2/hardening (API publik ini sengaja SINKRON, konsisten pola `better-sqlite3` sinkron
- * di repo — `db.backup()` mengembalikan Promise sehingga tak dipakai di sini).
+ * CATATAN reviewer (I-32): salinan pakai online backup API async — page-by-page dengan lock benar,
+ * **concurrency-safe by design**. Ini menggantikan pendekatan lama `wal_checkpoint(TRUNCATE)` +
+ * `copyFileSync` sinkron yang, saat daemon LIVE memegang koneksi WAL-nya sendiri & menulis konkuren,
+ * bisa menghasilkan salinan **half-written/korup** (checkpoint daemon menulis file utama SAAT copy
+ * membaca). API online membaca snapshot konsisten melintasi WAL tanpa race — jadi `backupDatabase`
+ * kini `async` (`db.backup()` mengembalikan Promise). Koneksi sumber sengaja tetap TERBUKA selama
+ * transfer (backup membaca darinya); ditutup di `finally`. Fail-safe `integrity_check` dipertahankan.
  */
-export function backupDatabase(cfg?: Partial<BackupConfig>): BackupResult {
+export async function backupDatabase(cfg?: Partial<BackupConfig>): Promise<BackupResult> {
   const resolved = resolveBackupConfig(cfg);
   const { dbPath, retention } = resolved;
 
@@ -121,19 +123,13 @@ export function backupDatabase(cfg?: Partial<BackupConfig>): BackupResult {
   try {
     try {
       sourceDb = new DatabaseCtor(dbPath);
-      sourceDb.pragma('wal_checkpoint(TRUNCATE)');
+      // Online Backup API (I-32): salinan konsisten page-by-page — aman saat writer konkuren
+      // (daemon) memegang koneksi WAL. Menggantikan wal_checkpoint+copyFileSync (rawan half-write).
+      await sourceDb.backup(destPath);
     } catch (cause) {
-      throw new BackupError(`gagal checkpoint WAL database sumber: ${dbPath}`, { cause });
+      throw new BackupError(`gagal membuat online-backup database sumber: ${dbPath}`, { cause });
     } finally {
-      // Tutup sebelum copy (tak wajib secara data — checkpoint sudah TRUNCATE — tapi menghindari
-      // sharing-violation file lock di Windows saat copyFileSync membaca file yang masih terbuka).
       sourceDb?.close();
-    }
-
-    try {
-      copyFileSync(dbPath, destPath);
-    } catch (cause) {
-      throw new BackupError(`gagal menyalin database ke snapshot: ${destPath}`, { cause });
     }
 
     let copyDb: DatabaseInstance | undefined;
