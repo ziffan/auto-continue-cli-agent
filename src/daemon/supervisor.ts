@@ -385,6 +385,16 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
           });
           return 'done';
         }
+        // D-2 (audit keempat, 18 Jul — RD-2): latch via verify = transisi status seperti jalur latch
+        // lain → WAJIB menulis `status_change` (konsistensi audit-trail) — dan karena `events` di sini
+        // dibungkus withNotifications, user otomatis dinotifikasi LIMIT_HIT (AC-5; justru kasus
+        // "limit asli sempat tertutup snapshot basi" yang paling butuh disurface). Sebelumnya hanya
+        // `job_dispatch_done` (tak dipetakan Notifier) → satu-satunya jalur latch yang bisu.
+        events.append({
+          session_id: job.session_id,
+          type: 'status_change',
+          payload: { to: 'LIMIT_HIT', source: 'verify' },
+        });
         const scheduled = scheduleProbeForLimit(
           { sessionId: job.session_id, detectedAt: at, now: at },
           { sessions, jobs, events },

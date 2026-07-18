@@ -283,10 +283,20 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.kind).toBe('probe');
 
-    const done = eventsFor(database, 's-verify-latch').find(
+    const events = eventsFor(database, 's-verify-latch');
+    const done = events.find(
       (e) => e.type === 'job_dispatch_done' && (e.payload as { action: string }).action === 'verify_latched_real_limit',
     );
     expect(done).toBeDefined();
+
+    // D-2 (RD-2, audit keempat): latch via verify WAJIB menulis `status_change {to:LIMIT_HIT}` —
+    // konsistensi audit-trail + otomatis di-surface Notifier (mapping status_change→LIMIT_HIT sudah
+    // diuji di notifier.test.ts). Sebelumnya = satu-satunya jalur latch yang bisu.
+    const statusChange = events.find(
+      (e) => e.type === 'status_change' && (e.payload as { to?: string; source?: string }).to === 'LIMIT_HIT',
+    );
+    expect(statusChange).toBeDefined();
+    expect((statusChange?.payload as { source?: string }).source).toBe('verify');
   });
 
   it('verify: sesi sudah LIMIT_HIT (hook primer melatch di antara suppress & fire) → skip, probe TAK dipanggil', async () => {
@@ -357,6 +367,73 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     expect((done?.payload as { action: string; status: string }).action).toBe('skipped:probe_stale_status');
     expect((done?.payload as { action: string; status: string }).status).toBe('RUNNING');
     expect(events.find((e) => e.type === 'job_dispatch_error')).toBeUndefined();
+  });
+
+  // D-1 (audit keempat 18 Jul / RD-1 Opsi A) — test KOMPOSISI lifecycle: status dicapai lewat
+  // transisi repo NYATA (markLimitHit → markExited, urutan persis wrapper), BUKAN di-seed langsung.
+  // Kelas gap yang melahirkan D-1: semua test dispatch men-seed status akhir → interaksi
+  // markExited×guard-I-35 tak pernah teruji. Dua test ini mengunci semantik yang diputuskan owner.
+  it('D-1 komposisi (agy): LIMIT_HIT → exit BERSIH → probe fire → optimistic resume (BUKAN skip stale)', async () => {
+    const { db: database } = await setupAndFire({
+      sessionId: 's-d1-agy',
+      tool: 'antigravity',
+      procState: 'alive',
+      cwd: process.cwd(),
+      jobKind: 'probe',
+      status: 'RUNNING',
+      // Urutan kejadian nyata di wrapper: limit ter-latch, lalu user menutup CLI bersih (Ctrl-C).
+      beforeFire: (db2) => {
+        const sessions = createSessionsRepo(db2);
+        sessions.markLimitHit('s-d1-agy', { source: 'output', detectedAt: 500 });
+        sessions.markExited('s-d1-agy');
+      },
+    });
+
+    const session = createSessionsRepo(database).getById('s-d1-agy');
+    expect(session?.status).toBe('LIMIT_HIT'); // markExited TAK meng-clobber (RD-1 Opsi A)
+    expect(session?.proc_state).toBe('exited');
+
+    // Jalur ADR-019 hidup kembali: probe → optimistic resume (job `resume` di-enqueue), bukan skip.
+    const remaining = pendingJobs(database, 's-d1-agy');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.kind).toBe('resume');
+
+    const events = eventsFor(database, 's-d1-agy');
+    const done = events.find((e) => e.type === 'job_dispatch_done');
+    expect((done?.payload as { action: string }).action).toBe('optimistic_resume_agy_exited');
+    expect(events.find((e) => (e.payload as { action?: string }).action === 'skipped:probe_stale_status')).toBeUndefined();
+  });
+
+  it('D-1 komposisi (CC): LIMIT_HIT → exit BERSIH → probe fire → probeUsage jalan → enqueue resume', async () => {
+    const probeUsage = vi.fn(
+      (): Promise<UsageSnapshot> =>
+        Promise.resolve({ tool: 'claude', limits: [{ kind: 'session', usedFraction: 0.3, resetAt: null }], capturedAt: 0 }),
+    );
+    adapters.claude.probeUsage = probeUsage;
+
+    const { db: database } = await setupAndFire({
+      sessionId: 's-d1-cc',
+      procState: 'alive',
+      cwd: process.cwd(),
+      jobKind: 'probe',
+      status: 'RUNNING',
+      cliSessionId: '77777777-7777-7777-7777-777777777777',
+      beforeFire: (db2) => {
+        const sessions = createSessionsRepo(db2);
+        sessions.markLimitHit('s-d1-cc', { source: 'stopfailure', detectedAt: 500 });
+        sessions.markExited('s-d1-cc');
+      },
+    });
+
+    expect(probeUsage).toHaveBeenCalledTimes(1); // probe BERJALAN — bukan skipped:probe_stale_status
+
+    const session = createSessionsRepo(database).getById('s-d1-cc');
+    expect(session?.status).toBe('LIMIT_HIT');
+    expect(session?.proc_state).toBe('exited');
+
+    const remaining = pendingJobs(database, 's-d1-cc');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.kind).toBe('resume'); // dispatch berikutnya = resume-by-id (cabang exited)
   });
 
   it('probe: adapter.probeUsage throws → error event + retry', async () => {

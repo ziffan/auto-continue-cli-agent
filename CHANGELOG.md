@@ -17,6 +17,11 @@ versi mengikuti [SemVer](https://semver.org/). Belum ada rilis publik (`0.1.0`, 
 - **Gate artefak shippable lintas-OS (I-34)** — `test/systemd-unit.test.ts`, `test/shell-script.test.ts`, `test/ps1-encoding.test.ts`, `test/task-scheduler-xml.test.ts`: tiap `.service`/`.timer`/`.sh`/`.ps1`/Task-Scheduler-XML divalidasi (struktur/render/encoding/`--`-in-comment), bukan sekadar dibaca reviewer. Kelas I-34 kini tertutup untuk SEMUA artefak deploy.
 - **Security pass 5-permukaan (M5.3)** — data-minimize IPC `status` (T-L1), + suite `test/security-*.test.ts` (injection firewall wire-level, credential-read, egress whitelist, audit append-only). THREAT-MODEL §8.
 
+### Fixed
+
+- **Auto-resume sesi "limit lalu exit bersih" (D-1/RD-1 Opsi A, audit keempat 18 Jul)** — `markExited` tak lagi meng-clobber `LIMIT_HIT`→`EXITED` (status hanya transisi dari `RUNNING`; semantik = `markOrphanExited`). Sesi yang kena limit lalu ditutup bersih (Ctrl-C/quit) kini tetap di-resume-by-id otomatis di `reset_at` — regresi senyap dari interaksi guard I-35 (17 Jul) yang membuat jalur agy-exited (ADR-019) praktis tak terjangkau. +5 test (3 unit + 2 komposisi lifecycle), negative control terbukti.
+- **Notifikasi limit asli hasil konfirmasi `verify` (D-2/RD-2)** — latch via job `verify` kini menulis `status_change {to:LIMIT_HIT, source:verify}` → user dinotifikasi (AC-5) + audit-trail transisi konsisten di semua jalur latch. Sebelumnya satu-satunya jalur latch yang bisu.
+
 ### Changed
 
 - **Engine backup → SQLite online backup API (I-32)** — `backupDatabase` kini async (`db.backup`), concurrency-safe by design: menghapus race `wal_checkpoint`+`copyFileSync` yang bisa hasilkan salinan half-written saat daemon menulis konkuren. Caller (`scripts/backup.js`) pakai top-level await.

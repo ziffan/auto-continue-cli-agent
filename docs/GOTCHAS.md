@@ -765,6 +765,22 @@ dulu sebelum NC. Bila terlanjur: re-apply dari konteks (di sini semua edit masih
 marker `grep -c` + full check hijau). Verifikasi `git status` + `grep` marker setelah operasi git destruktif apa pun mid-sesi.
 **Sumber:** NC dedup I-35, sesi 18 Jul (kerja `process-wrapper.ts` sempat hilang, di-re-apply penuh).
 
+### G-57 — Transisi terminal tanpa guard status + test yang men-SEED status langsung = interaksi lifecycle tak pernah teruji (kelas D-1)
+**Jebakan (audit keempat, 18 Jul):** `markExited` menulis `status='EXITED'` **tanpa guard** — beda dari saudara-saudaranya
+(`markOrphanExited`/`markResumed`/`markBlocked`/`markRunningAfterInject` yang semua ber-guard). Sendirian ini "cuma"
+inkonsistensi; ia jadi **P1 senyap** saat komponen LAIN menambah guard membaca status itu (guard `probe_stale_status`
+I-35, 17 Jul): sesi `LIMIT_HIT` yang exit bersih ter-clobber `EXITED` → job probe di-skip → auto-resume mati **tanpa
+satu test pun merah** — karena SEMUA test dispatch men-seed status akhir langsung (`createSession({status:'LIMIT_HIT'})`),
+tak ada yang mencapai status lewat **urutan transisi nyata** (`markLimitHit → markExited → probe fire`). Dampak ekstra
+agy: id resume agy hanya tertangkap di exit bersih (G-36) → jalur exited ADR-019 praktis dead-code, juga tanpa test gagal.
+**Cara benar:** (a) setiap fungsi transisi state di repo **wajib guard status eksplisit** (default = preserve, bukan
+clobber; kalau clobber memang diinginkan, tulis alasannya); (b) untuk tiap pasangan produsen-transisi × konsumen-guard,
+sediakan minimal satu **test komposisi lifecycle** yang men-drive urutan transisi nyata, bukan seed status akhir —
+pola: harness `beforeFire` menjalankan `markLimitHit`+`markExited` lalu fire dispatch (lihat
+`supervisor-dispatch.test.ts` "D-1 komposisi"). (c) Saat menambah guard baru atas kolom status, audit SEMUA penulis
+kolom itu (`grep "SET status"`), jangan hanya jalur yang sedang dipikirkan. **Sumber:** D-1/RD-1 audit keempat
+(`docs/audit/AUDIT-2026-07-18-MENYELURUH.md` §2), fix 18 Jul.
+
 ---
 
 ## Deploy / systemd (M5.4)
@@ -869,6 +885,7 @@ per-call" tak menjamin perilaku waktu-nyata. Negative control terbukti (bypass g
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-18 (audit keempat, D-1/RD-1) | **G-57** baru (transisi terminal tanpa guard status [`markExited` clobber] + test yang men-seed status langsung = interaksi lifecycle tak teruji → D-1 P1 senyap: sesi LIMIT_HIT exit-bersih kehilangan auto-resume saat guard I-35 hadir, jalur agy-exited ADR-019 dead-code tanpa test merah. Aturan: transisi state wajib guard eksplisit [default preserve] + test komposisi lifecycle utk tiap pasangan transisi×guard + audit semua penulis kolom saat menambah guard). Dari audit keempat + fix RD-1 Opsi A (18 Jul). |
 | 2026-07-18 (I-35, job `verify`) | **G-55** baru (callback `onUsageContradiction` menyala PER BARIS output → enqueue `verify` polos = N job/episode pada prosa multi-literal [skenario inti I-35/I-36]; fix = guard `hasPendingKind` idempoten, satu verify/episode; test wajib >1 pemicu; kelas G-54 = dedup di titik AKSI bukan deteksi). **G-56** baru (`git checkout <tracked-file>` untuk buang edit NC sementara MENGHAPUS semua perubahan uncommitted file itu — bukan cuma baris NC; beda G-51 [untracked tak ter-revert] = ini over-revert tracked; fix = Edit-balik baris NC saja / stash dulu; verifikasi `git status`+`grep` marker pasca-git destruktif). Dari penutupan residual I-35 (probe verifikasi eksplisit), 18 Jul. |
 | 2026-07-18 (backlog, I-32/I-8) | **G-53** baru (SQLite online backup API `db.backup()`: koneksi sumber wajib tetap terbuka saat transfer, dir tujuan harus ada [else TypeError], API async → caller ikut; race korupsi copy-vs-checkpoint yang di-fix = nondeterministik → test concurrency = scenario/kapabilitas, BUKAN negative-control keras — jangan overclaim). **G-54** baru (engine notifikasi stateless `proximityNotifications` lolos unit-test [dipanggil 1×] tapi caller periodik usage-monitor menyingkap spam [fire tiap ~2mnt di atas ambang]; fix = gate stateful rising-edge `createProximityGate`, clear per-tool; pelajaran: engine yang di-drive loop periodik butuh test multi-tick). Dari backlog I-32 + wiring I-8 (18 Jul). |
 | 2026-07-18 (M5.5 LIVE, no-flash) | **G-52** baru (`<Hidden>true>` Task Scheduler cuma sembunyikan task dari UI, BUKAN jendela proses; LIVE @logon nyata: `node` langsung dapat `PseudoConsoleWindow` TERLIHAT walau Hidden=true [mata owner + `EnumWindows`; `MainWindowHandle` naif lolos-palsu]. Fix: `conhost.exe --headless "<node>" "<entry>" daemon` → nol jendela + conhost=induk → IgnoreNew tetap sah + restart ~65s; `Start-ScheduledTask` on-demand mereproduksi jendela → iterasi murah tanpa logout berulang. VBScript+wscript ditolak [deprecated]). Dari M5.5 LIVE 18 Jul (logon nyata). |
