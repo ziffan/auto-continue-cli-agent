@@ -51,6 +51,8 @@ function createManualTimer() {
 const originalClaudeProbeUsage = adapters.claude.probeUsage;
 // eslint-disable-next-line @typescript-eslint/unbound-method
 const originalClaudeResumeCmd = adapters.claude.resumeCmd;
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const originalAgyProbeUsage = adapters.antigravity.probeUsage;
 
 describe('supervisor real dispatch (M3d.5/6/7)', () => {
   let tempDir: string | undefined;
@@ -60,6 +62,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
   afterEach(() => {
     adapters.claude.probeUsage = originalClaudeProbeUsage;
     adapters.claude.resumeCmd = originalClaudeResumeCmd;
+    adapters.antigravity.probeUsage = originalAgyProbeUsage;
     if (db) {
       closeDb(db);
       db = undefined;
@@ -184,6 +187,38 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     const done = events.find((e) => e.type === 'job_dispatch_done');
     expect(done).toBeDefined();
     expect((done?.payload as { action: string }).action).toBe('usage_available_enqueue_resume');
+    // C-5: probe CC = real-time (HTTP) → TAK ditandai basi (marker khusus agy-alive).
+    expect((done?.payload as { reason?: string }).reason).toBeUndefined();
+  });
+
+  it('probe C-5: agy sesi ALIVE → resume di-enqueue TAPI ditandai reason ls_snapshot_stale (G-35)', async () => {
+    // Probe usage agy sesi-hidup = snapshot LS beku launch-time → keputusan "tersedia" berbasis data basi.
+    // Perilaku sama (enqueue resume, self-correcting R3) tapi audit-trail wajib jujur soal kebasian.
+    adapters.antigravity.probeUsage = vi.fn(
+      (): Promise<UsageSnapshot> =>
+        Promise.resolve({
+          tool: 'antigravity',
+          limits: [{ kind: 'session', usedFraction: 0.3, resetAt: null }],
+          capturedAt: 0,
+        }),
+    );
+
+    const { db: database } = await setupAndFire({
+      sessionId: 's-probe-agy-alive',
+      procState: 'alive',
+      cwd: process.cwd(),
+      jobKind: 'probe',
+      tool: 'antigravity',
+    });
+
+    const remaining = pendingJobs(database, 's-probe-agy-alive');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.kind).toBe('resume');
+
+    const events = eventsFor(database, 's-probe-agy-alive');
+    const done = events.find((e) => e.type === 'job_dispatch_done');
+    expect((done?.payload as { action: string }).action).toBe('usage_available_enqueue_resume');
+    expect((done?.payload as { reason?: string }).reason).toBe('ls_snapshot_stale');
   });
 
   it('probe: at least one limit >= 1 → retry, no resume job enqueued', async () => {

@@ -23,7 +23,7 @@
 > **Audit menyeluruh KETIGA 13 Jul (`docs/audit/AUDIT-2026-07-12-MENYELURUH.md`, merged PR #1) → C-1..C-8.**
 > Gate diverifikasi independen di Linux (388/388). **1 P1 baru: C-1 (resume-load ≠ continue) — MASUK gate keluar M3e.**
 > **Ditutup 13 Jul (sesi RC): C-1 (RC-1) ✅ + C-2 (RC-2 validasi UUID hook) ✅ + C-3 (RC-3 capturer last-wins) ✅**
-> (393 test). **Terbuka: C-4 (P2, proc_state basi retry-senyap → RC-4, sebelum M5), C-5/C-6/C-7 (P3).** C-8 (drift CONTEXT)
+> (393 test). **C-4 (RC-4) ✅ + C-6 ✅ + C-7 ✅ (17 Jul) + C-5 (RC-5) ✅ (18 Jul) → semua temuan audit ketiga TERTUTUP.** C-8 (drift CONTEXT)
 > dikoreksi. **Gate keluar M3e kini: HANYA I-15 live-verify actuation** (inject/resume asli, butuh limit+user).
 >
 > **Review independen RC-1..RC-3 (16 Jul, `docs/audit/AUDIT-RC-1-3-INDEPENDENT-2026-07-16.md`) → F-1..F-6.**
@@ -648,11 +648,17 @@ dispatch cek `proc_state==='alive' && pid && !isProcessAlive(pid)` → `markOrph
 pada catch generik (tutup KELUARGA retry-senyap). **Sumber:** audit ketiga C-4. **Rekomendasi:** sebelum M5 (daemon jalan berhari-hari).
 </details>
 
-### C-5 — Probe LS agy sesi ALIVE = snapshot launch-time beku (G-35) → gate `still_limited`/`usage_available` agy-alive berbasis data basi [P3] → RC-5
-ADR-019 menutup agy-**exited** (optimistic); agy-**alive** masih pura-pura probe-nya bermakna (self-correcting via
-inject→detect R3, tapi event `usage_available_enqueue_resume` menyesatkan audit-trail). **Remedi:** perlakukan agy-alive
-konsisten ADR-019 (skip probe stale → langsung enqueue resume di reset_at) ATAU minimal tandai `reason:'ls_snapshot_stale'`.
-**Sumber:** audit ketiga C-5, G-35.
+### C-5 — Probe LS agy sesi ALIVE = snapshot launch-time beku (G-35) → gate `still_limited`/`usage_available` agy-alive berbasis data basi [P3] ✅ (18 Jul, RC-5 — opsi "tandai basi")
+**Solusi (opsi minimal audit-trail jujur, BUKAN optimistic penuh):** cabang `probe` (`supervisor.ts`) — satu-satunya
+sesi non-CC yang lolos ke `adapter.probeUsage` = agy `alive` (agy `exited` sudah di-optimistic-resume di atas, ADR-019).
+Untuk agy-alive, event keputusan (`usage_available_enqueue_resume` / `still_limited`) kini menyertakan
+`reason:'ls_snapshot_stale'` → audit-trail jujur bahwa keputusan berbasis snapshot LS beku launch-time (G-35), bukan
+data real-time. **Perilaku DIBIARKAN** (self-correcting R3: sesi hasil-inject re-detect limit via output TUI G-19).
+**Opsi "optimistic penuh spt agy-exited" DITOLAK sengaja:** itu meng-inject sesi agy live-yang-mungkin-masih-limit =
+jalur actuation belum di-live-verify (kelas I-15) → risiko > nilai untuk P3. CC tak tersentuh (probe CC = HTTP
+api.anthropic.com real-time). **Payload `reason` = label literal terkontrol → firewall ADR-013 utuh.** **+1 test**
+(agy-alive → resume enqueued + `reason:'ls_snapshot_stale'`; CC path assert `reason` undefined = kunci distingsi).
+**NC terbukti:** marker dihapus → tepat 1 test C-5 merah, 32 lain hijau (isolasi). **Sumber:** audit ketiga C-5, G-35.
 
 ### C-6 — Pesan limit agy memuat reset eksplisit (`Resets in 4h31m7s`, G-19) tapi `extractResetHint` hanya kenali `in N hours` → jatuh ke backoff [P3] ✅ (17 Jul, autonomous-run)
 **RESOLVED (17 Jul, Opus inline Tier-1).** `ResetHint` diperluas `relativeMinutes`/`relativeSeconds`;

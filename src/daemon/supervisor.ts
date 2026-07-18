@@ -263,6 +263,14 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         // I-25: keputusan "kuota tersedia" pindah ke adapter (`isUsageAvailable`). CC = hanya window
         // mengikat (global + scoped-aktif) supaya limit model-scoped tak-terpakai tak memblokir selamanya;
         // adapter tanpa override (agy) = default `every(<1)` (dual-limit per grup, semua bucket mengikat).
+        // C-5 (G-35): satu-satunya sesi non-CC yang lolos ke sini = agy `alive` (agy `exited` sudah
+        // di-optimistic-resume di atas). probe usage agy sesi-hidup = snapshot Language Server BEKU
+        // launch-time (bukan real-time) → keputusan di bawah berbasis data BASI. Perilaku DIBIARKAN
+        // (self-correcting R3: sesi hasil-inject re-detect limit via output TUI, G-19) TAPI audit-trail
+        // WAJIB jujur bahwa sumbernya basi → tandai `reason:'ls_snapshot_stale'`. TIDAK diubah ke optimistic
+        // penuh (spt agy-exited): itu meng-inject sesi agy live-yang-mungkin-masih-limit = jalur actuation
+        // belum di-live-verify (kelas I-15). CC tak kena (probe CC = HTTP api.anthropic.com, real-time).
+        const agyAliveStaleProbe = session.tool === 'antigravity';
         const hasAvailable = adapter.isUsageAvailable
           ? adapter.isUsageAvailable(usage)
           : usage.limits.every((l) => l.usedFraction < 1);
@@ -271,7 +279,11 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
           events.append({
             session_id: job.session_id,
             type: 'job_dispatch_done',
-            payload: { jobId: job.id, action: 'usage_available_enqueue_resume' },
+            payload: {
+              jobId: job.id,
+              action: 'usage_available_enqueue_resume',
+              ...(agyAliveStaleProbe ? { reason: 'ls_snapshot_stale' } : {}),
+            },
           });
           return 'done';
         }
@@ -279,7 +291,11 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         events.append({
           session_id: job.session_id,
           type: 'job_dispatch_pending',
-          payload: { jobId: job.id, action: 'still_limited' },
+          payload: {
+            jobId: job.id,
+            action: 'still_limited',
+            ...(agyAliveStaleProbe ? { reason: 'ls_snapshot_stale' } : {}),
+          },
         });
         return 'retry';
       }

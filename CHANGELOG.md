@@ -20,6 +20,7 @@ versi mengikuti [SemVer](https://semver.org/). Belum ada rilis publik (`0.1.0`, 
 ### Fixed
 
 - **Auto-resume sesi "limit lalu exit bersih" (D-1/RD-1 Opsi A, audit keempat 18 Jul)** — `markExited` tak lagi meng-clobber `LIMIT_HIT`→`EXITED` (status hanya transisi dari `RUNNING`; semantik = `markOrphanExited`). Sesi yang kena limit lalu ditutup bersih (Ctrl-C/quit) kini tetap di-resume-by-id otomatis di `reset_at` — regresi senyap dari interaksi guard I-35 (17 Jul) yang membuat jalur agy-exited (ADR-019) praktis tak terjangkau. +5 test (3 unit + 2 komposisi lifecycle), negative control terbukti.
+- **Audit-trail probe agy sesi-hidup jujur soal kebasian (C-5/RC-5, audit ketiga)** — event keputusan probe untuk sesi agy `alive` (`usage_available_enqueue_resume`/`still_limited`) kini menyertakan `reason:'ls_snapshot_stale'` (probe LS agy sesi-hidup = snapshot beku launch-time, G-35 — bukan real-time). Perilaku tak berubah (self-correcting via inject→detect); hanya audit-trail yang berhenti menyesatkan. Opsi optimistic-resume penuh (spt agy-exited) ditolak: meng-inject sesi agy live-mungkin-masih-limit = jalur belum di-live-verify.
 - **Notifikasi limit asli hasil konfirmasi `verify` (D-2/RD-2)** — latch via job `verify` kini menulis `status_change {to:LIMIT_HIT, source:verify}` → user dinotifikasi (AC-5) + audit-trail transisi konsisten di semua jalur latch. Sebelumnya satu-satunya jalur latch yang bisu.
 
 ### Security
