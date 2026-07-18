@@ -42,10 +42,10 @@ describe('CLI dispatch (regresi root-action / help)', () => {
     expect(err!.code).toBe('commander.unknownCommand');
   });
 
-  it('semua subcommand terdaftar (run/status/daemon/log/__hook/web)', () => {
+  it('semua subcommand terdaftar (run/status/daemon/log/__hook/web/prune)', () => {
     // `hook` terdaftar sbg perintah internal TERSEMBUNYI `__hook` (I-23).
     const names = buildProgram().commands.map((c) => c.name());
-    for (const n of ['run', 'status', 'daemon', 'log', '__hook', 'web']) {
+    for (const n of ['run', 'status', 'daemon', 'log', '__hook', 'web', 'prune']) {
       expect(names).toContain(n);
     }
   });

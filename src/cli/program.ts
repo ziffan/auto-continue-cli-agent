@@ -3,6 +3,7 @@ import { registerDaemonCommand } from './commands/daemon.js';
 import { registerHookCommand } from './commands/hook.js';
 import { registerLogCommand } from './commands/log.js';
 import { registerRunCommand } from './commands/run.js';
+import { registerPruneCommand } from './commands/prune.js';
 import { registerStatusCommand } from './commands/status.js';
 import { registerWebCommand } from './commands/web.js';
 
@@ -27,5 +28,6 @@ export function buildProgram(): Command {
   registerLogCommand(program);
   registerHookCommand(program);
   registerWebCommand(program);
+  registerPruneCommand(program);
   return program;
 }
