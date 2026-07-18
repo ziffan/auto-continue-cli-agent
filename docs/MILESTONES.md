@@ -268,6 +268,38 @@ regex+entropy, ADR-013 §2) & **lib Telegram bot Node** (✅ `grammy` 1.44.0, AD
 di-LOCK** (3 Jul malam); butuh Notifier (M4). Sisa yang di-tune saat M-remote: regex/threshold redaksi eksak + test corpus.
 **Catatan:** ini milestone paling sensitif — tak dimulai sebelum tier prasyaratnya hijau dan gate terpenuhi.
 
+## M-web — Web UI monitor read-only (ADR-028, US-10)
+
+> **PRD+TRD di-lock 2026-07-18** (doc-first, skill `docs-first-spec` mode modul). ADR pengikat: **ADR-028**
+> (read-only localhost) di atas ADR-008/013 (read-only ⇒ nol aksi) + ADR-023/T-L1 (data-minimize). Gate
+> keamanan: **THREAT-MODEL §9** (T-W1..W6 + R-7). **Belum ada kode.**
+
+**PRD — apa & untuk siapa:** solo orchestrator ingin memantau usage/sesi/log acca di browser lokal tanpa
+terminal (US-10). Read-only murni; nol aksi kontrol (owner 18 Jul).
+
+**TRD — kontrak teknis (ADR-028):** `acca web [--port]` (opt-in, default `4599`, env `ACCA_WEB_PORT`) →
+`http.createServer` bind **`127.0.0.1` saja**. `GET /` = HTML self-contained (CSS+JS inline, poll ~5s,
+render `textContent`). `GET /api/status` = JSON dari **proyeksi ter-firewall yang SUDAH ADA**
+(`toSessionStatusView` + `formatEventLine`/allowlist + data `formatUsageLines`). `Host` non-loopback → **403**;
+method non-GET → **405**. Nol dep/framework; nol mutasi; nol aset eksternal.
+
+**Vertical slices:**
+- **M-web.1 — Monitor read-only end-to-end** **[SANDBOX-testable]**: `web/status-json.ts` (PURE — rakit
+  payload dari proyeksi ter-firewall) + `web/server.ts` (bind 127.0.0.1, routing GET /(page) + /api/status,
+  Host-guard 403, method-guard 405) + `web/page.ts` (HTML self-contained, fetch `/api/status` poll, render
+  textContent) + command `acca web`. **Selesai bila:** server hidup di port efemeral, `fetch('/api/status')`
+  → JSON **tanpa** `cli_session_id`/`cwd`/secret (test properti); `Host: evil.com` → 403; `POST /` → 405;
+  bind non-loopback DILARANG (assert host literal `127.0.0.1`); grep `page.ts` = nol URL eksternal.
+- **M-web.2 — `acca daemon --web` co-host** **[SANDBOX]** *(opsional, nilai kemudahan)*: mount server yang
+  sama di daemon (flag `--web`, port sama). **Selesai bila:** daemon dgn `--web` melayani `/api/status`;
+  tanpa flag = tak ada listener (default-off).
+
+**Selesai (milestone) bila:** **AC-W1..W4 lulus** + **security-review gate** (skill `milestone-wrapup`,
+persona security-review) terhadap **T-W1..T-W6** (THREAT-MODEL §9.3): proyeksi ter-firewall terverifikasi
+(nol `cli_session_id`/`cwd` di JSON kabel), Host-guard 403, method-guard 405, bind loopback-saja, HTML
+nol-aset-eksternal. Uji khusus: test data-minimize (JSON kabel), test Host-guard (DNS-rebinding), test
+method-guard, test self-contained (grep aset eksternal).
+
 ## M5 — Hardening + Deploy sebagai service
 
 > **STATUS: ✅ DITUTUP PARSIAL 2026-07-17 (Linux track lengkap & LIVE-verified; Windows ditunda).** Slice: **M5.1/M5.2

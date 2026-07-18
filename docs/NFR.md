@@ -12,6 +12,8 @@
 | Selisih reset_at → sesi lanjut kembali | ≤ 5 menit (lihat PROJECT.md metrik sukses) |
 | Overhead CPU/RAM daemon saat idle | < 1% CPU, < 80 MB RAM (muat di VPS 3,6 GB / node headless) |
 | Latensi `acca status` render | < 300 ms |
+| Latensi `GET /api/status` (Web UI, M-web) | < 300 ms (baca store read-only, sama kelas `acca status`) |
+| Muat awal halaman Web UI (`GET /`, lokal) | < 1 detik (HTML self-contained, nol aset eksternal) |
 
 ## Availability
 
@@ -70,10 +72,28 @@
   **wajib konfirmasi eksplisit** (human-in-the-loop, tak ada inject tanpa konfirmasi); egress output =
   redaksi rahasia + size-cap + opt-in per sesi; injection firewall (isi output = data, tak jadi aksi);
   rate-limit per sender. **THREAT-MODEL.md = gate wajib sebelum implementasi tier C.**
+- **Web UI monitor (M-web, ADR-028) — ingress lokal, bukan egress.** Membuka listener HTTP **`127.0.0.1` saja**
+  (loopback terjangkau proses lokal lain, kelas T-L1 → data-minimize = proyeksi ter-firewall, nol jalur data baru);
+  read-only GET; Host-guard anti-DNS-rebinding; halaman self-contained → **nol egress baru** (allowlist egress
+  tak berubah). Gate security-review M-web (THREAT-MODEL §9, T-W1..W6).
+
+## Web UI monitor (M-web, ADR-028)
+
+- **Opt-in, default mati.** `acca web [--port]` (default `4599`, env `ACCA_WEB_PORT`). Bukan bagian daemon default.
+- **Bind `127.0.0.1` SAJA** (hardcoded). LAN/`0.0.0.0` = ADR terpisah + auth (di luar v1).
+- **Read-only:** hanya `GET /` (HTML self-contained) + `GET /api/status` (JSON); method lain → **405**; nol mutasi.
+- **Nol jalur data baru:** `/api/status` = proyeksi ter-firewall yang SUDAH ADA (`toSessionStatusView` tanpa
+  `cli_session_id`/`cwd`, `formatEventLine` allowlist, `formatUsageLines` G-9). Endpoint tak singkap > IPC status.
+- **Nol egress baru:** halaman self-contained (CSS+JS inline, nol CDN/font/analytics). **Host-guard** `127.0.0.1`/
+  `localhost` → else 403 (DNS-rebinding). Render nilai sbg teks (anti-XSS).
+- **Isolasi availability:** server web opt-in, best-effort — **BUKAN** bagian SLA uptime daemon; crash web tak
+  mengganggu auto-resume (proses/jalur terpisah). Resource: dapat-diabaikan (poll ~5s, JSON kecil).
 
 ## Compliance
 
 - MVP lokal, single-user, tidak mengumpulkan data pribadi pihak lain → beban PDP minimal.
+- **Web UI (M-web):** lokal + single-user + loopback + nol egress eksternal + data ter-minimize → **nol delta**
+  kewajiban PDP/PSE (tak ada data pribadi baru dikumpulkan/dikirim keluar mesin).
 - Bila kelak ada telemetry/cloud sync: tinjau UU PDP + lokasi data sebelum implementasi (ADR baru).
 
 ## Portability

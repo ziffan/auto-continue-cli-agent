@@ -150,6 +150,22 @@ usage/quota, *so that* aku tidak perlu memelototi terminal.
   ke PTY; **tanpa konfirmasi tak ada inject**. Tak ada aksi yang diturunkan dari *isi* output agent (injection
   firewall, ADR-013). Setiap langkah di-audit (`events`).
 
+### Web UI monitor — v1 (opt-in, dibangun 18 Jul; promosi US-10)
+
+**US-10 — Dashboard web read-only status usage & sesi** *(v1 module; opt-in; ADR-028)*
+*As a* solo orchestrator, *I want* melihat usage/sesi/log acca di browser lokal, *so that* aku bisa memantau
+sekilas tanpa terminal — **tanpa menambah permukaan aksi**.
+- Given daemon menulis state ke store (usage snapshot, sesi, events),
+  When aku menjalankan `acca web` (opt-in, default mati) lalu buka `http://127.0.0.1:<port>`,
+  Then browser menampilkan **mirror read-only** `acca status`: usage bar 2 CLI + reset countdown, liveness
+  daemon, tabel sesi, tail event-log — auto-refresh (~5s). **Nol aksi** (tak ada resume/cancel dari web di v1).
+- Given endpoint di-bind **`127.0.0.1` saja**,
+  When proses/website mana pun mencoba membacanya,
+  Then hanya `GET /` (HTML self-contained) + `GET /api/status` (JSON) yang dilayani; data = **proyeksi
+  ter-firewall yang SAMA** dengan IPC status (`toSessionStatusView` tanpa `cli_session_id`/`cwd`,
+  `formatEventLine` allowlist, `formatUsageLines` G-9) — **nol jalur data baru**; `Host` non-loopback → 403
+  (guard DNS-rebinding). Halaman **100% self-contained** (nol aset eksternal/CDN → nol egress baru).
+
 ### Nice (v1)
 
 - **US-6** Mode konfirmasi "ask" vs full-auto. *(Untuk **resume** = tetap Nice. Untuk **relay-instruksi remote**
@@ -161,7 +177,7 @@ usage/quota, *so that* aku tidak perlu memelototi terminal.
 
 ### Later (v2+)
 
-- **US-10** Dashboard web status usage & sesi.
+- ~~**US-10** Dashboard web status usage & sesi.~~ → **DIPROMOSIKAN ke v1 module (opt-in, read-only)** 18 Jul — lihat "Web UI monitor — v1" di atas + ADR-028.
 - **US-11** Dukungan OpenCode dan agent CLI lain (arsitektur adapter).
 - **US-12** Mode multi-user/tim dengan node always-on bersama.
 - **US-13** Prediksi proaktif "limit akan habis dalam ~N menit" sebelum benar-benar berhenti.
@@ -261,6 +277,32 @@ Catatan: angka usage adalah **best-effort** (lihat RESEARCH.md — header tidak 
 tampilkan indikator "perkiraan" bila sumbernya heuristik, bukan data pasti. Loading/empty/error state
 wajib eksplisit (mis. "belum ada sesi termonitor", "gagal baca usage — tampilkan terakhir diketahui").
 
+Web UI monitor (browser lokal `http://127.0.0.1:<port>`, opt-in `acca web` — read-only, ADR-028):
+
+```
+┌─ acca ▓▓▓░░ · auto-continue on reset ──────────── 127.0.0.1:4599 · ⟳ 5s ─┐
+│                                                                          │
+│  CLAUDE CODE               diperbarui 12s lalu   daemon: ● HIDUP (pid …) │
+│    session     ▓▓▓▓▓▓▓░░░  74%                                           │
+│    weekly_all  ▓▓▓▓▓░░░░░  54%                                           │
+│  ANTIGRAVITY CLI           diperbarui 12s lalu                           │
+│    5h          ▓▓▓░░░░░░░  31%      weekly  ▓▓▓▓▓▓▓▓░░  86%               │
+│                                                                          │
+│  SESI                                                                    │
+│  #a1b2  claude       RUNNING     alive  pid 1234   reset —               │
+│  #c3d4  claude       LIMIT_HIT   exited pid —      reset 03:15           │
+│  #e5f6  antigravity  LIMIT_HIT   exited pid —      reset Sen 09:00 (wk)  │
+│                                                                          │
+│  EVENT LOG (tail)                                                        │
+│  23:10:04  #c3d4  status_change  to=LIMIT_HIT source=verify              │
+│  23:10:41  #c3d4  resume_spawned  jobId=… newSessionId=…                 │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+Catatan: tabel sesi web **TIDAK** menampilkan `cwd` maupun `cli_session_id` (proyeksi ter-firewall
+`toSessionStatusView` — endpoint loopback bisa dijangkau proses lokal lain, T-W1). Event log = `formatEventLine`
+(allowlist field terkontrol, nol payload mentah). Nol tombol aksi (read-only v1).
+
 Interaksi Telegram (mobile) — tier A notif + tier B/C kontrol (ADR-011/012/013):
 
 ```
@@ -305,6 +347,12 @@ Checklist test milestone (detail Given/When/Then ada di tiap story §3):
 - [ ] AC-11 Instruksi remote **tak pernah** di-inject tanpa konfirmasi eksplisit; tanpa `chat_id` terotorisasi = ditolak. (US-17, ADR-008/013)
 - [ ] AC-12 Output ke Telegram teredaksi rahasia + size-capped + opt-in; **tak ada aksi diturunkan dari isi output** (injection firewall). (US-16, ADR-013)
 
+**Web UI monitor (US-10, ADR-028) — diuji di M-web:**
+- [ ] AC-W1 `acca web` (opt-in) menyajikan `GET /` (HTML self-contained) + `GET /api/status` (JSON) di **`127.0.0.1` saja**; mirror read-only usage/liveness/sesi/event-log, auto-refresh. (US-10)
+- [ ] AC-W2 **Read-only:** hanya method `GET`; tak ada endpoint mutasi (resume/cancel) di v1; method lain → 405. (US-10, ADR-008/028)
+- [ ] AC-W3 `/api/status` = **proyeksi ter-firewall yang sama** dgn IPC status (nol `cli_session_id`/`cwd`/secret/payload mentah); `Host` non-loopback → **403** (guard DNS-rebinding). (US-10, ADR-028, T-W1/T-W3)
+- [ ] AC-W4 Halaman **self-contained** (nol aset eksternal → nol egress baru); data dirender sbg **teks** (bukan `innerHTML`) → nol XSS dari nilai tersimpan. (US-10, ADR-028, T-W4/T-W5)
+
 > Catatan: AC-9..AC-12 diuji di **M-remote** dengan **security-review gate**; prasyarat **THREAT-MODEL.md** (ADR-013 §5).
 > Flow §4 (sub-flow remote-control) & wireframe §5 (interaksi Telegram) + container Remote Gateway (ARCHITECTURE)
 > + THREAT-MODEL.md **sudah dibuat 3 Jul (sore, lanjutan)**. Sisa: putuskan pola redaksi + lib bot → lock ADR-011/012/013.
@@ -319,3 +367,4 @@ Checklist test milestone (detail Given/When/Then ada di tiap story §3):
 | 2026-07-03 | US-1 + flow §4 direvisi pasca temuan hook `StopFailure` & nuansa "limit-hit ≠ proses exit": sumber sinyal deteksi diperluas, langkah 9 bercabang inject-PTY (proses hidup) vs resume-by-id (proses mati). (RESEARCH §2c) | Claude (validasi sesi 3 Jul) |
 | 2026-07-03 (sore) | **Fitur remote-control Telegram masuk MVP (tier A+B+C, keputusan user).** Batasan §1 diksi ulang (human-in-the-loop, never autonomous); US-5 rujuk Telegram; **US-14..US-17 baru (Must)** — notif/kontrol/lihat-output/instruksi-ber-konfirmasi; US-6 mode `ask` naik Must utk relay-instruksi; US-9 Telegram→US-14 (ntfy/email tetap Nice); AC-9..AC-12 baru. Dasar: ADR-008 (revisi) + ADR-011/012/013 (baru). Flow/wireframe/ARCHITECTURE/NFR/MILESTONES/THREAT-MODEL = sesi berikutnya. | Ziffan × Claude |
 | 2026-07-03 (sore, lanjutan) | **Flow §4 sub-flow remote-control** (notif→kontrol→confirm gate→inject; cabang error remote) + **wireframe §5 interaksi Telegram (mobile)** ditambahkan, selaras ADR-011/012/013. (Rantai doc-first Telegram: THREAT-MODEL.md dibuat + ARCHITECTURE Remote Gateway + NFR egress `api.telegram.org` + MILESTONES M-remote — lihat DECISIONS change log.) | Ziffan × Claude |
+| 2026-07-18 | **US-10 (dashboard web) DIPROMOSIKAN dari Later ke v1 module (opt-in, read-only) — keputusan owner.** Story expanded (Given/When/Then) + wireframe web §5 + **AC-W1..W4** (loopback-only, read-only GET, proyeksi ter-firewall = nol jalur data baru, Host-guard DNS-rebinding, self-contained nol-egress, render-as-text anti-XSS). Dasar: **ADR-028** (read-only localhost). Rantai doc-first Web UI: THREAT-MODEL §9 (T-W1..W6) + NFR (Web UI) + MAP (`src/web/`) + MILESTONES M-web — lihat DECISIONS change log. | Ziffan × Claude |

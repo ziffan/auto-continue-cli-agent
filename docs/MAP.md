@@ -35,6 +35,10 @@ auto-continue-cli-agent/
 │   │   ├── migrations/      #   NNNN-nama.sql (ber-nomor, forward-only)
 │   │   └── repositories/    #   sessions / events / scheduled_jobs / meta
 │   ├── notify/              # Notifier lokal (node-notifier/stdout) + hook ke remote (M4)
+│   ├── web/                 # Web UI monitor read-only (ADR-028, M-web) — opt-in `acca web`
+│   │   ├── server.ts        #   http.createServer bind 127.0.0.1; GET /(HTML) + /api/status(JSON); Host-guard; GET-only
+│   │   ├── status-json.ts   #   PURE: rakit /api/status dari proyeksi ter-firewall (toSessionStatusView/formatEventLine/usage) — nol jalur data baru
+│   │   └── page.ts          #   HTML self-contained (CSS+JS inline, nol aset eksternal; render textContent anti-XSS)
 │   └── shared/              # tipe umum, waktu (epoch-ms), path lintas-OS, logger terstruktur
 ├── test/                    # unit + integration (fixtures deteksi limit di test/fixtures/); gate artefak: systemd-unit / shell-script / ps1-encoding (I-34)
 ├── deploy/                  # template service+backup (non-TS, dirender/di-substitusi saat install — bukan dibuild ke dist/)
@@ -59,6 +63,10 @@ auto-continue-cli-agent/
   Konsistensi lintas-proses = pembagian baris tegas + WAL (ADR-004) + rearm/recovery; **tak ada write-race**. Konsolidasi
   sole-writer penuh **DITOLAK** (ADR-017) — residual I-10 = **RESOLVED by-design**, bukan refactor menunggu.
 - `adapters/` = satu-satunya tempat perintah tool-spesifik (resume/probe). Core **tak** hardcode `claude`/`agy`.
+- `web/` (ADR-028) = **read-only**, baca `store/` langsung (seperti `acca status`), bind `127.0.0.1` saja.
+  `/api/status` WAJIB memakai proyeksi ter-firewall yang SUDAH ADA (`toSessionStatusView`, `formatEventLine`,
+  `formatUsageLines`) — **DILARANG** menambah jalur data baru atau menyingkap `cli_session_id`/`cwd`/rahasia
+  (loopback terjangkau proses lokal lain, T-W1). **Nol mutasi** (tak panggil IPC/daemon; tak ada resume/cancel).
 - `remote/` masuk supervisor lewat **IPC lokal yang sama** seperti CLI (otoritas identik — ADR-012);
   `remote/redact.ts` wajib di jalur egress output (ADR-013).
 

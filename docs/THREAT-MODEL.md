@@ -201,10 +201,49 @@ tercatat residual (R-5/R-6) **sebelum** M5 dinyatakan selesai — dan **sebelum*
 
 ---
 
+## 9. Permukaan Web UI monitor — ingress lokal (ADR-028)
+
+> Ditambahkan 2026-07-18 (spec M-web). §1–§7 = remote Telegram; §8 = fondasi lokal; **§9 = ingress HTTP
+> loopback baru** yang Web UI monitor buka. Pengikat: **ADR-028** (read-only localhost) + ADR-008/013
+> (read-only ⇒ nol aksi) + ADR-023/T-L1 (data-minimize kanal jaringan-terjangkau).
+>
+> **Insight pengikat:** bind `127.0.0.1` **BUKAN** privat — proses/user lokal lain di host sama bisa
+> `GET` endpoint (kelas identik DACL named-pipe terbuka, T-L1). Karena itu Web UI diperlakukan sebagai
+> **kanal jaringan-terjangkau**, bukan "cuma lokal jadi aman".
+
+### 9.1 Ancaman Web UI → mitigasi → jejak
+
+| ID | Ancaman | Mitigasi | Kontrol | AC |
+|---|---|---|---|---|
+| T-W1 | **Info disclosure:** proses/user lokal lain `GET /api/status` di loopback → baca data monitoring (id resume-capability, path proyek, rahasia) | **Proyeksi ter-firewall yang SAMA dgn IPC status** — `toSessionStatusView` (tanpa `cli_session_id`/`cwd`) + `formatEventLine` allowlist + `formatUsageLines` (G-9); **nol jalur data baru** (endpoint tak singkap > IPC). Opt-in default-off | ADR-028 / ADR-023 | AC-W3 |
+| T-W2 | **Elevation via mutasi:** aksi resume/cancel/inject via web = jalan pintas injection-firewall | **Nol endpoint mutasi v1** — GET-only (method lain→405); resume/cancel via web = ADR terpisah (parity confirm-gate ADR-013) | ADR-008/013/028 | AC-W2 |
+| T-W3 | **DNS-rebinding:** website jahat rebind DNS→`127.0.0.1` → browser korban baca endpoint | **Guard `Host` header** ∈ {`localhost`,`127.0.0.1`}(:port) → else **403**; nol header CORS (default same-origin); read-only ⇒ tak ada state berubah | ADR-028 | AC-W3 |
+| T-W4 | **Egress via halaman:** page menarik CDN/font/analytics → egress baru / phone-home | Halaman **100% self-contained** (CSS+JS inline, nol aset eksternal); satu-satunya fetch = same-origin `/api/status` | ADR-028 / NFR §Security | AC-W4 |
+| T-W5 | **XSS/stored-injection:** nilai tersimpan (evidence/label) di-render sbg HTML → skrip jalan di browser | Data di-render **`textContent`/escape, bukan `innerHTML`** (defense-in-depth walau nilai sudah ter-firewall keluar via allowlist/proyeksi) | ADR-028 | AC-W4 |
+| T-W6 | **DoS/bind:** port terpakai / flood GET | Port **configurable** (env+flag), bind gagal → pesan jelas+exit; handler read-only murah; server web **terisolasi** dari daemon (crash web ≠ ganggu auto-resume) | ADR-028 / NFR | — |
+
+### 9.2 Residual risk Web UI (tambahan §6/§8.2)
+
+- **R-7 (diterima, terdokumentasi — single-user desktop).** Endpoint loopback `127.0.0.1:<port>` terjangkau
+  proses/user lokal lain (kelas T-L1/R-5). **Dimitigasi:** read-only + data-minimize (proyeksi ter-firewall
+  identik IPC — nol `cli_session_id`/`cwd`/secret) + Host-guard + opt-in default-off. Sisa = data monitoring
+  ter-minimize bisa dibaca proses lokal lain. **Diterima** single-user desktop (sejajar R-5 named-pipe). Akses
+  LAN (bind non-loopback) + auth token = **pending decision terpisah** (DECISIONS), bukan v1.
+
+### 9.3 Gate M-web security
+
+Security-review gate M-web (skill `milestone-wrapup`, persona security-review) HARUS memverifikasi T-W1..T-W6
+tertutup/residual **sebelum** M-web dinyatakan selesai: (a) `/api/status` = proyeksi ter-firewall (test properti:
+nol `cli_session_id`/`cwd` di JSON kabel); (b) Host non-loopback → 403; (c) method non-GET → 405; (d) bind = `127.0.0.1`
+saja; (e) HTML nol referensi aset eksternal (grep). Selaras pola gate §8.3/close-out §8.4.
+
+---
+
 ## Change Log
 
 | Tanggal | Perubahan | Oleh |
 |---|---|---|
+| 2026-07-18 | **§9 baru — permukaan Web UI monitor (ingress HTTP loopback, ADR-028).** T-W1..T-W6 (info-disclosure loopback-terjangkau, elevation-via-mutasi, DNS-rebinding, egress-via-halaman, XSS, DoS/bind) + residual **R-7** (loopback≠privat, diterima single-user spt R-5) + gate M-web. Insight pengikat: bind 127.0.0.1 terjangkau proses lokal lain (kelas T-L1) → endpoint pakai proyeksi ter-firewall = nol jalur data baru. | Ziffan × Claude |
 | 2026-07-03 | Draft awal — aset, trust boundary, STRIDE 4 vektor (spoof/authz, egress, injection→aksi, DoS/repudiation), matriks kontrol→AC, residual risk, gate. Gate ADR-013 §5 untuk implementasi tier B/C. | Ziffan × Claude |
 | 2026-07-17 | **§8 baru — permukaan lokal fondasi (M5 security pass).** T-L1..T-L8 (DACL named pipe I-26/ADR-023, credential-read, egress whitelist, state korup, service privilege, audit tampering) + residual R-5 (DACL terbuka diterima single-user) / R-6 (backup RPO). Gate security-review M5 sebelum M-remote. Basis: verifikasi web DACL (Node tak bisa set-DACL; PID spoofable) → ADR-023. | Ziffan × Claude |
 | 2026-07-17 | **§8.4 close-out M5.3.** Verdict per-item: T-L1 hardened (IPC `status` data-minimize `toSessionStatusView` — buang `cli_session_id`/`cwd`, GAP nyata ditutup) + T-L2/T-L4/T-L5/T-L8 verified via `test/security-*.test.ts` (30 test). T-L3 N/A. T-L6 parsial (engine M5.1 ✅, restore=M5.2 LIVE) / T-L7 menunggu M5.4-5 LIVE. R-5 diperbarui (payload `status` tak lagi bocor sensitif). | Ziffan × Claude |
