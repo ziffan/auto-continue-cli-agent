@@ -15,8 +15,21 @@
 
 ## Terbuka
 
-> **Status roadmap (owner 18 Jul):** M-remote DITUNDA tanpa target → **tak ada milestone aktif**. Semua item di
-> bawah = P3 oportunistik atau sengaja ditahan. Tak ada pekerjaan prioritas.
+> **Status roadmap (owner 18 Jul):** M-remote DITUNDA tanpa target. Modul aktif = **M-web** (Web UI monitor,
+> ADR-028) — M-web.1 ✅ diimplementasi+verified; belum ditutup formal (gate di bawah). Sisa lain = P3.
+
+### W-1 — Security-review gate M-web belum dijalankan [P2, ditunda owner ke sesi berikutnya]
+M-web.1 (`acca web`) sudah diimplementasi + verified runtime (bind loopback, Host-guard 403, method-guard 405,
+`/api/status` firewalled) + 21 unit test. **Belum:** gate `milestone-wrapup` persona security-review formal vs
+**T-W1..T-W6** (THREAT-MODEL §9.3) — verifikasi sistematis proyeksi ter-firewall, Host/method-guard, bind, HTML
+nol-aset. **Owner memutuskan tunda ke sesi berikutnya (18 Jul).** Milestone M-web tak ditutup formal sampai ini jalan.
+
+### W-2 — M-web.2 `acca daemon --web` co-host [P3, opsional]
+Mount server web yang sama di daemon (flag `--web`). Nilai kemudahan (satu proses). Belum dikerjakan.
+
+### W-3 — Polish halaman Web UI [P3, kosmetik]
+Kolom `reset_at`/`updated_at` masih epoch-ms mentah di tabel (belum human-readable spt `formatResetCell`);
+favicon inline; kolom `now` header. Fungsional, murni kosmetik.
 
 ### F-4 / F-5 / F-6 — nits RC-2/RC-3 [P3, non-blocking, sengaja ditahan]
 - **F-4** — residual pembajakan capturer id agy: kill sebelum agy cetak resume-cmd → uuid palsu (match terakhir)
