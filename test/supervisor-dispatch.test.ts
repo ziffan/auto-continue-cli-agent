@@ -81,7 +81,10 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     sessionId: string;
     procState: 'alive' | 'exited';
     cwd: string;
-    jobKind: 'probe' | 'resume';
+    jobKind: 'probe' | 'resume' | 'verify';
+    /** Status awal sesi. Default 'LIMIT_HIT' (cabang probe/resume). Cabang `verify` butuh 'RUNNING'
+     *  (sesi yang limit-nya DI-suppress, belum di-latch). */
+    status?: Session['status'];
     cliSessionId?: string;
     tool?: 'claude' | 'antigravity';
     requestInject?: SupervisorDeps['requestInject'];
@@ -105,7 +108,7 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
       id: opts.sessionId,
       tool: opts.tool ?? 'claude',
       cwd: opts.cwd,
-      status: 'LIMIT_HIT',
+      status: opts.status ?? 'LIMIT_HIT',
       proc_state: opts.procState,
       cli_session_id: opts.cliSessionId ?? null,
       // pid = pid proses test ITU SENDIRI (selalu "alive") — supaya reconcileOrphans() yang
@@ -235,6 +238,84 @@ describe('supervisor real dispatch (M3d.5/6/7)', () => {
     const events = eventsFor(database, 's-probe-scoped');
     const done = events.find((e) => e.type === 'job_dispatch_done');
     expect((done?.payload as { action: string }).action).toBe('usage_available_enqueue_resume');
+  });
+
+  // I-35 residual: cabang `verify` (probe verifikasi eksplisit). Sesi BELUM di-latch (limit output
+  // di-suppress korroborasi → tetap RUNNING); verify mem-probe → kuota HABIS = latch, tersedia = FP.
+  function sessionRow(database: DatabaseInstance, sessionId: string): { status: string; detect_source: string | null } {
+    return database
+      .prepare<[string], { status: string; detect_source: string | null }>('SELECT status, detect_source FROM sessions WHERE id = ?')
+      .get(sessionId) as { status: string; detect_source: string | null };
+  }
+
+  it('verify: kuota tersedia → FP terkonfirmasi (TAK latch, TAK resume), job verify dihapus', async () => {
+    adapters.claude.probeUsage = vi.fn(
+      (): Promise<UsageSnapshot> =>
+        Promise.resolve({ tool: 'claude', limits: [{ kind: 'session', usedFraction: 0.4, resetAt: null }], capturedAt: 0 }),
+    );
+
+    const { db: database } = await setupAndFire({ sessionId: 's-verify-fp', procState: 'alive', cwd: process.cwd(), jobKind: 'verify', status: 'RUNNING' });
+
+    // Sesi tetap RUNNING — suppress benar, verify tak mengubah apa pun.
+    expect(sessionRow(database, 's-verify-fp').status).toBe('RUNNING');
+    // Job verify selesai+dihapus; TAK ada job probe/resume baru (verify tak pernah resume).
+    expect(pendingJobs(database, 's-verify-fp')).toHaveLength(0);
+
+    const done = eventsFor(database, 's-verify-fp').find((e) => e.type === 'job_dispatch_done');
+    expect((done?.payload as { action: string }).action).toBe('verify_fp_confirmed');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(adapters.claude.probeUsage).toHaveBeenCalledTimes(1);
+  });
+
+  it('verify: kuota HABIS → latch LIMIT_HIT (source verify) + probe dijadwalkan (mesin normal ambil alih)', async () => {
+    adapters.claude.probeUsage = vi.fn(
+      (): Promise<UsageSnapshot> =>
+        Promise.resolve({ tool: 'claude', limits: [{ kind: 'session', usedFraction: 1, resetAt: null }], capturedAt: 0 }),
+    );
+
+    const { db: database } = await setupAndFire({ sessionId: 's-verify-latch', procState: 'alive', cwd: process.cwd(), jobKind: 'verify', status: 'RUNNING' });
+
+    const row = sessionRow(database, 's-verify-latch');
+    expect(row.status).toBe('LIMIT_HIT');
+    expect(row.detect_source).toBe('verify');
+    // verify job dihapus (done); job `probe` baru dijadwalkan oleh scheduleProbeForLimit (mesin normal).
+    const remaining = pendingJobs(database, 's-verify-latch');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.kind).toBe('probe');
+
+    const done = eventsFor(database, 's-verify-latch').find(
+      (e) => e.type === 'job_dispatch_done' && (e.payload as { action: string }).action === 'verify_latched_real_limit',
+    );
+    expect(done).toBeDefined();
+  });
+
+  it('verify: sesi sudah LIMIT_HIT (hook primer melatch di antara suppress & fire) → skip, probe TAK dipanggil', async () => {
+    adapters.claude.probeUsage = vi.fn(
+      (): Promise<UsageSnapshot> => Promise.resolve({ tool: 'claude', limits: [{ kind: 'session', usedFraction: 0.4, resetAt: null }], capturedAt: 0 }),
+    );
+
+    const { db: database } = await setupAndFire({ sessionId: 's-verify-stale', procState: 'alive', cwd: process.cwd(), jobKind: 'verify', status: 'LIMIT_HIT' });
+
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(adapters.claude.probeUsage).not.toHaveBeenCalled();
+    const done = eventsFor(database, 's-verify-stale').find((e) => e.type === 'job_dispatch_done');
+    expect((done?.payload as { action: string }).action).toBe('skipped:verify_stale');
+    expect(pendingJobs(database, 's-verify-stale')).toHaveLength(0);
+  });
+
+  it('verify: probe tak terbaca di cap attempts → menyerah TANPA markBlocked (sesi tetap RUNNING)', async () => {
+    adapters.claude.probeUsage = vi.fn(
+      (): Promise<UsageSnapshot> => Promise.resolve({ tool: 'claude', limits: [], capturedAt: 0 }),
+    );
+
+    // jobAttempts=2 → attempts+1=3 = MAX_DISPATCH_ATTEMPTS → cabang cap dalam SATU fire.
+    const { db: database } = await setupAndFire({ sessionId: 's-verify-unreadable', procState: 'alive', cwd: process.cwd(), jobKind: 'verify', status: 'RUNNING', jobAttempts: 2 });
+
+    // KRITIS (beda dari cabang probe): sesi RUNNING & sehat TAK boleh di-BLOCKED atas probe tak terbaca.
+    expect(sessionRow(database, 's-verify-unreadable').status).toBe('RUNNING');
+    const done = eventsFor(database, 's-verify-unreadable').find((e) => e.type === 'job_dispatch_done');
+    expect((done?.payload as { action: string }).action).toBe('skipped:verify_unreadable');
+    expect(pendingJobs(database, 's-verify-unreadable')).toHaveLength(0);
   });
 
   it('probe: empty limits → retry (cannot determine usage yet)', async () => {

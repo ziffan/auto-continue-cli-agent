@@ -21,7 +21,12 @@ export type Tool = (typeof TOOLS)[number];
 export const RESET_SOURCES = ['exact', 'heuristic', 'backoff'] as const;
 export type ResetSource = (typeof RESET_SOURCES)[number];
 
-export const JOB_KINDS = ['probe', 'resume'] as const;
+// I-35: `verify` = probe verifikasi eksplisit. Dijadwalkan saat sinyal limit OUTPUT-CC di-suppress
+// oleh korroborasi (snapshot usage segar membantah). Landing memutuskan LATCH (limit asli tertutup
+// snapshot basi) vs FP-terkonfirmasi (no-op) — TIDAK langsung resume (keputusan owner). Semantik
+// KEBALIKAN `probe` (probe = sesi LIMIT_HIT, cek kuota bebas → resume; verify = sesi belum di-latch,
+// cek kuota HABIS → latch) → butuh kind terpisah, bukan overload `probe`.
+export const JOB_KINDS = ['probe', 'resume', 'verify'] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 /** Baris tabel `sessions` (DATA-MODEL.md). Waktu = epoch ms (number), bukan Date naif. */

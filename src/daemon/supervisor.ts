@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { adapters } from '../adapters/index.js';
 import type { SpawnSpec } from '../adapters/types.js';
 import { runSession } from './process-wrapper.js';
+import { scheduleProbeForLimit } from './schedule-reset.js';
 import { isProcessAlive } from '../shared/proc.js';
 import { isCanonicalUuid } from '../shared/ids.js';
 import { sessionControlSocketPath } from '../shared/paths.js';
@@ -281,6 +282,119 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
           payload: { jobId: job.id, action: 'still_limited' },
         });
         return 'retry';
+      }
+
+      if (job.kind === 'verify') {
+        // I-35 residual: verifikasi aktif atas sinyal limit OUTPUT-CC yang di-suppress korroborasi.
+        // Semantik KEBALIKAN `probe`: di sini sesi BELUM di-latch (kita suppress → tetap RUNNING);
+        // verify mem-probe usage → kuota HABIS = limit asli tertutup snapshot basi → LATCH (mesin
+        // reset/probe normal ambil alih, TIDAK langsung resume); kuota tersedia = FP terkonfirmasi (no-op).
+        const rawSession = sessions.getById(job.session_id);
+        if (!rawSession) {
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_done',
+            payload: { jobId: job.id, action: 'skipped:session_not_found' },
+          });
+          return 'done';
+        }
+        const session = reconcileDispatchLiveness(rawSession);
+
+        // Guard tool: CC-only by construction (onUsageContradiction hanya menyala utk claude via
+        // readUsageCorroboration). Guard struktural di sisi konsumen — jangan andalkan produsen saja.
+        if (session.tool !== 'claude') {
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_done',
+            payload: { jobId: job.id, action: 'skipped:verify_non_cc', tool: session.tool },
+          });
+          return 'done';
+        }
+
+        // Guard status: verify hanya bermakna utk sesi RUNNING-hidup yang limit-nya kita suppress.
+        // Sudah LIMIT_HIT (hook StopFailure PRIMER melatch di antara suppress & fire — bypass suppress,
+        // ADR-001) → jalur normal sudah memiliki sesi ini → verify redundan. `exited` (termasuk hasil
+        // reconcile pid-mati) → jalur exited-resume terpisah menangani, bukan urusan verify.
+        if (session.status !== 'RUNNING' || session.proc_state !== 'alive') {
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_done',
+            payload: { jobId: job.id, action: 'skipped:verify_stale', status: session.status, procState: session.proc_state },
+          });
+          return 'done';
+        }
+
+        const adapter = adapters[session.tool];
+        if (!adapter?.probeUsage) {
+          // Beda dari cabang `probe`: JANGAN markBlocked. Sesi ini RUNNING & sehat — memblokirnya
+          // atas ketakmampuan probe = salah. Cukup menyerah teraudit (defensif; CC punya probeUsage).
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_done',
+            payload: { jobId: job.id, action: 'skipped:verify_probe_unsupported' },
+          });
+          return 'done';
+        }
+
+        const usage = await adapter.probeUsage({ sessionPid: session.pid ?? undefined });
+
+        if (usage.limits.length === 0) {
+          // Probe tak terbaca (glitch transien atau skema berubah). Retry ber-cap; pada cap → menyerah
+          // teraudit, TETAP tanpa markBlocked (sesi RUNNING; output/hook sesi sendiri akan menangkap
+          // limit asli kelak). Verify = jaring tambahan, bukan satu-satunya penjaga.
+          if (job.attempts + 1 >= MAX_DISPATCH_ATTEMPTS) {
+            events.append({
+              session_id: job.session_id,
+              type: 'job_dispatch_done',
+              payload: { jobId: job.id, action: 'skipped:verify_unreadable', reason: 'limits_empty_persistent', attempts: job.attempts + 1 },
+            });
+            return 'done';
+          }
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_pending',
+            payload: { jobId: job.id, action: 'verify_still_unknown', reason: 'limits_empty' },
+          });
+          return 'retry';
+        }
+
+        const hasAvailable = adapter.isUsageAvailable
+          ? adapter.isUsageAvailable(usage)
+          : usage.limits.every((l) => l.usedFraction < 1);
+        if (hasAvailable) {
+          // FP terkonfirmasi: suppress benar, kuota memang longgar. No-op teraudit (jangan resume).
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_done',
+            payload: { jobId: job.id, action: 'verify_fp_confirmed' },
+          });
+          return 'done';
+        }
+
+        // Kuota HABIS → limit ASLI yang tadi tertutup snapshot segar-tapi-basi. Latch (RUNNING→LIMIT_HIT)
+        // lalu serahkan ke mesin reset/probe normal (scheduleProbeForLimit; tanpa resetHint → estimator
+        // jatuh ke backoff, probe lagi ~5m). markLimitHit guard status='RUNNING' → false bila sesi keluar
+        // RUNNING (race exit) → jangan jadwalkan probe yatim.
+        const at = deps.now();
+        const latched = sessions.markLimitHit(job.session_id, { source: 'verify', detectedAt: at });
+        if (!latched) {
+          events.append({
+            session_id: job.session_id,
+            type: 'job_dispatch_done',
+            payload: { jobId: job.id, action: 'skipped:verify_latch_race', status: session.status },
+          });
+          return 'done';
+        }
+        const scheduled = scheduleProbeForLimit(
+          { sessionId: job.session_id, detectedAt: at, now: at },
+          { sessions, jobs, events },
+        );
+        events.append({
+          session_id: job.session_id,
+          type: 'job_dispatch_done',
+          payload: { jobId: job.id, action: 'verify_latched_real_limit', probeJobId: scheduled?.jobId ?? null },
+        });
+        return 'done';
       }
 
       // job.kind === 'resume'

@@ -7,6 +7,7 @@ import { closeDb, openDb, type DatabaseInstance } from '../src/store/db.js';
 import { createEventsRepo } from '../src/store/repositories/events.js';
 import { createScheduledJobsRepo } from '../src/store/repositories/scheduled-jobs.js';
 import { createSessionsRepo } from '../src/store/repositories/sessions.js';
+import { createMetaRepo } from '../src/store/repositories/meta.js';
 import { runSession } from '../src/daemon/process-wrapper.js';
 import { adapters } from '../src/adapters/index.js';
 import { requestInject } from '../src/daemon/inject-continue.js';
@@ -249,6 +250,69 @@ describe('runSession integration', () => {
         expect(limitHits).toHaveLength(1);
         expect(suppressed).toHaveLength(1);
         expect(suppressed[0]?.payload.reason).toBe('post_unlatch_output_grace');
+      } finally {
+        adapters.claude.supervisorHooks = originalHooks;
+      }
+    },
+    15_000,
+  );
+
+  it(
+    'I-35: sinyal limit OUTPUT-CC dibantah snapshot segar → limit_suppressed + job `verify` ter-enqueue (WIRING nyata)',
+    async () => {
+      // Menutup gap wiring yang unit test dispatch tak sentuh: onUsageContradiction (limit-watcher) →
+      // enqueue verify (process-wrapper) via PTY nyata + store nyata. Snapshot usage SEGAR (< 5 mnt) yang
+      // membantah (maxBinding 0.55 < ambang 0.85) → banner limit OUTPUT DISUPPRESS (bukan latch) DAN job
+      // `verify` benar-benar ditulis ke scheduled_jobs (jaring FN aktif I-35), bukan cuma event.
+      const sessions = createSessionsRepo(db);
+      const events = createEventsRepo(db);
+      const jobs = createScheduledJobsRepo(db);
+      const meta = createMetaRepo(db);
+
+      meta.set(
+        'usage_snapshot_claude',
+        JSON.stringify({
+          tool: 'claude',
+          capturedAt: Date.now(),
+          limits: [{ kind: 'session', usedFraction: 0.55, resetAt: null, isActive: true }],
+        }),
+      );
+
+      // supervisorHooks CC menyisipkan `--settings` yg ditolak node stand-in → nonaktifkan (jalur OUTPUT).
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      const originalHooks = adapters.claude.supervisorHooks;
+      adapters.claude.supervisorHooks = undefined;
+
+      // DUA baris banner (simulasi prosa multi-literal: mis. membaca file dengan >1 literal kanonik) →
+      // dua sinyal suppress, tapi dedup → tetap SATU job verify per episode.
+      const banner = "\\x1b[31mYou've hit your session limit\\x1b[0m\\r\\n";
+      const script = `process.stdout.write("${banner}");process.stdout.write("${banner}");setTimeout(()=>process.exit(0),1500);`;
+
+      try {
+        const { sessionId, waitForExit } = runSession(
+          { file: process.execPath, args: ['-e', script], cwd: process.cwd(), tool: 'claude' },
+          { sessions, events, jobs, usageSnapshotJson: (tool) => meta.get(`usage_snapshot_${tool}`) },
+        );
+
+        await waitFor(() => events.listBySession(sessionId, 100).some((e) => e.type === 'verify_scheduled'), 6000);
+        await waitForExit;
+
+        const evs = events
+          .listBySession(sessionId, 200)
+          .map((e) => ({ type: e.type, payload: JSON.parse(e.payload) as Record<string, unknown> }));
+
+        // Tak pernah latch (suppress benar) — nol status_change ke LIMIT_HIT.
+        expect(evs.filter((e) => e.type === 'status_change' && e.payload.to === 'LIMIT_HIT')).toHaveLength(0);
+        // Kedua baris banner ter-suppress (suppress per-baris).
+        const suppressed = evs.filter((e) => e.type === 'limit_suppressed');
+        expect(suppressed).toHaveLength(2);
+        expect(suppressed[0]?.payload.reason).toBe('usage_contradicts');
+        // WIRING inti: job verify BENAR-BENAR ditulis (bukan hanya event). Tanpa enqueue di
+        // onUsageContradiction → filter ini kosong (negative control saat pengembangan).
+        // DEDUP: dua suppress → tetap SATU verify job + satu event verify_scheduled.
+        const verifyJobs = jobs.listPending().filter((j) => j.session_id === sessionId && j.kind === 'verify');
+        expect(verifyJobs).toHaveLength(1);
+        expect(evs.filter((e) => e.type === 'verify_scheduled')).toHaveLength(1);
       } finally {
         adapters.claude.supervisorHooks = originalHooks;
       }
