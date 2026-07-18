@@ -7,10 +7,11 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 > ✅ hijau** (deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup / resume-by-id sesi mati;
 > `acca status` usage-view, `acca log`, notifikasi transisi). Deteksi limit CC primer + inject-continue otomatis
 > sudah **live-verified pada limit Claude Code ASLI** (16 Jul).
-> Sekarang di **M5 — hardening + deploy sebagai service**: backup/restore state + security pass ✅; **service Linux
-> (systemd `--user`) menyusul**; **service Windows DITUNDA** atas blocker terbukti — lihat [Menjalankan daemon](#menjalankan-daemon).
-> **626 test hijau** (2 skip POSIX-only di Windows), cross-OS (Linux + Windows). Belum dirilis/dipaketkan;
-> M-remote (kontrol Telegram) menyusul setelah M5. Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
+> **M5 (hardening + deploy sebagai service) ✅ TUTUP PENUH** — Linux (systemd `--user` + linger) DAN Windows
+> (autostart per-user Task Scheduler @logon, ADR-026) — lihat [Menjalankan daemon](#menjalankan-daemon).
+> **±630 test hijau** (angka per-mesin — beberapa gate men-generate test per-file; hitungan resmi lihat
+> CLAUDE.md §2), cross-OS (Linux + Windows). Belum dirilis/dipaketkan; **M-remote (kontrol Telegram) DITUNDA**
+> (keputusan owner 18 Jul). Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
 ---
 

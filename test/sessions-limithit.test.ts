@@ -99,6 +99,49 @@ describe('sessions.markRunningAfterInject (R3/I-21)', () => {
   });
 });
 
+describe('sessions.markExited mempertahankan status non-RUNNING (D-1/RD-1 Opsi A, audit keempat)', () => {
+  it('LIMIT_HIT + exit bersih → status TETAP LIMIT_HIT, proc_state → exited (jalur resume-by-id tetap hidup)', () => {
+    const sessions = createSessionsRepo(db);
+    const id = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id, tool: 'antigravity', cwd: process.cwd(), status: 'RUNNING', proc_state: 'alive' });
+    sessions.markLimitHit(id, { source: 'output', detectedAt: 1_720_000_000_000 });
+
+    sessions.markExited(id);
+
+    const row = sessions.getById(id);
+    // Sebelum RD-1: status di-clobber EXITED → guard probe I-35 men-skip job → auto-resume mati senyap.
+    expect(row?.status).toBe('LIMIT_HIT');
+    expect(row?.proc_state).toBe('exited');
+    expect(row?.detected_at).toBe(1_720_000_000_000); // episode limit tetap tercatat
+  });
+
+  it('RUNNING + exit bersih → EXITED/exited (semantik lama utk sesi sehat tak berubah)', () => {
+    const sessions = createSessionsRepo(db);
+    const id = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id, tool: 'claude', cwd: process.cwd(), status: 'RUNNING', proc_state: 'alive' });
+
+    sessions.markExited(id);
+
+    const row = sessions.getById(id);
+    expect(row?.status).toBe('EXITED');
+    expect(row?.proc_state).toBe('exited');
+  });
+
+  it('BLOCKED + exit → status TETAP BLOCKED (butuh-manual tak hilang), proc_state → exited', () => {
+    const sessions = createSessionsRepo(db);
+    const id = `sess-${randomBytes(4).toString('hex')}`;
+    sessions.createSession({ id, tool: 'claude', cwd: process.cwd(), status: 'RUNNING', proc_state: 'alive' });
+    sessions.markLimitHit(id, { source: 'output', detectedAt: 1 });
+    sessions.markBlocked(id);
+
+    sessions.markExited(id);
+
+    const row = sessions.getById(id);
+    expect(row?.status).toBe('BLOCKED');
+    expect(row?.proc_state).toBe('exited');
+  });
+});
+
 describe('sessions.markResumed guard (I-28/A-13)', () => {
   it('LIMIT_HIT → RESUMED (jalur normal)', () => {
     const sessions = createSessionsRepo(db);
