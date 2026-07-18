@@ -1,7 +1,21 @@
 # auto-continue-cli-agent
 
+```
+  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+  ┃   a ( c∞c ) a   ·  acca     ┃
+  ┃   auto-continue cli agent   ┃
+  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+  never lose a session to a limit.
+```
+
+**`a·c∞c·a` · acca** — usage-aware auto-continue for **Claude Code** & **Antigravity CLI**.
+
 Supervisor lokal yang **memonitor usage** dan **melanjutkan otomatis sesi yang terputus karena limit**
 untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
+
+> Brand `cc` = **c**ontinue-**c**ontinue (auto-continue) / **C**laude **C**ode — dua `c` saling-punggung =
+> loop tak berujung. Splash muncul di `acca` (tanpa argumen), `--help`/`--version`, dan saat `acca daemon`
+> start — **TTY-only**, hormati `NO_COLOR`, dengan fallback ASCII (ADR-027). Detail: [`docs/BRANDING.md`](docs/BRANDING.md).
 
 > **Status:** Implementasi berjalan — **loop auto-continue (M1–M3d) + monitoring & UX (M4 inti) bertes & gate M3e
 > ✅ hijau** (deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup / resume-by-id sesi mati;
@@ -9,9 +23,11 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 > sudah **live-verified pada limit Claude Code ASLI** (16 Jul).
 > **M5 (hardening + deploy sebagai service) ✅ TUTUP PENUH** — Linux (systemd `--user` + linger) DAN Windows
 > (autostart per-user Task Scheduler @logon, ADR-026) — lihat [Menjalankan daemon](#menjalankan-daemon).
-> **Suite hijau lintas-OS** (Linux + Windows) — jumlah test bergantung-mesin (gate per-file); angka-of-record
-> di CLAUDE.md §2 (RD-5). Belum dirilis/dipaketkan; **M-remote (kontrol Telegram) DITUNDA**
-> (keputusan owner 18 Jul). Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
+> **UX/UI (18 Jul):** brand/splash + inline badge (ADR-027) · **Web UI monitor read-only** `acca web` (ADR-028,
+> bind `127.0.0.1`) · **`acca prune`** (soft-archive sesi lama agar status tetap relevan). **Suite hijau lintas-OS**
+> (Linux + Windows) — jumlah test bergantung-mesin (gate per-file); angka-of-record di CLAUDE.md §2 (RD-5).
+> Belum dirilis/dipaketkan; **M-remote (kontrol Telegram) DITUNDA** (keputusan owner 18 Jul).
+> Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
 ---
 
@@ -70,8 +86,10 @@ Ganti `acca` dengan `node dist/cli/index.js`, mis. `node dist/cli/index.js daemo
 | `acca daemon`                    | Supervisor daemon: rekonsiliasi orphan, scheduler resume, monitor usage periodik, IPC. |
 | `acca status`                    | Sesi termonitor + usage best-effort (bar per window, indikator "perkiraan").           |
 | `acca log [sessionId]`           | Riwayat event / audit trail (terbaru dulu).                                            |
+| `acca web [--port <n>]`          | Web UI monitor **read-only** di browser (`http://127.0.0.1:<port>`, default 4599). Mirror status/usage/sesi/log, auto-refresh. Opt-in; bind loopback saja (ADR-028). |
+| `acca prune [ids…] [--all] [--force] [--dry-run]` | Arsipkan sesi (**soft**, tak hapus — ADR-004) agar `status` tetap relevan. Default: sesi terminal saja (sisakan RUNNING/LIMIT_HIT); reversible. |
 
-Belum ada: kontrol Telegram (M-remote) & `resume-now`/`cancel` via remote, deploy sebagai service (M5 — lihat bawah).
+Belum ada: kontrol Telegram (M-remote — DITUNDA) & `resume-now`/`cancel` via remote; aksi kontrol via Web UI (v1 read-only saja).
 
 ## Menjalankan daemon
 
@@ -117,6 +135,35 @@ profil laptop; always-on sejati = Linux systemd). **Kenapa BUKAN Windows Service
 (`docs/ISSUES.md`, `docs/DECISIONS.md`).
 
 **Batasan (semua OS, ADR-007):** kalau mesin tidur/mati, resume tertunda sampai ia bangun.
+
+## Web UI monitor (opt-in, read-only)
+
+Pantau usage/sesi/log di browser lokal — mirror `acca status` yang auto-refresh (ADR-028).
+
+```bash
+acca web                    # http://127.0.0.1:4599  (Ctrl-C untuk berhenti)
+acca web --port 8080        # atau set env ACCA_WEB_PORT
+```
+
+**Read-only + aman:** bind **`127.0.0.1` saja** (bukan LAN), hanya `GET /` + `GET /api/status`, **nol aksi**
+(tak ada resume/cancel via web). Endpoint memakai proyeksi ter-firewall yang sama dengan IPC status —
+**tak** membocorkan `cli_session_id`/`cwd`/rahasia; `Host` non-loopback ditolak (guard DNS-rebinding); halaman
+100% self-contained (nol aset eksternal). Threat model: [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) §9.
+
+## Membersihkan sesi (`acca prune`)
+
+`acca status` menumpuk sesi lama (EXITED/RESUMED/…). `acca prune` mengarsipkannya supaya tampilan tetap relevan.
+
+```bash
+acca prune                  # arsip sesi TERMINAL saja; sisakan RUNNING/LIMIT_HIT
+acca prune --dry-run        # lihat yang akan diarsip tanpa mengubah
+acca prune <id> [<id>…]     # arsip sesi tertentu (dipantau/hidup butuh --force)
+acca prune --all            # arsip SEMUA sesi aktif (termasuk yang dipantau)
+```
+
+**Soft-archive, bukan hapus (ADR-004):** hanya menyetel `archived_at` → sesi hilang dari `status` tapi row
+**tetap ada** di DB (audit `events` + retensi never-purge); reversible. Setiap arsip tercatat di `acca log`
+(`session_archived from=<status> source=prune`).
 
 ## Backup & restore
 
@@ -180,7 +227,8 @@ auto-continue native sedang diminta ke upstream Claude Code (tracking #13354, **
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | C4, container map, tech stack                                                |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md)       | ADR (locked / pending)                                                       |
 | [`docs/NFR.md`](docs/NFR.md)                   | Target non-fungsional terukur                                                |
-| [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Threat model remote (Telegram) — gate keamanan M-remote                      |
+| [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Threat model remote (Telegram) + fondasi lokal (§8) + Web UI ingress (§9)     |
+| [`docs/BRANDING.md`](docs/BRANDING.md)         | Identitas visual `acca` (wordmark/splash + inline badge, gating ADR-027)      |
 | [`docs/MILESTONES.md`](docs/MILESTONES.md)     | Rencana milestone + progres                                                  |
 | [`docs/GOTCHAS.md`](docs/GOTCHAS.md)           | Jebakan teknis yang sudah dibayar (agy/CC/PTY/store)                         |
 | [`docs/CONTEXT.md`](docs/CONTEXT.md)           | Status proyek (update tiap sesi)                                             |
