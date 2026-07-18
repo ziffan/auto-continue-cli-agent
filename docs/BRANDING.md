@@ -1,8 +1,8 @@
 # BRANDING.md — identitas visual `acca`
 
 > Design note untuk sentuhan visual di **README** dan **terminal** (`acca status` + splash).
-> Status: **keputusan logo LOCKED** (18 Jul) · **banner policy + web UI = pending, butuh ADR** sebelum kode.
-> Ini dokumen desain, bukan spec implementasi. Kode UX menunggu ADR banner-policy.
+> Status: **keputusan logo LOCKED** (18 Jul) · **banner-policy LOCKED → ADR-027** (18 Jul) · **web UI = pending, butuh PRD+TRD+ADR** sebelum kode.
+> Ini dokumen desain, bukan spec implementasi. Gating banner (§5) kini di-lock ADR-027 → kode splash+inline-badge boleh dimulai (Tier-2).
 
 ---
 
@@ -12,8 +12,8 @@
 |---|---|---|
 | Wordmark / brand (README, splash) | **Opsi 1 — "The Loop" (`cc` → ∞)** | LOCKED |
 | Bahasa inline di `acca status` | **Opsi 3 — "The Gauge" (`▓░`)** | LOCKED |
-| Kapan splash muncul | bukan tiap `status` — lihat §4 | pending → ADR |
-| Gating TTY / `NO_COLOR` / fallback | wajib, lihat §5 | pending → ADR |
+| Kapan splash muncul | bukan tiap `status` — lihat §4 | **LOCKED → ADR-027** |
+| Gating TTY / `NO_COLOR` / fallback | wajib, lihat §5 | **LOCKED → ADR-027** |
 | Web UI monitor | read-only, localhost, opt-in — lihat §6 | pending → PRD+TRD+ADR |
 
 Rasional: `∞` memikul **identitas** (auto-continue = kontinuitas), `▓░` memikul **data** (usage-view yang sudah ada). Keduanya tak bertabrakan — satu untuk brand, satu untuk baris data.
@@ -100,7 +100,7 @@ Splash besar cocok untuk momen "kenalan" yang jarang — **bukan** tiap kali cek
 
 ## 5. Gating (wajib — bukan opsional)
 
-Aturan ini yang membedakan "sentuhan desain" dari "regresi UX". Harus masuk ADR banner-policy sebelum kode.
+Aturan ini yang membedakan "sentuhan desain" dari "regresi UX". **Di-lock ADR-027 (18 Jul)** — implementasi wajib memenuhi semua poin di bawah.
 
 - **TTY-only.** Warna/banner dicetak **hanya bila `process.stdout.isTTY`**. Di-redirect/pipe → plain, tanpa ANSI, tanpa banner.
 - **Hormati `NO_COLOR`.** Env standar; bila set → nonaktifkan warna.
@@ -152,3 +152,4 @@ Story: heartbeat/monitoring (nyambung ke `formatDaemonLiveness`). **Tak dipakai 
 | Tanggal | Perubahan |
 |---|---|
 | 2026-07-18 | Dokumen dibuat. Logo LOCKED: Opsi 1 wordmark + Opsi 3 inline. Banner-policy & web UI ditandai pending (butuh ADR). |
+| 2026-07-18 | **Banner-policy (§4 placement + §5 gating) di-LOCK → ADR-027.** Kode splash+inline-badge boleh dimulai (Tier-2). Web UI (§6) tetap pending — butuh PRD+TRD+ADR terpisah. |
