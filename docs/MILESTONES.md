@@ -272,7 +272,12 @@ di-LOCK** (3 Jul malam); butuh Notifier (M4). Sisa yang di-tune saat M-remote: r
 
 > **PRD+TRD di-lock 2026-07-18** (doc-first, skill `docs-first-spec` mode modul). ADR pengikat: **ADR-028**
 > (read-only localhost) di atas ADR-008/013 (read-only ⇒ nol aksi) + ADR-023/T-L1 (data-minimize). Gate
-> keamanan: **THREAT-MODEL §9** (T-W1..W6 + R-7). **Belum ada kode.**
+> keamanan: **THREAT-MODEL §9** (T-W1..W6 + R-7).
+>
+> **STATUS: M-web.1 ✅ diimplementasi + verified (18 Jul, `77763a6`).** AC-W1..W4 terpenuhi (unit 21 test +
+> runtime: `/api/status` firewalled · Host evil→403 · POST→405 · netstat `LISTENING 127.0.0.1` SAJA). **Sisa:**
+> security-review gate M-web formal (skill `milestone-wrapup`, persona security-review terhadap T-W1..W6) +
+> M-web.2 (`daemon --web`, opsional). Milestone belum ditutup formal sampai gate dijalankan.
 
 **PRD — apa & untuk siapa:** solo orchestrator ingin memantau usage/sesi/log acca di browser lokal tanpa
 terminal (US-10). Read-only murni; nol aksi kontrol (owner 18 Jul).
@@ -284,7 +289,7 @@ render `textContent`). `GET /api/status` = JSON dari **proyeksi ter-firewall yan
 method non-GET → **405**. Nol dep/framework; nol mutasi; nol aset eksternal.
 
 **Vertical slices:**
-- **M-web.1 — Monitor read-only end-to-end** **[SANDBOX-testable]**: `web/status-json.ts` (PURE — rakit
+- **M-web.1 — Monitor read-only end-to-end** ✅ (`77763a6`, 18 Jul) **[SANDBOX-testable]**: `web/status-json.ts` (PURE — rakit
   payload dari proyeksi ter-firewall) + `web/server.ts` (bind 127.0.0.1, routing GET /(page) + /api/status,
   Host-guard 403, method-guard 405) + `web/page.ts` (HTML self-contained, fetch `/api/status` poll, render
   textContent) + command `acca web`. **Selesai bila:** server hidup di port efemeral, `fetch('/api/status')`

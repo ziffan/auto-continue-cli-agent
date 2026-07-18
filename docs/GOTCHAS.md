@@ -80,6 +80,7 @@
 - **G-55** — Callback yang menyala PER BARIS output → enqueue job berulang dalam satu episode (butuh dedup)
 - **G-56** — `git checkout <tracked-file>` untuk membuang edit NC sementara MENGHAPUS SEMUA perubahan uncommitted file itu
 - **G-57** — Transisi terminal tanpa guard status + test yang men-SEED status langsung = interaksi lifecycle tak pernah teruji (kelas D-1)
+- **G-58** — `program.action()` di root commander (utk splash bare-`acca`) membuat `acca help`/subcommand di-parse sbg argumen berlebih ("too many arguments"); bare-argv tangani SEBELUM parse via `process.argv`, bukan root-action
 
 ## Deploy / systemd (M5.4)
 - **G-47** — `Restart=on-failure` TAK restart pada exit bersih (SIGTERM→exit 0); uji auto-restart WAJIB pakai SIGKILL

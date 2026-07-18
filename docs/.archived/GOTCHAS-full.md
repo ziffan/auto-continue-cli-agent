@@ -854,6 +854,21 @@ exit → repetisi restart. **Terverifikasi LIVE:** parent=conhost, `EnumWindows`
 berulang. **Alternatif ditolak:** VBScript+`wscript.exe` (GUI-subsystem, proven no-flash) — **VBScript deprecated** Win11 FoD;
 conhost native + tak-deprecated dipilih. **Revisit bila** `--headless` hilang/berubah di Windows mendatang. **Sumber:** M5.5 LIVE 18 Jul.
 
+## CLI dispatch / commander (M-web, banner ADR-027)
+
+### G-58 — `program.action()` di root commander mematahkan `acca help` & subcommand ("too many arguments")
+**Konteks:** slice banner ADR-027 memasang `program.action(() => splash+help)` di root utk mencetak splash saat
+`acca` dijalankan tanpa argumen. **Jebakan:** dengan action terpasang di root + program tak mendeklarasikan argumen,
+commander memperlakukan `acca help` (dan subcommand lain di sebagian jalur) sbg **argumen posisional BERLEBIH** ke root →
+`error: too many arguments. Expected 0 arguments but got 1`. Bug lolos build+lint+test lama (tak ada test yang mem-parse
+`help`) — tertangkap **owner saat pakai manual**. **Fix:** tangani kasus bare-`acca` (splash+`outputHelp()`) **SEBELUM**
+`parse`, dengan cek `process.argv.slice(2).length === 0`, BUKAN via root-action. argv non-kosong diteruskan apa adanya ke
+commander. **Guard regresi:** `buildProgram()` diekstrak ke `src/cli/program.ts` (bebas side-effect) + `test/cli-dispatch.test.ts`
+pakai `exitOverride()` → assert `acca help`/`--help` menghasilkan kode help **bukan** `commander.excessArguments`, `--version`→
+`commander.version`, unknown→`commander.unknownCommand`, semua subcommand terdaftar (`__hook` = nama internal tersembunyi I-23).
+**Pelajaran:** entrypoint CLI = permukaan yang jarang ter-cover unit-test (side-effect + `process.exit`) → ekstrak konfigurasi
+ke fungsi pure + uji jalur bawaan commander dgn `exitOverride`.
+
 ## Backup / Notifier (I-32 / I-8)
 
 ### G-53 — SQLite online backup API (`db.backup()`): koneksi sumber WAJIB tetap terbuka saat transfer + dir tujuan harus ada; race korupsi lama tak bisa jadi negative-control deterministik
