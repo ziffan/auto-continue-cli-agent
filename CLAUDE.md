@@ -24,9 +24,9 @@ Detail lengkap masalah, persona, story, flow → **`docs/PROJECT.md`**.
 
 ## 2. Status
 
-Fase: **M5 ✅ TUTUP PENUH (Linux + Windows)** — hardening + deploy sebagai service (systemd `--user` [Linux] + autostart per-user Task Scheduler @logon [Windows, ADR-026]). **Tak ada milestone aktif** — **M-remote (Telegram) DITUNDA tanpa target** (keputusan owner 18 Jul: "fitur remote Claude Code sudah cukup"). Kerja tersisa = **P3 oportunistik**; M-remote menunggu owner membuka lagi.
+Fase: **M5 ✅ TUTUP PENUH (Linux + Windows)** — hardening + deploy sebagai service (systemd `--user` [Linux] + autostart per-user Task Scheduler @logon [Windows, ADR-026]). **Tak ada milestone aktif** — **M-remote (Telegram) DITUNDA tanpa target** (keputusan owner 18 Jul: "fitur remote Claude Code sudah cukup"). Kerja tersisa = **P3 oportunistik** + **branding/UX** (ADR-027 banner LOCKED; splash+inline-badge **sudah diimplementasi** 18 Jul — web UI monitor masih pending PRD+TRD+ADR). M-remote menunggu owner membuka lagi.
 
-**Suite hijau — angka-of-record = 637 pass + 2 skip POSIX** (diukur Windows 18 Jul). Jumlah test **bergantung-mesin** (gate per-file men-generate test atas working tree); **ini satu-satunya lokasi ber-integer** — doc lain menunjuk ke sini (D-5/RD-5).
+**Suite hijau — angka-of-record = 653 pass + 4 skip POSIX** (diukur Windows 18 Jul, pasca-slice banner ADR-027). Jumlah test **bergantung-mesin** (gate per-file men-generate test atas working tree); **ini satu-satunya lokasi ber-integer** — doc lain menunjuk ke sini (D-5/RD-5).
 
 **Audit — semua TUNTAS:** lima audit di `docs/audit/` (07-11 I-20..I-28/R1–R8 · 07-12-FOLLOWUP B-1..B-3 · 07-12-MENYELURUH C-1..C-8 · RC-16 F-1..F-6 · 07-18-MENYELURUH D-1..D-5). Semua P1/P2 tertutup; audit ketiga & keempat tuntas 18 Jul. **I-35 DITUTUP PENUH** (deteksi limit OUTPUT false-positive → korroborasi snapshot + guard-status + job `kind:'verify'`, insiden live 17 Jul). **Sisa terbuka (P3):** F-4/5/6 (nits RC, ditahan) · B-3 (butuh live-verify) · I-15 (live-verify oportunistik saat limit asli) · I-33-residual (jalur Windows-Service, deferred).
 
