@@ -275,8 +275,8 @@ di-LOCK** (3 Jul malam); butuh Notifier (M4). Sisa yang di-tune saat M-remote: r
 > security pass ✅** (T-L1/2/4/5/8 tutup, T-L7 Linux tutup via M5.4, **T-L6 tutup via M5.6 restore LIVE**) · **M5.4 systemd
 > `--user` ✅ LIVE** (AC-M5-1 penuh + AC-M5-3 Linux) · **M5.5 Windows ✅ DITUTUP PENUH (ADR-026, LIVE 18 Jul)** — autostart
 > per-user (Task Scheduler @logon) menyelesaikan I-33 by construction; **AC-M5-2 hijau LIVE** (daemon=user + same-DB + creds +
-> @logon-fire + watchdog ~65s + nol-jendela via `conhost --headless`) · **M5.6 wrap-up ✅**. **615 test hijau. M5 TUTUP PENUH
-> (Linux + Windows).** **Gate security-review ke M-remote BERSIH** (semua T-L lokal tutup; T-L3 N/A). Paruh Windows AC-M5-3
+> @logon-fire + watchdog ~65s + nol-jendela via `conhost --headless`) · **M5.6 wrap-up ✅**. **Suite hijau di M5-close. M5 TUTUP PENUH
+> (Linux + Windows).** (Jumlah test bergantung-mesin; angka-of-record di CLAUDE.md §2 — RD-5.) **Gate security-review ke M-remote BERSIH** (semua T-L lokal tutup; T-L3 N/A). Paruh Windows AC-M5-3
 > (reboot→login saat job pending) = **kelas I-15** (butuh limit asli utk stage job resume; recovery-on-start sudah terbukti Linux).
 
 > **PRD+TRD di-lock 2026-07-17** (doc-first, skill `docs-first-spec` mode modul). ADR pengikat: **ADR-021**

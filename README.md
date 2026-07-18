@@ -9,8 +9,8 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 > sudah **live-verified pada limit Claude Code ASLI** (16 Jul).
 > **M5 (hardening + deploy sebagai service) ✅ TUTUP PENUH** — Linux (systemd `--user` + linger) DAN Windows
 > (autostart per-user Task Scheduler @logon, ADR-026) — lihat [Menjalankan daemon](#menjalankan-daemon).
-> **±630 test hijau** (angka per-mesin — beberapa gate men-generate test per-file; hitungan resmi lihat
-> CLAUDE.md §2), cross-OS (Linux + Windows). Belum dirilis/dipaketkan; **M-remote (kontrol Telegram) DITUNDA**
+> **Suite hijau lintas-OS** (Linux + Windows) — jumlah test bergantung-mesin (gate per-file); angka-of-record
+> di CLAUDE.md §2 (RD-5). Belum dirilis/dipaketkan; **M-remote (kontrol Telegram) DITUNDA**
 > (keputusan owner 18 Jul). Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
 
 ---

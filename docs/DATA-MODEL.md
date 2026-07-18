@@ -57,7 +57,7 @@ Index: `idx_events_session(session_id, created_at)`. **Tak pernah UPDATE/DELETE*
 | `id` | INTEGER PK AUTOINCREMENT | |
 | `session_id` | TEXT FK→sessions.id | |
 | `run_at` | INTEGER | epoch ms jadwal jalan |
-| `kind` | TEXT CHECK(`probe`\|`resume`) | |
+| `kind` | TEXT CHECK(`probe`\|`resume`\|`verify`) | `verify` ditambah migrasi `0003` (`schema_version`=3) — probe verifikasi eksplisit FP limit (I-35): latch murni dari probe usage, bukan isi output (ADR-013). |
 | `attempts` | INTEGER DEFAULT 0 | |
 | `next_backoff_ms` | INTEGER NULL | backoff berjenjang (NFR: 5m→15m→1j→cap) |
 | `created_at` | INTEGER | |

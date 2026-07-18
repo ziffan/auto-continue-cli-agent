@@ -22,6 +22,10 @@ versi mengikuti [SemVer](https://semver.org/). Belum ada rilis publik (`0.1.0`, 
 - **Auto-resume sesi "limit lalu exit bersih" (D-1/RD-1 Opsi A, audit keempat 18 Jul)** — `markExited` tak lagi meng-clobber `LIMIT_HIT`→`EXITED` (status hanya transisi dari `RUNNING`; semantik = `markOrphanExited`). Sesi yang kena limit lalu ditutup bersih (Ctrl-C/quit) kini tetap di-resume-by-id otomatis di `reset_at` — regresi senyap dari interaksi guard I-35 (17 Jul) yang membuat jalur agy-exited (ADR-019) praktis tak terjangkau. +5 test (3 unit + 2 komposisi lifecycle), negative control terbukti.
 - **Notifikasi limit asli hasil konfirmasi `verify` (D-2/RD-2)** — latch via job `verify` kini menulis `status_change {to:LIMIT_HIT, source:verify}` → user dinotifikasi (AC-5) + audit-trail transisi konsisten di semua jalur latch. Sebelumnya satu-satunya jalur latch yang bisu.
 
+### Security
+
+- **Egress allowlist dipersempit — `api.telegram.org` DIHAPUS (D-4/RD-4, audit keempat 18 Jul)** — host tanpa konsumen produksi (M-remote ditunda tak-tentu) dibuang dari `ALLOWED_HOSTS` (`shared/http.ts`); least-privilege, preseden persis ADR-019. Dikembalikan saat slice M-remote (ADR-011) benar-benar dibangun. Test egress + NFR §Security disesuaikan.
+
 ### Changed
 
 - **Engine backup → SQLite online backup API (I-32)** — `backupDatabase` kini async (`db.backup`), concurrency-safe by design: menghapus race `wal_checkpoint`+`copyFileSync` yang bisa hasilkan salinan half-written saat daemon menulis konkuren. Caller (`scripts/backup.js`) pakai top-level await.

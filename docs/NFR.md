@@ -49,10 +49,11 @@
 - Output CLI/transcript diperlakukan sebagai data, bukan perintah (proteksi prompt-injection).
 - Aksi otomatis whitelist-only, least-privilege (ADR-008).
 - Events append-only sebagai audit trail (siapa/apa/kapan tiap resume).
-- Egress terbatas & eksplisit (whitelist): MVP hanya boleh memanggil (a) endpoint usage provider yang
-  jadi sumber probe — `api.anthropic.com/api/oauth/usage` (probe CC, **ADR-001/010**) — (b) localhost (LS
-  `GetUserStatus`/`RetrieveUserQuotaSummary` agy sesi hidup, **ADR-010 opsi #2**) — dan (c) `api.telegram.org`
-  (kanal remote-control Telegram, long-polling outbound-only, **ADR-011**). **Tidak ada** host Google OAuth
+- Egress terbatas & eksplisit (whitelist): allowlist AKTIF hanya (a) endpoint usage provider yang
+  jadi sumber probe — `api.anthropic.com/api/oauth/usage` (probe CC, **ADR-001/010**) — dan (b) localhost (LS
+  `GetUserStatus`/`RetrieveUserQuotaSummary` agy sesi hidup, **ADR-010 opsi #2**). `api.telegram.org` (kanal
+  remote-control Telegram, **ADR-011**) **BELUM di allowlist** — ditambah saat slice M-remote benar-benar
+  dibangun (kode konsumen + long-polling outbound-only). **Tidak ada** host Google OAuth
   publik (`oauth2.googleapis.com`/`cloudcode-pa.googleapis.com`): probe agy standalone via `retrieveUserQuota`
   (opsi #3) **dibatalkan** — terbukti membaca pool kuota SALAH (gemini-cli harian ≠ grup agy weekly+5h), lihat
   **ADR-019**; agy-exited kini pakai **optimistic resume + detect** (nol egress baru).
@@ -60,7 +61,10 @@
   *(Revisi 3 Jul 2026: "MVP tanpa jaringan keluar" lama kontradiktif dengan probe usage; egress di-scope
   eksplisit oleh ADR-001 + ADR-010. Revisi 3 Jul sore: tambah `api.telegram.org` — ADR-011. Revisi 11 Jul:
   tambah `oauth2.googleapis.com` — ADR-018. **Revisi 12 Jul: ADR-018 di-supersede ADR-019 → `oauth2.googleapis.com`
-  + `cloudcode-pa.googleapis.com` DIHAPUS dari whitelist** (opsi #3 tak viable; live-verify baca pool salah).)*
+  + `cloudcode-pa.googleapis.com` DIHAPUS dari whitelist** (opsi #3 tak viable; live-verify baca pool salah).
+  **Revisi 18 Jul (RD-4): `api.telegram.org` DIHAPUS dari allowlist** — M-remote ditunda tak-tentu (keputusan
+  owner) → host tanpa konsumen produksi melanggar least-privilege (preseden persis ADR-019); dikembalikan saat
+  slice M-remote dibuka.)*
 - **Remote-control (tier B/C) — kontrol keamanan wajib** (detail: THREAT-MODEL.md + ADR-012/013):
   ingress hanya dari `chat_id` allowlist (default-deny, sender tak sah di-drop+audit); relay-instruksi
   **wajib konfirmasi eksplisit** (human-in-the-loop, tak ada inject tanpa konfirmasi); egress output =

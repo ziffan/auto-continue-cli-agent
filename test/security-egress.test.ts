@@ -64,8 +64,11 @@ describe('security-egress: loopbackHttpsPostJson end-to-end allow/block matrix',
   });
 
   it('host allowlisted publik (bukan loopback) via https tetap diblokir (insecure-TLS hanya loopback)', () => {
+    // `api.anthropic.com` = host yang MEMANG di allowlist tapi bukan loopback → tetap ditolak jalur
+    // insecure-TLS. (Dulu contohnya `api.telegram.org`; dihapus dari allowlist di RD-4 → tak lagi
+    // membuktikan properti "allowlisted tapi bukan loopback".)
     const impl = vi.fn() as unknown as HttpsRequestFn;
-    expect(() => loopbackHttpsPostJson('https://api.telegram.org/x', '{}', impl)).toThrow(EgressBlockedError);
+    expect(() => loopbackHttpsPostJson('https://api.anthropic.com/x', '{}', impl)).toThrow(EgressBlockedError);
     expect(impl).not.toHaveBeenCalled();
   });
 });

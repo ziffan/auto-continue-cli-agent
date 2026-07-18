@@ -32,7 +32,6 @@ function fakeHttps(status: number, body: string, onWrite?: (chunk: string) => vo
 describe('guardEgress', () => {
   it.each([
     'https://api.anthropic.com/api/oauth/usage',
-    'https://api.telegram.org/botTOKEN/sendMessage',
     'http://localhost:1234/x',
     'http://127.0.0.1:55031/y',
     'http://[::1]:8080/z',
@@ -46,6 +45,9 @@ describe('guardEgress', () => {
     // membaca pool kuota salah). Keduanya kini diblokir (least-privilege).
     'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota',
     'https://oauth2.googleapis.com/token',
+    // RD-4 (18 Jul): `api.telegram.org` DIHAPUS dari allowlist (M-remote ditunda tak-tentu, nol
+    // konsumen produksi — least-privilege, preseden ADR-019). Ditambah lagi saat slice M-remote dibuka.
+    'https://api.telegram.org/botTOKEN/sendMessage',
   ])('blocks a host not in the allowlist: %s', (url) => {
     expect(() => guardEgress(url)).toThrow(EgressBlockedError);
   });

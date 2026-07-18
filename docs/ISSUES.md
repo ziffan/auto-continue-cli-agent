@@ -48,7 +48,8 @@
 > **Audit menyeluruh KEEMPAT 18 Jul (`docs/audit/AUDIT-2026-07-18-MENYELURUH.md`) → D-1..D-5.**
 > Verifikasi independen Linux: typecheck+lint+**623/623 test** hijau; semua remedi A-/B-/C-/F- terpasang,
 > tak ada regresi remedi lama. **D-1 (P1) + D-2 (P2) DITUTUP hari yang sama** (RD-1 Opsi A + RD-2, keputusan
-> owner; 629 test). Terbuka: D-3/D-4/D-5 (P3).
+> owner; 629 test). **D-3/D-4/D-5 (P3) DITUTUP 18 Jul** (RD-3 DATA-MODEL 0003 · RD-4 hapus `api.telegram.org`
+> dari allowlist egress · RD-5 satu sumber angka test). **Audit keempat TUNTAS — semua temuan tertutup.**
 
 ### D-1 — `markExited` clobber `LIMIT_HIT` + guard status probe (I-35) ⇒ auto-resume sesi "limit lalu exit BERSIH" mati senyap [P1] ✅ (18 Jul, RD-1 Opsi A — keputusan owner)
 **Solusi (Opsi A):** `markExited` kini meniru `markOrphanExited` — `status` hanya transisi `RUNNING→EXITED`;
@@ -68,17 +69,26 @@ mapping LIMIT_HIT yang sudah ada — nol mapping baru). Audit-trail transisi kin
 **Bukti:** test verify-latch diperluas assert `status_change`; NC terbukti (append dihapus sementara → tepat 1
 test merah).
 
-### D-3 — DATA-MODEL.md belum mencatat `kind='verify'`/migrasi 0003 (drift sumber-kebenaran skema) [P3]
-`DATA-MODEL.md:60` masih `CHECK(probe|resume)`. Remedi = **RD-3** (docs-only).
+### D-3 — DATA-MODEL.md belum mencatat `kind='verify'`/migrasi 0003 (drift sumber-kebenaran skema) [P3] ✅ (18 Jul, RD-3)
+**Solusi (docs-only):** `DATA-MODEL.md` baris `scheduled_jobs.kind` kini `CHECK(probe|resume|verify)` +
+catatan `verify` ditambah migrasi `0003` (`schema_version`=3, probe verifikasi eksplisit I-35, latch murni
+dari probe usage). Skema doc kembali selaras `0003-scheduled-jobs-kind-verify.sql` + `types.ts` JobKind.
 
-### D-4 — `api.telegram.org` di allowlist egress dengan NOL konsumen produksi [P3, least-privilege]
-`shared/http.ts:12-18`. Inkonsisten preseden ADR-019 (cloudcode-pa dihapus krn tak dipanggil produksi);
-M-remote kini ditunda tak-tentu (keputusan owner 18 Jul). Remedi = **RD-4**: hapus sampai slice M-remote dibuka
-(+ sesuaikan `security-egress.test.ts` + NFR §Security).
+### D-4 — `api.telegram.org` di allowlist egress dengan NOL konsumen produksi [P3, least-privilege] ✅ (18 Jul, RD-4)
+**Solusi:** `api.telegram.org` DIHAPUS dari `ALLOWED_HOSTS` (`shared/http.ts`) — grep konfirmasi nol konsumen
+produksi (nol `grammy`/telegram di `src/` selain entri allowlist itu sendiri). Menyimpan host tanpa pemanggil
+= melanggar least-privilege, preseden persis ADR-019 (cloudcode-pa/oauth2 dihapus krn tak dipanggil). Test
+disesuaikan: `http-egress.test.ts` memindah telegram allow→block; `security-egress.test.ts` mengganti contoh
+"allowlisted-tapi-bukan-loopback" ke `api.anthropic.com` (host yang MEMANG masih di allowlist → properti tetap
+sahih). NFR §Security direvisi (egress aktif = anthropic + loopback saja; telegram dikembalikan saat slice
+M-remote/ADR-011 dibangun). Reversibel by design. 632 test hijau (Windows), gate egress + literal hijau.
 
-### D-5 — Klaim jumlah test bergantung-mesin & drift antar-doc (626 CLAUDE/README vs 615 MILESTONES vs 623 audit-Linux) [P3, higiene klaim]
-Gate per-file (literal/artefak) men-generate test atas working tree → angka beda per mesin (file untracked ikut).
-Remedi = **RD-5**: pin angka dari checkout bersih di SATU lokasi / berhenti pin angka eksak.
+### D-5 — Klaim jumlah test bergantung-mesin & drift antar-doc (629 CLAUDE vs 615 MILESTONES vs 623 audit-Linux) [P3, higiene klaim] ✅ (18 Jul, RD-5)
+**Solusi:** **CLAUDE.md §2 = SATU-SATUNYA lokasi yang menyebut integer test** (angka-of-record 629 checkout
+Linux 18 Jul, ber-label machine+date + catatan gate per-file men-generate test atas working tree → mesin lain
+wajar beda, mis. Windows 632+2skip). README + MILESTONES-header + CONTEXT **berhenti pin integer eksak** →
+menunjuk ke CLAUDE.md §2. Angka per-slice historis di MILESTONES DIBIARKAN (rekaman point-in-time, jujur apa
+adanya). Drift antar-doc lenyap by construction (hanya satu integer "current" yang eksis).
 
 ### I-35 — Deteksi limit dari OUTPUT false-positive pada PROSA yang mengutip pesan kanonik → inject token ke sesi SEHAT [P1 — ✅ DITUTUP PENUH 18 Jul: korroborasi (17 Jul) + guard-status (17 Jul) + probe verifikasi eksplisit `kind:'verify'` (18 Jul)]
 **Ditemukan live 17 Jul di sesi ini sendiri** (`acca run claude` — dogfood tak sengaja, sesi `z36i`). **DUA FP nyata

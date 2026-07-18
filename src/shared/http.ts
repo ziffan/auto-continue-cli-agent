@@ -2,7 +2,10 @@
 // Semua panggilan HTTP di codebase ini WAJIB lewat `safeFetch` (host publik) atau
 // `loopbackHttpsPostJson` (agy Language Server lokal, TLS self-signed) — tak ada `fetch`/`https`
 // telanjang. Allowlist sengaja sempit: hanya host yang benar-benar dipakai probe usage (CC/agy) +
-// Telegram + loopback. Host lain → `EgressBlockedError`, bukan silently proceed.
+// loopback. Host lain → `EgressBlockedError`, bukan silently proceed. Catatan (RD-4, 18 Jul):
+// `api.telegram.org` DIHAPUS — M-remote ditunda tak-tentu → nol konsumen produksi; menyimpannya di
+// allowlist melanggar least-privilege (preseden persis ADR-019 di bawah: host tanpa pemanggil produksi
+// dibuang). Ditambah lagi saat slice M-remote (ADR-011) benar-benar dibangun.
 // Catatan (ADR-019): host Google OAuth publik (`oauth2.googleapis.com`/`cloudcode-pa.googleapis.com`)
 // TIDAK di allowlist — probe agy standalone `retrieveUserQuota` (ADR-018 opsi #3) dibatalkan karena
 // membaca pool kuota salah (gemini-cli harian ≠ grup agy weekly+5h). agy-exited pakai optimistic resume.
@@ -11,7 +14,6 @@ import { request as httpsRequest, type RequestOptions } from 'node:https';
 
 const ALLOWED_HOSTS = new Set([
   'api.anthropic.com',
-  'api.telegram.org',
   'localhost',
   '127.0.0.1',
   '[::1]',
