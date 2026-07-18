@@ -5,6 +5,7 @@ import { registerHookCommand } from './commands/hook.js';
 import { registerLogCommand } from './commands/log.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerStatusCommand } from './commands/status.js';
+import { renderSplash, resolveBannerCaps } from '../shared/banner.js';
 
 const program = new Command();
 
@@ -22,6 +23,14 @@ registerStatusCommand(program);
 registerDaemonCommand(program);
 registerLogCommand(program);
 registerHookCommand(program);
+
+// `acca` tanpa subcommand = momen kenalan (ADR-027 §4): splash penuh lalu help. Root action hanya
+// menyala saat tak ada subcommand cocok; `--help`/`--version` di-handle commander lebih dulu (exit).
+program.action(() => {
+  const splash = renderSplash(resolveBannerCaps());
+  if (splash) console.log(splash);
+  program.outputHelp();
+});
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));

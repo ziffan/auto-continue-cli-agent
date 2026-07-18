@@ -3,6 +3,7 @@ import { closeDb, openDb } from '../../store/db.js';
 import { createSessionsRepo } from '../../store/repositories/sessions.js';
 import { createMetaRepo } from '../../store/repositories/meta.js';
 import { isProcessAlive } from '../../shared/proc.js';
+import { renderInlineBadge, resolveBannerCaps } from '../../shared/banner.js';
 import type { Session, Tool, UsageLimit } from '../../shared/types.js';
 
 const COLUMNS = ['#id', 'tool', 'status', 'reset', 'proc', 'pid', 'cwd', 'updated'] as const;
@@ -153,6 +154,11 @@ export function registerStatusCommand(program: Command): void {
     .action(() => {
       const db = openDb();
       try {
+        // Header brand inline (ADR-027) — TTY-only via renderInlineBadge (''=non-TTY). Dicetak SEBELUM
+        // jalur data supaya, saat di-pipe/redirect, output data (usage/tabel) tetap bersih & parseable.
+        const badge = renderInlineBadge(resolveBannerCaps());
+        if (badge) console.log(badge);
+
         const meta = createMetaRepo(db);
         for (const tool of ['claude', 'antigravity'] as const) {
           for (const line of formatUsageLines(tool, meta.get(`usage_snapshot_${tool}`), Date.now())) {

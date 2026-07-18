@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { runtimeSocketPath } from '../../shared/paths.js';
 import { DaemonAlreadyRunningError, createSupervisor } from '../../daemon/supervisor.js';
+import { renderSplash, resolveBannerCaps } from '../../shared/banner.js';
 import { closeDb, openDb } from '../../store/db.js';
 
 const HEARTBEAT_INTERVAL_MS = 5000;
@@ -12,6 +13,10 @@ export function registerDaemonCommand(program: Command): void {
     .command('daemon')
     .description('Jalankan supervisor daemon (foreground) — IPC + rekonsiliasi orphan + heartbeat')
     .action(async () => {
+      // Splash sekali menandai daemon hidup (ADR-027; TTY-only, ''=non-TTY spt service/redirect).
+      const splash = renderSplash(resolveBannerCaps());
+      if (splash) console.log(splash);
+
       const db = openDb();
       const supervisor = createSupervisor({
         db,

@@ -15,3 +15,14 @@ const ANSI_PATTERN = /\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\
 export function stripAnsi(text: string): string {
   return text.replace(ANSI_PATTERN, '');
 }
+
+// ── Warna ANSI minimal (zero-dep — ADR-027) ──────────────────────────────────────────────────
+// Dipakai banner/splash. Wrapping selalu opt-in via parameter `enabled` supaya jalur non-TTY /
+// NO_COLOR mengeluarkan teks polos (unit-testable tanpa TTY nyata, tak menarik chalk/kleur).
+const RESET = '\x1b[0m';
+export const ANSI = { dim: '\x1b[2m', bold: '\x1b[1m', cyan: '\x1b[36m' } as const;
+
+/** Bungkus `text` dengan kode ANSI `code` bila `enabled`; else kembalikan teks apa adanya. */
+export function paint(text: string, code: string, enabled: boolean): string {
+  return enabled ? `${code}${text}${RESET}` : text;
+}
