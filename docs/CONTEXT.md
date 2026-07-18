@@ -6,6 +6,12 @@
 
 ## Status saat ini
 
+- **Terakhir diupdate:** 2026-07-18 (sesi **Windows, dgn owner** — `/session-start` → **BRANDING doc-hygiene + ADR banner-policy**). Baseline Step 0 sinkron origin 0/0, tree bersih kecuali `docs/BRANDING.md` untracked (dibuat sesi sebelumnya). Owner memilih arah A (bereskan BRANDING + banner ADR) — tak ada milestone aktif, M-remote tetap ditunda.
+  **(1) Doc-hygiene:** `docs/BRANDING.md` di-track (logo LOCKED: Opsi 1 wordmark `c∞c` + Opsi 3 inline gauge `▓░`). Dua pending decision yang BRANDING introduce tapi belum terekam kini masuk tabel Pending `DECISIONS.md`: **banner/splash policy** (→ akan di-lock ADR-027 sesi ini) + **web UI monitor** (butuh PRD+TRD+ADR terpisah, tetap pending). BRANDING §5/§6 memang menyuruh "catat sebagai pending di CONTEXT" — drift ditutup.
+  **(2) ADR-027 banner-policy** (sub-task 2, via skill adr): meng-*unblock* implementasi splash+inline-badge (kode di sesi berikutnya, Tier-2). Web UI TETAP pending.
+  **Verifikasi:** `npm run check` hijau (gate `no-canonical-limit-literals` men-scan BRANDING baru — bersih, tak memuat frasa kanonik limit).
+  **Next konkret:** implementasi banner (helper ANSI pure-function `src/shared/` + splash + inline gauge `acca status`) setelah ADR-027 lock — vertical slice kecil Tier-2. Web UI = menunggu owner buka PRD+TRD.
+
 - **Terakhir diupdate:** 2026-07-18 (sesi **Windows, dgn owner** — lanjutan: **PELANGSINGAN DOCS** agar session-start ramping). Owner konfirmasi sisa kerja = P3 oportunistik → tak perlu seret sejarah tiap sesi. **Nol hard-delete** — historis/tertutup dipindah ke `docs/.archived/` (greppable, di luar jalur ritual).
   **Hasil (session-start read-set 4360 → ~900 baris, ~79% turun):** yang dilangsingkan (3797→~340): CONTEXT 1029→~36 (entri terbaru + pointer) · ISSUES 1044→~140 (Open penuh + indeks closed) · GOTCHAS 927→94 (indeks 1-baris/G-N) · DECISIONS 797→~70 (indeks ADR + Pending + larangan keras). CLAUDE.md §2 (di-load TIAP sesi) **53→12 baris**. Sengaja TAK disentuh (spec stabil): PROJECT/ARCHITECTURE/MAP/CONVENTIONS (563). Arsip self-contained: `.archived/{CONTEXT-2026-07,ISSUES-closed,GOTCHAS-full,DECISIONS-full}.md`.
   **Verifikasi:** `npm run check` **637 test** hijau (gate literal 103→107 = scan 4 file arsip baru, semua bersih — menegaskan D-5: nambah docs nambah test per-file). Angka-of-record CLAUDE.md §2 diperbarui 633→637.

@@ -53,6 +53,8 @@
 | Keputusan | Owner | Target |
 |---|---|---|
 | Lisensi repo (MIT vs proprietary) — terkait rencana komersialisasi | Ziffan | sebelum publik |
+| Banner/splash policy (placement + gating TTY/`NO_COLOR`/`--plain`/ASCII-fallback) — `docs/BRANDING.md` §4–5 | Ziffan | sebelum kode banner (→ ADR-027) |
+| Web UI monitor read-only (port, bind `127.0.0.1`, auth, konsistensi egress/threat-model) — `docs/BRANDING.md` §6 | Ziffan | butuh PRD+TRD+ADR terpisah sebelum kode |
 
 > Semua pending lain **sudah selesai** (probe agy → ADR-010/019, IPC → ADR-015, TUI → plain ANSI, resume agy MATI →
 > ADR-019, pin WinSW → ADR-025, retensi backup → ADR-024, THREAT-MODEL + ADR-011/012/013, redaksi, lib bot, retensi
