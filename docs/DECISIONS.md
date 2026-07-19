@@ -37,7 +37,7 @@
 | 025 | Pin WinSW v2.12.0 (`WinSW.NET461.exe`, hash `b5066b7b…`, unduh+verifikasi) | Accepted; **dorman pasca-ADR-026** (revisit trigger → servy) |
 | 026 | **Deployment Windows MVP = autostart per-user (Task Scheduler @logon, run-hidden, restart-on-failure)** | Accepted; men-supersede sebagian realisasi Windows ADR-021; **meng-unblock I-33** |
 | 027 | Banner/splash `acca` = tampil di bawah gating ketat (TTY-only · `NO_COLOR` · `--plain` · ASCII-fallback · zero-dep · pure-function) | Accepted; menguatkan ADR-013 (dekoratif vs data); belum ada kode |
-| 028 | Web UI monitor = dashboard read-only localhost (bind `127.0.0.1` · zero-framework `http` · proyeksi ter-firewall = nol jalur data baru · Host-guard · opt-in) | Accepted; menguatkan ADR-008/013 + ADR-023/T-L1; menutup Pending web-UI; belum ada kode |
+| 028 | Web UI monitor = dashboard read-only localhost (bind `127.0.0.1` · zero-framework `http` · proyeksi ter-firewall = nol jalur data baru · Host-guard · opt-in) | Accepted; menguatkan ADR-008/013 + ADR-023/T-L1; **M-web dibangun + DITUTUP FORMAL 19 Jul** (gate keamanan T-W1..T-W6 lulus penuh) |
 
 ## Larangan keras (JANGAN PERNAH)
 
