@@ -82,6 +82,9 @@
 - **G-57** — Transisi terminal tanpa guard status + test yang men-SEED status langsung = interaksi lifecycle tak pernah teruji (kelas D-1)
 - **G-58** — `program.action()` di root commander (utk splash bare-`acca`) membuat `acca help`/subcommand di-parse sbg argumen berlebih ("too many arguments"); bare-argv tangani SEBELUM parse via `process.argv`, bukan root-action
 
+## Packaging / instalasi lintas-mesin (npm)
+- **G-59** — `npm install -g git+https://…` TAK ANDAL (bug npm: skrip `prepare` dijalankan dua kali, invokasi kedua tanpa `node_modules/.bin` → `tsc: not found`); pakai `git clone` manual + `npm install` biasa
+
 ## Deploy / systemd (M5.4)
 - **G-47** — `Restart=on-failure` TAK restart pada exit bersih (SIGTERM→exit 0); uji auto-restart WAJIB pakai SIGKILL
 - **G-48** — `sed` substitusi placeholder juga menggarabl token yang sama di KOMENTAR prosa template

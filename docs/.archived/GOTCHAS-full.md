@@ -869,6 +869,33 @@ pakai `exitOverride()` → assert `acca help`/`--help` menghasilkan kode help **
 **Pelajaran:** entrypoint CLI = permukaan yang jarang ter-cover unit-test (side-effect + `process.exit`) → ekstrak konfigurasi
 ke fungsi pure + uji jalur bawaan commander dgn `exitOverride`.
 
+## Packaging / instalasi lintas-mesin (npm)
+
+### G-59 — `npm install -g git+https://…` TAK ANDAL untuk paket dgn skrip `prepare` (`tsc: not found`)
+**Konteks:** owner minta cara instal `acca` lintas-mesin tanpa `git clone` manual — kandidat jelas = shortcut
+npm standar `npm install -g git+https://github.com/…/repo.git` (npm men-clone lalu, per dokumentasi resmi,
+menjalankan `devDependencies`+`prepare` sebelum pack/install). **Jebakan:** diuji langsung 2× (isolated prefix,
+`--prefix`) — **gagal konsisten** `sh: tsc: not found` walau (a) `package.json` sudah punya script
+`"prepare": "npm run build"`, (b) `typescript` sudah dipindah dari `devDependencies` ke `dependencies` (yang
+seharusnya SELALU terpasang apa pun jalur reify). Debug log (`npm error`/`~/.npm/_logs`) menunjukkan **`prepare`
+dijalankan DUA KALI** oleh npm 11.14.1 untuk kombinasi git-dependency + install global: sekali oleh persiapan
+git internal pacote (di situ deps lengkap, ini yang BERHASIL bila diuji manual via `git clone`+`npm install`
+biasa — direproduksi sukses di `/tmp` terpisah), sekali lagi oleh **`arborist/rebuild.js`** saat menempatkan
+paket final ke prefix target (`build:run:prepare:<tmp-git-clone-dir>`) — invokasi kedua ini `cwd`-nya balik ke
+direktori clone temp **tanpa `node_modules/.bin` terisi** (baik `dependencies` maupun `devDependencies`), jadi
+`tsc` tak ditemukan sama sekali. Ini murni bug/keterbatasan **npm sendiri** (bukan salah `package.json`) —
+reproduksi bersih di dua percobaan berturut, dgn dan tanpa `typescript` di `dependencies`.
+**Fix (bukan workaround — metode resmi):** JANGAN pakai shortcut `git+https://`. Pakai `git clone` manual +
+`npm install` biasa di direktori proyek sendiri — jalur ini **selalu** memasang `dependencies` **dan**
+`devDependencies` dgn urutan benar (raw top-level install, bukan git-dependency-untuk-paket-lain), lalu skrip
+`prepare` (`npm run build`) jalan sekali dan sukses. **Teruji end-to-end** 2× dari clone segar `/tmp` (`tsc: OK`,
+`dist/cli/index.js --version` jalan). Skrip `prepare` (ditambah utk kasus ini) tetap bernilai independen dari bug
+di atas: `npm install` polos pasca-`git clone` kini auto-build `dist/` tanpa langkah `npm run build` terpisah.
+**Pelajaran:** jangan percaya janji dokumentasi npm ("prepare + full deps utk git dependency") tanpa uji langsung
+end-to-end dgn command PERSIS yang akan dipakai user (`-g`, `--prefix` terisolasi) — perilaku bisa beda dari
+`npm install` biasa di direktori sendiri, dan devDependencies-availability bukan penjelasan lengkap (dependencies
+biasa pun kena). **Sumber:** sesi 19 Jul, permintaan packaging lintas-mesin owner.
+
 ## Backup / Notifier (I-32 / I-8)
 
 ### G-53 — SQLite online backup API (`db.backup()`): koneksi sumber WAJIB tetap terbuka saat transfer + dir tujuan harus ada; race korupsi lama tak bisa jadi negative-control deterministik
