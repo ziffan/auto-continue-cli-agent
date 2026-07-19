@@ -4,6 +4,16 @@
 
 ---
 
+### W-1 — Security-review gate M-web (T-W1..T-W6) belum dijalankan [P2] ✅ DITUTUP PENUH (19 Jul)
+M-web.1 (`acca web`) diimplementasi+verified 18 Jul; gate formal (skill `milestone-wrapup`, persona
+security-review vs THREAT-MODEL §9.3) dijalankan 19 Jul — verifikasi INDEPENDEN (baca code + jalankan test).
+**Semua T-W CONFIRMED, nol gap:** T-W1 proyeksi ter-firewall (`SessionStatusView` tanpa `cli_session_id`/`cwd`;
+caller `web.ts:44` proyeksikan via `toSessionStatusView`; usage/events lewat firewall) + negative-control test
+(JSON kabel tak memuat `RESUME-CAP-SECRET-ID`/`RAHASIA`/`LEAK-ME`/`SECRET-model`) · T-W2 GET-only 405 · T-W3
+Host-guard 403 IPv6-aware · T-W4 self-contained (grep nol aset eksternal) · T-W5 `textContent` anti-XSS · T-W6
+port-validasi+bind-fail-exit+isolasi-proses. R-7 (loopback terjangkau proses lokal) DITERIMA single-user desktop.
+Nol kode diubah — gate murni verifikasi. Full suite 691 pass + 2 skip. → **milestone M-web DITUTUP FORMAL.**
+
 ### D-1 — `markExited` clobber `LIMIT_HIT` + guard status probe (I-35) ⇒ auto-resume sesi "limit lalu exit BERSIH" mati senyap [P1] ✅ (18 Jul, RD-1 Opsi A — keputusan owner)
 **Solusi (Opsi A):** `markExited` kini meniru `markOrphanExited` — `status` hanya transisi `RUNNING→EXITED`;
 `LIMIT_HIT`/`BLOCKED` **dipertahankan** (`CASE WHEN`), `proc_state` selalu `exited` (`sessions.ts`). Satu semantik

@@ -1,8 +1,8 @@
 ---
 name: session-start
 description: >-
-  Ritual buka sesi kerja — baca docs proyek dalam urutan wajib (PROJECT → ARCHITECTURE →
-  DECISIONS → MAP → CONVENTIONS → GOTCHAS → CONTEXT → ISSUES), buktikan pemahaman secara
+  Ritual buka sesi kerja — baca docs status/aturan wajib (DECISIONS → MAP → CONVENTIONS →
+  GOTCHAS → CONTEXT → ISSUES; PROJECT/ARCHITECTURE = referensi on-demand), buktikan pemahaman
   eksplisit, lalu usulkan rencana sesi. Jalankan di AWAL setiap sesi pada proyek yang
   punya docs/, saat user bilang "mulai sesi", "lanjutkan proyek", "lanjut milestone",
   "kita di mana", atau saat sesi baru dibuka tanpa konteks pekerjaan sebelumnya.
@@ -33,17 +33,23 @@ dari kebenaran di `origin`.
 
 ## Step 1 — Baca berurutan
 
-Baca file berikut dalam urutan ini (lewati yang tidak ada, catat ketiadaannya):
+**Wajib baca penuh** (status + aturan yang berubah tiap sesi — inti "di mana kita"):
 
-1. `docs/PROJECT.md` — masalah & scope
-2. `docs/ARCHITECTURE.md` — bentuk sistem
-3. `docs/DECISIONS.md` — locked / pending / JANGAN PERNAH
-4. `docs/MAP.md` — peta repo
-5. `docs/CONVENTIONS.md` — pola wajib & terlarang
-6. `docs/GOTCHAS.md` — jebakan yang sudah ditemukan
-7. `docs/CONTEXT.md` — status terkini, milestone aktif, blocker
-8. `docs/ISSUES.md` — issue open, prioritas
-9. `HANDOFF_CONTEXT_v{n}.md` versi terbaru, bila ada
+1. `docs/DECISIONS.md` — locked / pending / JANGAN PERNAH
+2. `docs/MAP.md` — peta repo
+3. `docs/CONVENTIONS.md` — pola wajib & terlarang
+4. `docs/GOTCHAS.md` — jebakan yang sudah ditemukan (indeks 1-baris)
+5. `docs/CONTEXT.md` — status terkini, milestone aktif, blocker (entri teratas = di mana kita)
+6. `docs/ISSUES.md` — issue open, prioritas (fokus bagian **Terbuka**)
+7. `HANDOFF_CONTEXT_v{n}.md` versi terbaru, bila ada
+
+**Referensi on-demand** (spec/bentuk-sistem STABIL — jangan baca penuh tiap sesi; proyek matang
+tanpa milestone aktif per 19 Jul). Skim header untuk orientasi; **deep-read HANYA saat task hari
+ini menyentuhnya** (fitur baru, ubah arsitektur, sengketa scope):
+
+- `docs/PROJECT.md` — masalah, persona, user story, AC. Flow + wireframe sudah diarsip
+  (`.archived/PROJECT-design.md`) — baca dari sana bila perlu.
+- `docs/ARCHITECTURE.md` — C4, container map, tech stack.
 
 Baca untuk dipakai, bukan untuk diringkas panjang — jangan paste ulang isinya ke chat.
 
