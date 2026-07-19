@@ -136,6 +136,43 @@ profil laptop; always-on sejati = Linux systemd). **Kenapa BUKAN Windows Service
 
 **Batasan (semua OS, ADR-007):** kalau mesin tidur/mati, resume tertunda sampai ia bangun.
 
+## Update acca (setelah ada commit baru)
+
+`acca daemon` (service) jalan dari `dist/` — **bukan** langsung dari source. `git pull` saja **tidak cukup**;
+`dist/` basi sampai kamu `npm run build` ulang + restart proses yang jalan (service tak auto-reload).
+
+**Linux — service (systemd `--user`):**
+
+```bash
+git pull                                    # atau: git fetch && git status  dulu kalau ada kerja lokal
+npm install                                 # kalau ada dependency baru (aman dijalankan selalu)
+npm run build                               # rebuild dist/ dari source terbaru
+systemctl --user restart acca-daemon        # daemon lama berhenti, yang baru pakai dist/ terbaru
+systemctl --user status acca-daemon --no-pager   # verifikasi: active (running), PID baru
+journalctl --user -u acca-daemon --since "1 minute ago" --no-pager   # cek log start bersih, nol error
+acca status                                 # dogfood check — daemon HIDUP + heartbeat baru
+```
+
+**Windows — Task Scheduler (autostart per-user):**
+
+```powershell
+git pull
+npm install
+npm run build
+Stop-ScheduledTask -TaskName acca-daemon
+Start-ScheduledTask -TaskName acca-daemon
+Get-ScheduledTask acca-daemon | Get-ScheduledTaskInfo   # verifikasi LastTaskResult / LastRunTime
+```
+
+**Aman kapan pun:** restart daemon tidak menghapus state — sesi & job terjadwal ada di `acca.db` (SQLite),
+daemon me-reconcile ulang saat start (AC-7). Cek dulu `acca status` sebelum restart kalau mau tahu ada sesi
+`RUNNING`/`LIMIT_HIT` yang sedang dipantau (restart tidak membunuhnya — proses `acca run` target CLI-nya
+terpisah dari daemon, ADR-017 — tapi tetap baik untuk tahu kondisi sebelum menyentuh service).
+
+**Kalau perintah `acca` belum ada di PATH** (`command not found` / `'acca' is not recognized`): jalankan
+`npm link` sekali (lihat [Instalasi](#instalasi-dari-source) di atas) — ini terpisah dari update di atas,
+cukup dilakukan sekali per mesin, bukan tiap update.
+
 ## Web UI monitor (opt-in, read-only)
 
 Pantau usage/sesi/log di browser lokal — mirror `acca status` yang auto-refresh (ADR-028).
