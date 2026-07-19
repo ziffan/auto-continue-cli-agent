@@ -53,12 +53,14 @@ Detail (untuk siapa, biaya masalah terukur, batasan) → [`docs/PROJECT.md`](doc
 
 ## Instalasi (dari source)
 
-Belum ada paket/installer rilis — jalankan dari source. Cross-OS (Linux + Windows).
+Belum ada paket/installer rilis — jalankan dari source. Cross-OS (Linux + Windows). `npm install` men-trigger
+build otomatis (script `prepare` → `npm run build`) — tak perlu jalankan `npm run build` terpisah kecuali
+rebuild manual setelah edit source (lihat [Update acca](#update-acca-setelah-ada-commit-baru)).
 
-**Linux / macOS / Git Bash:**
+**Sudah punya clone repo ini (Linux / macOS / Git Bash):**
 
 ```bash
-npm install && npm run build
+npm install
 npm link                        # sekali — bikin perintah `acca` tersedia di PATH
 ```
 
@@ -66,7 +68,6 @@ npm link                        # sekali — bikin perintah `acca` tersedia di P
 
 ```powershell
 npm install
-npm run build
 npm link                        # sekali — bikin perintah `acca` tersedia di PATH
 ```
 
@@ -77,6 +78,34 @@ Ganti `acca` dengan `node dist/cli/index.js`, mis. `node dist/cli/index.js daemo
 
 > Perintah `acca` **hanya** ada setelah `npm link` (atau `npm i -g .`). Kalau muncul `'acca' is not recognized` /
 > `command not found`, itu sebabnya — bukan build yang gagal.
+
+### Mesin baru, belum ada clone (setup lintas-mesin)
+
+Repo ini **private** — mesin baru butuh git ter-otorisasi ke GitHub sekali (`gh auth login` lalu
+`gh auth setup-git`, atau SSH key terdaftar) sebelum `git clone` jalan.
+
+```bash
+git clone https://github.com/ziffan/auto-continue-cli-agent.git ~/acca
+cd ~/acca
+npm install                     # trigger build otomatis (script "prepare")
+npm link                        # `acca` tersedia di PATH
+acca --version                  # verifikasi
+```
+
+Native addon (`node-pty`, `better-sqlite3`) di-compile ulang saat `npm install` — mesin butuh toolchain build
+native (Linux: `build-essential`/setara; Windows: Visual Studio Build Tools "Desktop development with C++").
+Kalau native module gagal jalan meski `npm install` "sukses" tanpa error, lihat **G-11**
+([`docs/GOTCHAS.md`](docs/GOTCHAS.md)) — ada kelas kegagalan senyap (`allow-scripts`) yang butuh verifikasi eksplisit.
+
+**Jangan pakai** `npm install -g git+https://…` (shortcut satu-baris tanpa clone manual) — diuji langsung dan
+**tidak andal**: npm menjalankan lifecycle `prepare` dua kali untuk git-dependency + instalasi global, dan pada
+salah satu jalurnya `node_modules/.bin` (termasuk `tsc`) belum terpasang saat `prepare` jalan → gagal
+`sh: tsc: not found` (bug npm, bukan config repo ini). `git clone` manual + `npm install` di atas **tidak** kena
+masalah ini (raw `npm install` di direktori proyek sendiri selalu memasang `dependencies` **dan**
+`devDependencies` dengan urutan benar) — sudah diuji ulang bersih dari clone segar.
+
+Setelah `acca` terpasang, lanjut ke [Menjalankan daemon](#menjalankan-daemon) untuk pasang sebagai service
+(systemd `--user` di Linux / Task Scheduler autostart di Windows) supaya jalan tanpa terminal terbuka.
 
 ## Perintah (yang sudah ada)
 
