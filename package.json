@@ -11,6 +11,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
+    "prepare": "npm run build",
     "build": "tsc && node scripts/copy-migrations.js",
     "dev": "tsx src/cli/index.ts",
     "test": "vitest run",
