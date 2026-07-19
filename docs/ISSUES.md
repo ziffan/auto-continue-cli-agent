@@ -15,17 +15,8 @@
 
 ## Terbuka
 
-> **Status roadmap (owner 18 Jul):** M-remote DITUNDA tanpa target. Modul aktif = **M-web** (Web UI monitor,
-> ADR-028) — M-web.1 ✅ diimplementasi+verified; belum ditutup formal (gate di bawah). Sisa lain = P3.
-
-### W-1 — Security-review gate M-web belum dijalankan [P2, ditunda 2 sesi berturut]
-M-web.1 (`acca web`) sudah diimplementasi + verified runtime (bind loopback, Host-guard 403, method-guard 405,
-`/api/status` firewalled) + 21 unit test. **Belum:** gate `milestone-wrapup` persona security-review formal vs
-**T-W1..T-W6** (THREAT-MODEL §9.3) — verifikasi sistematis proyeksi ter-firewall, Host/method-guard, bind, HTML
-nol-aset. **Ditunda 18 Jul** (owner tutup sesi dgn `acca prune`+README), **ditunda lagi 19 Jul** (owner alihkan
-ke ops: update daemon terinstall + packaging instalasi lintas-mesin, lihat CONTEXT.md). Milestone M-web tak
-ditutup formal sampai ini jalan — **prioritaskan di sesi berikutnya** sebelum kerja lain, bila tak ada permintaan
-mendesak lain dari owner.
+> **Status roadmap (owner 18 Jul):** M-remote DITUNDA tanpa target. Modul **M-web** (Web UI monitor, ADR-028)
+> **DITUTUP FORMAL 19 Jul** (W-1 gate LULUS). Tak ada milestone aktif. Sisa = P3 oportunistik.
 
 ### W-2 — M-web.2 `acca daemon --web` co-host [P3, opsional]
 Mount server web yang sama di daemon (flag `--web`). Nilai kemudahan (satu proses). Belum dikerjakan.
@@ -68,6 +59,11 @@ proyek) always-on lintas-logout **sudah direlakan** (ADR-007). Tak ada yang perl
 ---
 
 ## Tertutup — indeks (writeup lengkap + bukti di [`.archived/ISSUES-closed.md`](.archived/ISSUES-closed.md))
+
+**Modul M-web (Web UI monitor, ADR-028):**
+| ID | Ringkas | Resolusi |
+|---|---|---|
+| W-1 | Security-review gate M-web (T-W1..T-W6) belum dijalankan | 19 Jul LULUS PENUH — semua T-W CONFIRMED nol gap; M-web ditutup formal (verifikasi code + negative-control test + full suite 691 hijau) |
 
 **Audit keempat (D):**
 | ID | Ringkas | Resolusi |

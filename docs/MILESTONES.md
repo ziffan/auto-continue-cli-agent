@@ -274,10 +274,14 @@ di-LOCK** (3 Jul malam); butuh Notifier (M4). Sisa yang di-tune saat M-remote: r
 > (read-only localhost) di atas ADR-008/013 (read-only ⇒ nol aksi) + ADR-023/T-L1 (data-minimize). Gate
 > keamanan: **THREAT-MODEL §9** (T-W1..W6 + R-7).
 >
-> **STATUS: M-web.1 ✅ diimplementasi + verified (18 Jul, `77763a6`).** AC-W1..W4 terpenuhi (unit 21 test +
-> runtime: `/api/status` firewalled · Host evil→403 · POST→405 · netstat `LISTENING 127.0.0.1` SAJA). **Sisa:**
-> security-review gate M-web formal (skill `milestone-wrapup`, persona security-review terhadap T-W1..W6) +
-> M-web.2 (`daemon --web`, opsional). Milestone belum ditutup formal sampai gate dijalankan.
+> **STATUS: ✅ DITUTUP FORMAL 2026-07-19** (security-review gate M-web LULUS PENUH). M-web.1 diimplementasi +
+> verified (18 Jul, `77763a6`); **gate T-W1..T-W6 dijalankan 19 Jul** (skill `milestone-wrapup`, persona
+> security-review) — **semua CONFIRMED, nol gap**: T-W1 proyeksi ter-firewall (code + negative-control test:
+> JSON kabel tak memuat `cli_session_id`/`cwd`/secret; caller `web.ts:44` proyeksikan via `toSessionStatusView`),
+> T-W2 GET-only 405, T-W3 Host-guard 403 (IPv6-aware, tolak subdomain-attack), T-W4 self-contained (grep nol
+> aset eksternal), T-W5 `textContent` anti-XSS, T-W6 port validasi + bind-fail exit + proses terisolasi dari
+> daemon; R-7 (loopback terjangkau proses lokal) DITERIMA (single-user desktop). **M-web.2 (`daemon --web`)
+> tetap opsional (W-2), tak menghalangi penutupan.**
 
 **PRD — apa & untuk siapa:** solo orchestrator ingin memantau usage/sesi/log acca di browser lokal tanpa
 terminal (US-10). Read-only murni; nol aksi kontrol (owner 18 Jul).
