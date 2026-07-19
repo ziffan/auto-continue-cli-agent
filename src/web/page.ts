@@ -4,6 +4,21 @@
 //           (defense-in-depth walau payload sudah ter-firewall di server).
 // String statis — tak ada interpolasi data server-side (data hanya masuk di browser via fetch).
 
+/** Formatter timestamp sisi-browser (W-3) — sumber JS MURNI diekspor sbg string agar (a) di-embed
+ *  ke halaman DAN (b) dievaluasi di test (`new Function`) → nol duplikasi, nol jsdom. `reset_at`/
+ *  `updated_at` epoch-ms → `HH:MM` lokal; beda >24 jam dari sekarang → sisipkan nama hari (spt CLI
+ *  `formatResetCell`, B-2: `HH:MM` telanjang untuk window mingguan MENYESATKAN). Semua di browser —
+ *  NOL field baru ke `/api/status` (jaga T-W1 nol-jalur-data-baru). */
+export const FMT_TS_JS = `
+function fmtTs(ms, now) {
+  if (ms === null || ms === undefined) return '-';
+  var DAYS = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+  var d = new Date(ms);
+  var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+  var hhmm = p2(d.getHours()) + ':' + p2(d.getMinutes());
+  return Math.abs(ms - now) > 86400000 ? DAYS[d.getDay()] + ' ' + hhmm : hhmm;
+}`;
+
 const PAGE_HTML = `<!doctype html>
 <html lang="id">
 <head>
@@ -48,13 +63,15 @@ const PAGE_HTML = `<!doctype html>
 <section><h2>Event log</h2><pre id="events" class="events empty">&hellip;</pre></section>
 
 <script>
+${FMT_TS_JS}
 (function () {
   var REFRESH_MS = 5000;
+  var TS_COLS = { reset_at: 1, updated_at: 1 };
   var $ = function (id) { return document.getElementById(id); };
 
   function setText(el, text) { el.textContent = text; }
 
-  function renderSessions(list) {
+  function renderSessions(list, nowMs) {
     var host = $('sessions');
     host.textContent = '';
     if (!list || list.length === 0) { host.className = 'empty'; host.textContent = 'Belum ada sesi.'; return; }
@@ -71,7 +88,8 @@ const PAGE_HTML = `<!doctype html>
       cols.forEach(function (c) {
         var td = document.createElement('td');
         var v = row[c];
-        td.textContent = (v === null || v === undefined) ? '-' : String(v);
+        if (TS_COLS[c]) { td.textContent = fmtTs(v, nowMs); }
+        else { td.textContent = (v === null || v === undefined) ? '-' : String(v); }
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
@@ -85,7 +103,7 @@ const PAGE_HTML = `<!doctype html>
     var agy = (data.usage && data.usage.antigravity) || [];
     $('usage').className = ''; setText($('usage'), claude.concat([''], agy).join('\\n'));
     $('daemon').className = ''; setText($('daemon'), data.daemon || '-');
-    renderSessions(data.sessions);
+    renderSessions(data.sessions, data.now || Date.now());
     var ev = data.events || [];
     $('events').className = 'events' + (ev.length ? '' : ' empty');
     setText($('events'), ev.length ? ev.join('\\n') : 'Belum ada event.');

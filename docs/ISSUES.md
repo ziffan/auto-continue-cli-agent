@@ -21,9 +21,15 @@
 ### W-2 — M-web.2 `acca daemon --web` co-host [P3, opsional]
 Mount server web yang sama di daemon (flag `--web`). Nilai kemudahan (satu proses). Belum dikerjakan.
 
-### W-3 — Polish halaman Web UI [P3, kosmetik]
-Kolom `reset_at`/`updated_at` masih epoch-ms mentah di tabel (belum human-readable spt `formatResetCell`);
-favicon inline; kolom `now` header. Fungsional, murni kosmetik.
+### W-3 — Polish halaman Web UI [P3, kosmetik — SEBAGIAN selesai 19 Jul]
+- ✅ **Kolom `reset_at`/`updated_at` human-readable** (19 Jul, `page.ts` `fmtTs`): epoch-ms → `HH:MM` lokal,
+  sisip nama hari bila >24 jam (anti-B-2). Browser-side, **nol field baru ke `/api/status`** (jaga T-W1). Diuji
+  behavioral via `new Function(FMT_TS_JS)` + embed-guard + runtime `acca web` (5 test). Kolom `now` header sudah
+  tampil via meta "diperbarui HH:MM:SS".
+- ⏳ **Favicon inline DITUNDA** [P3]: butuh `<link href="data:…">` → memecah assertion T-W4 `web.test.ts` yang
+  blanket `\b(src|href)\s*=`. Menambahkannya = longgarkan guard ketat itu (izinkan `data:` saja) demi kosmetik
+  bernilai sangat rendah → ditahan. Kalau dikerjakan: sempitkan regex test ke URL non-`data:` eksternal, bukan
+  blanket.
 
 ### F-4 / F-5 / F-6 — nits RC-2/RC-3 [P3, non-blocking, sengaja ditahan]
 - **F-4** — residual pembajakan capturer id agy: kill sebelum agy cetak resume-cmd → uuid palsu (match terakhir)

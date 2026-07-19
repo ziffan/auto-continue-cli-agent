@@ -8,7 +8,7 @@ import {
   startWebServer,
 } from '../src/web/server.js';
 import { buildStatusPayload } from '../src/web/status-json.js';
-import { renderPage } from '../src/web/page.js';
+import { FMT_TS_JS, renderPage } from '../src/web/page.js';
 import { toSessionStatusView } from '../src/store/repositories/sessions.js';
 import type { Session } from '../src/shared/types.js';
 import type { StoredEvent } from '../src/store/repositories/events.js';
@@ -214,5 +214,47 @@ describe('renderPage — self-contained (T-W4/T-W5)', () => {
 
   it('fetch hanya ke same-origin /api/status', () => {
     expect(page).toContain("fetch('/api/status'");
+  });
+});
+
+// ── Formatter timestamp sisi-browser (W-3) ───────────────────────────────────────────────────────
+
+describe('fmtTs — formatter reset_at/updated_at (W-3)', () => {
+  // Evaluasi SUMBER JS yang PERSIS di-embed ke halaman (nol duplikasi, nol jsdom). String =
+  // konstanta kita sendiri (bukan input), jadi implied-eval di sini aman & disengaja utk menguji
+  // kode-terkirim yang sebenarnya.
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call
+  const fmtTs = new Function(`${FMT_TS_JS}; return fmtTs;`)() as (
+    ms: number | null | undefined,
+    now: number,
+  ) => string;
+  const now = new Date('2026-07-19T10:00:00').getTime(); // waktu LOKAL (formatter pakai getHours lokal)
+
+  it('null/undefined → "-"', () => {
+    expect(fmtTs(null, now)).toBe('-');
+    expect(fmtTs(undefined, now)).toBe('-');
+  });
+
+  it('sama-hari (≤24 jam) → HH:MM zero-padded, tanpa nama hari', () => {
+    const t = new Date('2026-07-19T03:05:00').getTime();
+    expect(fmtTs(t, now)).toBe('03:05');
+  });
+
+  it('>24 jam ke depan (window mingguan) → sisipkan nama hari (anti-B-2)', () => {
+    const t = new Date('2026-07-22T14:30:00').getTime(); // Rabu
+    expect(fmtTs(t, now)).toBe('Rab 14:30');
+  });
+
+  it('>24 jam ke belakang → juga bernama hari (updated_at basi)', () => {
+    const t = new Date('2026-07-16T21:00:00').getTime(); // Kamis
+    expect(fmtTs(t, now)).toBe('Kam 21:00');
+  });
+
+  it('halaman meng-embed FMT_TS_JS + memanggil fmtTs utk kolom waktu', () => {
+    const page = renderPage();
+    expect(page).toContain('function fmtTs(');
+    expect(page).toContain('fmtTs(v, nowMs)');
+    expect(page).toContain('reset_at:');
+    expect(page).toContain('updated_at:');
   });
 });
