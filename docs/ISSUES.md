@@ -23,11 +23,18 @@
 Repo **masih private** (keputusan owner 20 Jul: "belum publik sampai benar-benar pas"). Fondasinya sudah siap
 (ADR-029 Apache 2.0 + `LICENSE`/`NOTICE`, `SECURITY.md`, CI lintas-OS hijau, audit history nol secret/PII).
 Tiga langkah tersisa, **semua di tangan owner**, urut:
-1. **Aktifkan GitHub private vulnerability reporting** (Settings → Security). Sampai ini aktif, link "Report a
-   vulnerability" di `SECURITY.md` akan **404** — jangan publik sebelum ini.
-2. **Flip visibility** ke publik.
+1. **Flip visibility** ke publik (Settings → General → Danger Zone → Change repository visibility).
+2. **SEGERA setelah itu: aktifkan GitHub private vulnerability reporting** (Settings → **Advanced Security**,
+   UI lama: *Code security and analysis* → "Private vulnerability reporting" → Enable).
 3. **Tag `v0.1.0`** dari commit ber-CI-hijau (paling awal: `2d89abc`) + GitHub Release. **Bukan `npm publish`**
    (`"private": true` disengaja; G-59 membuat npm bukan kanal distribusi yg sehat untuk repo ini).
+
+> **KOREKSI urutan (20 Jul, diverifikasi):** versi awal item ini menaruh "aktifkan PVR" SEBELUM flip visibility —
+> **itu tak mungkin**. PVR hanya tersedia untuk repo **publik**; selama private, `GET /repos/:o/:r/private-vulnerability-reporting`
+> balas **404** dan `security_and_analysis` = `null` (dicek langsung via `gh api`, bukan diasumsikan). Konsekuensi
+> yang diterima: ada **jeda singkat** pasca-flip di mana link "Report a vulnerability" di `SECURITY.md` masih 404 —
+> perkecil dgn mengerjakan langkah 2 langsung setelah 1; kontak alternatif (kampusmerah.com) sudah ada di
+> `SECURITY.md` sebagai jaring.
 **Catatan:** `.claude/skills/*` sengaja ikut publik (README §Metodologi) — bila owner berubah pikiran, keluarkan
 **sebelum** repo publik; setelah publik, history-nya sudah beredar.
 
