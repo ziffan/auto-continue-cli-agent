@@ -33,6 +33,7 @@ versi mengikuti [SemVer](https://semver.org/). Belum ada rilis publik (`0.1.0`, 
 
 ### Security
 
+- **PII: alamat email pribadi dihapus dari metadata 25 commit (G-61)** — sapuan privasi pra-publik menemukan email owner di field author+committer; audit sebelumnya melewatkannya karena hanya memindai isi file (`git grep` membaca blob, tak pernah header commit). Diremediasi `git filter-repo --mailmap` → seluruh history memakai `@users.noreply.github.com`; tree hash `HEAD` lama == baru (terbukti hanya metadata berubah, nol perubahan isi). **Gate pencegah** di `test/ci-workflow.test.ts`: nol alamat email di domain pribadi owner pada file tracked (URL situs tetap boleh — atribusi ADR-029), diverifikasi dgn negative-control. Batasnya ditulis eksplisit: metadata commit tak terjangkau gate file-based → cek manual `git log --all --format='%ae'`.
 - **Egress allowlist dipersempit — `api.telegram.org` DIHAPUS (D-4/RD-4, audit keempat 18 Jul)** — host tanpa konsumen produksi (M-remote ditunda tak-tentu) dibuang dari `ALLOWED_HOSTS` (`shared/http.ts`); least-privilege, preseden persis ADR-019. Dikembalikan saat slice M-remote (ADR-011) benar-benar dibangun. Test egress + NFR §Security disesuaikan.
 
 ### Changed

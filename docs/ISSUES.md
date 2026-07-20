@@ -22,6 +22,10 @@
 ### P-1 — Sisa langkah membuka repo ke publik [P2, aksi OWNER — bukan kerja agent]
 Repo **masih private** (keputusan owner 20 Jul: "belum publik sampai benar-benar pas"). Fondasinya sudah siap
 (ADR-029 Apache 2.0 + `LICENSE`/`NOTICE`, `SECURITY.md`, CI lintas-OS hijau, audit history nol secret/PII).
+**Prasyarat mendesak (20 Jul, jangan dilewat):** history di-**rewrite** (hapus alamat email pribadi owner dari
+metadata 25 commit — G-61) → **clone di mesin Windows WAJIB dihapus & di-clone ulang**. `git pull` biasa di sana
+akan menarik balik commit lama ber-email dan menghidupkannya kembali di `origin` pada push berikutnya.
+
 Tiga langkah tersisa, **semua di tangan owner**, urut:
 1. **Flip visibility** ke publik (Settings → General → Danger Zone → Change repository visibility).
 2. **SEGERA setelah itu: aktifkan GitHub private vulnerability reporting** (Settings → **Advanced Security**,
