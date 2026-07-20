@@ -1,5 +1,7 @@
 # ISSUES.md — issue terbuka & indeks tertutup
 
+> **Baru di repo ini?** Doc ini = **pelacak kerja internal** (ID `I-`/`W-`/`F-`, referensi `ADR-`/`G-`), **bukan**
+> GitHub Issues. Untuk gambaran proyek mulai dari [`../README.md`](../README.md) & [`PROJECT.md`](PROJECT.md).
 > Prioritas: P0 (blocker) · P1 (penting) · P2 (mengganggu) · P3 (nanti). Ditutup = tulis solusinya.
 > **Writeup LENGKAP semua issue tertutup** (termasuk `<details>` bukti) → [`.archived/ISSUES-closed.md`](.archived/ISSUES-closed.md) (greppable, di luar jalur session-start).
 
