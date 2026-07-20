@@ -19,6 +19,18 @@
 > **DITUTUP FORMAL 19 Jul** (W-1 gate LULUS). Tak ada milestone aktif. Sisa = P3 oportunistik.
 > **20 Jul:** lisensi repo di-LOCK **Apache 2.0** (ADR-029) · **W-2 DITOLAK** owner (lihat di bawah).
 
+### P-1 — Sisa langkah membuka repo ke publik [P2, aksi OWNER — bukan kerja agent]
+Repo **masih private** (keputusan owner 20 Jul: "belum publik sampai benar-benar pas"). Fondasinya sudah siap
+(ADR-029 Apache 2.0 + `LICENSE`/`NOTICE`, `SECURITY.md`, CI lintas-OS hijau, audit history nol secret/PII).
+Tiga langkah tersisa, **semua di tangan owner**, urut:
+1. **Aktifkan GitHub private vulnerability reporting** (Settings → Security). Sampai ini aktif, link "Report a
+   vulnerability" di `SECURITY.md` akan **404** — jangan publik sebelum ini.
+2. **Flip visibility** ke publik.
+3. **Tag `v0.1.0`** dari commit ber-CI-hijau (paling awal: `2d89abc`) + GitHub Release. **Bukan `npm publish`**
+   (`"private": true` disengaja; G-59 membuat npm bukan kanal distribusi yg sehat untuk repo ini).
+**Catatan:** `.claude/skills/*` sengaja ikut publik (README §Metodologi) — bila owner berubah pikiran, keluarkan
+**sebelum** repo publik; setelah publik, history-nya sudah beredar.
+
 ### ~~W-2 — M-web.2 `acca daemon --web` co-host~~ [DITOLAK owner 20 Jul]
 Rencana: mount server web yang sama di daemon (flag `--web`), nilai = satu proses. **Ditolak owner:** `acca web`
 "tidak selalu dibutuhkan" → biarkan proses terpisah, dinyalakan saat perlu. Efek samping baik: isolasi **T-W6**

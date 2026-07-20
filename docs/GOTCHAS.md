@@ -93,6 +93,9 @@
 - **G-51** — `git checkout -- <file>` TAK bisa mengembalikan file baru/untracked (negative-control revert gagal senyap)
 - **G-52** — `<Hidden>true>` Task Scheduler TAK cegah jendela konsol; node @logon dapat PseudoConsoleWindow terlihat -> pakai conhost headless
 
+## Repo publik / dokumen turunan
+- **G-60** — Dokumen keamanan tulisan subagent terbaca meyakinkan tapi bisa BERTENTANGAN dgn kode/ADR → verifikasi tiap klaim ke kode; gate baru wajib punya assertion anti-kosong (lolos-palsu)
+
 ## Backup / Notifier (I-32 / I-8)
 - **G-53** — SQLite online backup API (`db.backup()`): koneksi sumber WAJIB tetap terbuka saat transfer + dir tujuan harus ada; race korupsi lama tak bisa jadi negative-control deterministik
 - **G-54** — Engine notifikasi STATELESS lolos unit-test (dipanggil 1×) tapi caller PERIODIK menyingkap spam (fire tiap tick)

@@ -896,6 +896,35 @@ end-to-end dgn command PERSIS yang akan dipakai user (`-g`, `--prefix` terisolas
 `npm install` biasa di direktori sendiri, dan devDependencies-availability bukan penjelasan lengkap (dependencies
 biasa pun kena). **Sumber:** sesi 19 Jul, permintaan packaging lintas-mesin owner.
 
+## Repo publik / dokumen turunan (kesiapan publik, 20 Jul)
+
+### G-60 — Dokumen KEAMANAN yang ditulis subagent terbaca meyakinkan tapi bisa BERTENTANGAN dgn kode & ADR
+**Konteks:** slice kesiapan publik menurunkan penulisan `SECURITY.md` ke subagent Sonnet dgn spec yang **sudah**
+memerintahkan "ambil fakta dari `docs/THREAT-MODEL.md` + `CLAUDE.md`, jangan mengarang". Hasilnya rapi, terstruktur,
+dan **dua klaim faktualnya salah**: (a) menyebut acca membaca `~/.gemini/oauth_creds.json` — kode (`src/shared/
+credentials.ts`) hanya membaca `~/.claude/.credentials.json`; (b) menyebut allowlist egress memuat
+`cloudcode-pa.googleapis.com` — `src/shared/http.ts` justru **sengaja mengeluarkan** host Google OAuth sejak
+ADR-018 di-supersede **ADR-019** (dan komentar di file itu menyatakannya eksplisit). Kedua klaim itu "masuk akal"
+karena proyek ini MEMANG bicara agy/Google di banyak dokumen — persis itu yang membuatnya lolos baca sekilas.
+**Kenapa berbahaya khusus di dokumen keamanan:** salah-arah DUA-arah. Klaim yang terlalu luas (daftar kredensial
+yang tak pernah disentuh) menakuti pengguna tanpa dasar; klaim yang terlalu longgar (host egress yang sebetulnya
+tak dihubungi) membuat pengguna yang memeriksa lalu lintas jaringannya merasa tertipu, dan **mempublikasikan
+kebijakan yang bertentangan dgn ADR ber-status Accepted** merusak kredibilitas seluruh docs — di repo yang
+justru menjual disiplin doc-first.
+**Fix:** tiap klaim faktual di dokumen publik diverifikasi ke **kode**, bukan ke dokumen lain dan bukan ke ingatan
+model — `grep` path kredensial di `credentials.ts`, `grep` konstanta `ALLOWED_HOSTS` di `http.ts`. Ditambah catatan
+jujur di SECURITY.md bahwa proses CLI yang di-spawn tentu menghubungi endpoint vendornya sendiri (di luar kendali
+acca) supaya pembaca tak menyimpulkan allowlist acca = seluruh trafik mesinnya.
+**Pelajaran:** spec subagent yang menyebut "jangan mengarang, ambil dari docs" **tidak cukup** untuk dokumen yang
+menyatakan properti keamanan sistem. Turunkan penulisan bentuk/strukturnya, tapi **verifikasi tiap klaimnya ke
+source-of-truth eksekutabel** sebelum publish. Sejalan pola tier-review: yang direview bukan cuma diff kode, tapi
+**klaim** yang dibawa artefak turunan.
+**Residual dari sesi yang sama (kelas G-46, gate yang hampir lolos-palsu):** saat menulis gate `test/ci-workflow.
+test.ts`, regex awal `^\s*uses:` tak menangkap baris berformat `- uses: …` (dash di depan) → nol baris terdeteksi
+= gate "hijau" tanpa memeriksa apa pun. Tertangkap hanya karena test menyertakan guard "daftar `uses:` tak boleh
+kosong". **Setiap gate baru wajib punya assertion anti-kosong**, kalau tidak ia lolos-palsu justru saat artefaknya
+paling rusak. **Sumber:** sesi 20 Jul (lisensi + kesiapan repo publik).
+
 ## Backup / Notifier (I-32 / I-8)
 
 ### G-53 — SQLite online backup API (`db.backup()`): koneksi sumber WAJIB tetap terbuka saat transfer + dir tujuan harus ada; race korupsi lama tak bisa jadi negative-control deterministik
@@ -929,6 +958,7 @@ per-call" tak menjamin perilaku waktu-nyata. Negative control terbukti (bypass g
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-20 (sesi lisensi + kesiapan repo publik) | **G-60** baru — dokumen keamanan tulisan subagent (`SECURITY.md`) terbaca meyakinkan tapi memuat DUA klaim yang bertentangan dgn kode/ADR (jalur kredensial `~/.gemini/…` yang tak pernah dibaca; allowlist egress memuat host Google OAuth yang justru SENGAJA dikeluarkan ADR-019) — ketahuan saat orkestrator `grep` ke `credentials.ts`/`http.ts`, bukan saat baca dokumen. Plus residual kelas G-46: regex gate `^\s*uses:` tak menangkap `- uses:` → gate lolos-palsu, tertangkap hanya oleh guard anti-kosong. |
 | 2026-07-18 (audit keempat, D-1/RD-1) | **G-57** baru (transisi terminal tanpa guard status [`markExited` clobber] + test yang men-seed status langsung = interaksi lifecycle tak teruji → D-1 P1 senyap: sesi LIMIT_HIT exit-bersih kehilangan auto-resume saat guard I-35 hadir, jalur agy-exited ADR-019 dead-code tanpa test merah. Aturan: transisi state wajib guard eksplisit [default preserve] + test komposisi lifecycle utk tiap pasangan transisi×guard + audit semua penulis kolom saat menambah guard). Dari audit keempat + fix RD-1 Opsi A (18 Jul). |
 | 2026-07-18 (I-35, job `verify`) | **G-55** baru (callback `onUsageContradiction` menyala PER BARIS output → enqueue `verify` polos = N job/episode pada prosa multi-literal [skenario inti I-35/I-36]; fix = guard `hasPendingKind` idempoten, satu verify/episode; test wajib >1 pemicu; kelas G-54 = dedup di titik AKSI bukan deteksi). **G-56** baru (`git checkout <tracked-file>` untuk buang edit NC sementara MENGHAPUS semua perubahan uncommitted file itu — bukan cuma baris NC; beda G-51 [untracked tak ter-revert] = ini over-revert tracked; fix = Edit-balik baris NC saja / stash dulu; verifikasi `git status`+`grep` marker pasca-git destruktif). Dari penutupan residual I-35 (probe verifikasi eksplisit), 18 Jul. |
 | 2026-07-18 (backlog, I-32/I-8) | **G-53** baru (SQLite online backup API `db.backup()`: koneksi sumber wajib tetap terbuka saat transfer, dir tujuan harus ada [else TypeError], API async → caller ikut; race korupsi copy-vs-checkpoint yang di-fix = nondeterministik → test concurrency = scenario/kapabilitas, BUKAN negative-control keras — jangan overclaim). **G-54** baru (engine notifikasi stateless `proximityNotifications` lolos unit-test [dipanggil 1×] tapi caller periodik usage-monitor menyingkap spam [fire tiap ~2mnt di atas ambang]; fix = gate stateful rising-edge `createProximityGate`, clear per-tool; pelajaran: engine yang di-drive loop periodik butuh test multi-tick). Dari backlog I-32 + wiring I-8 (18 Jul). |
