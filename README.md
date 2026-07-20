@@ -13,22 +13,6 @@
 Supervisor lokal yang **memonitor usage** dan **melanjutkan otomatis sesi yang terputus karena limit**
 untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 
-> Brand `cc` = **c**ontinue-**c**ontinue (auto-continue) / **C**laude **C**ode — dua `c` saling-punggung =
-> loop tak berujung. Splash muncul di `acca` (tanpa argumen), `--help`/`--version`, dan saat `acca daemon`
-> start — **TTY-only**, hormati `NO_COLOR`, dengan fallback ASCII (ADR-027). Detail: [`docs/BRANDING.md`](docs/BRANDING.md).
-
-> **Status:** Implementasi berjalan — **loop auto-continue (M1–M3d) + monitoring & UX (M4 inti) bertes & gate M3e
-> ✅ hijau** (deteksi limit → jadwal reset → probe usage → inject-continue sesi hidup / resume-by-id sesi mati;
-> `acca status` usage-view, `acca log`, notifikasi transisi). Deteksi limit CC primer + inject-continue otomatis
-> sudah **live-verified pada limit Claude Code ASLI** (16 Jul).
-> **M5 (hardening + deploy sebagai service) ✅ TUTUP PENUH** — Linux (systemd `--user` + linger) DAN Windows
-> (autostart per-user Task Scheduler @logon, ADR-026) — lihat [Menjalankan daemon](#menjalankan-daemon).
-> **UX/UI (18 Jul):** brand/splash + inline badge (ADR-027) · **Web UI monitor read-only** `acca web` (ADR-028,
-> bind `127.0.0.1`) · **`acca prune`** (soft-archive sesi lama agar status tetap relevan). **Suite hijau lintas-OS**
-> (Linux + Windows) — jumlah test bergantung-mesin (gate per-file); angka-of-record di CLAUDE.md §2 (RD-5).
-> Belum dirilis/dipaketkan; **M-remote (kontrol Telegram) DITUNDA** (keputusan owner 18 Jul).
-> Status terkini per sesi → [`docs/CONTEXT.md`](docs/CONTEXT.md).
-
 ---
 
 ## English summary
