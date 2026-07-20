@@ -19,6 +19,7 @@
 //   6. SECURITY.md ada, menautkan docs/THREAT-MODEL.md, dan NOL alamat email (mencegah PII
 //      pribadi bocor ke file publik repo - kontak resmi = GitHub private reporting/kampusmerah.com).
 
+import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -61,6 +62,34 @@ describe('gate artefak CI workflow (repo publik, I-34)', () => {
 
   it('`permissions:` top-level memuat `contents: read` (least-privilege GITHUB_TOKEN)', () => {
     expect(workflow).toMatch(/permissions:\s*\n\s*contents:\s*read/);
+  });
+
+  // G-61: alamat email pribadi owner sempat bocor via metadata commit (sudah di-rewrite), LALU
+  // nyaris bocor ulang lewat jalur yang lebih konyol — docs yang MENDOKUMENTASIKAN kebocoran itu
+  // menuliskan alamatnya verbatim. Gate ini menutup jalur teks: domain pribadi owner boleh muncul
+  // sebagai URL situs (atribusi ADR-029), TAPI tak boleh muncul sebagai alamat email (`<lokal>@`).
+  // Metadata commit sendiri TAK terjangkau gate file-based — cek manualnya:
+  //   git log --all --format='%ae' | sort -u   (dan '%ce')
+  it('nol alamat email di domain pribadi owner pada file tracked (G-61; situs boleh, email tidak)', () => {
+    const tracked = execSync('git ls-files', { cwd: repoRoot, encoding: 'utf8' })
+      .split('\n')
+      .filter((p) => p.length > 0)
+      // File ini sendiri dikecualikan: ia WAJIB memuat pola-nya untuk bisa mengujinya.
+      .filter((p) => p !== 'test/ci-workflow.test.ts');
+
+    const personalEmailRe = /[a-zA-Z0-9._%+-]+@firdinal\.my\.id/;
+    const offenders = tracked.filter((rel) => {
+      const abs = join(repoRoot, rel);
+      let body: string;
+      try {
+        body = readFileSync(abs, 'utf8');
+      } catch {
+        return false; // symlink/biner — bukan target gate teks
+      }
+      return personalEmailRe.test(body);
+    });
+
+    expect(offenders, `alamat email pribadi owner muncul di: ${offenders.join(', ')}`).toEqual([]);
   });
 
   it('SECURITY.md ada, menautkan docs/THREAT-MODEL.md, dan nol alamat email (PII tak boleh bocor ke repo publik)', () => {

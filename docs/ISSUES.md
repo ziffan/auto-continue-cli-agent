@@ -26,7 +26,7 @@ Tiga langkah tersisa, **semua di tangan owner**, urut:
 1. **Flip visibility** ke publik (Settings → General → Danger Zone → Change repository visibility).
 2. **SEGERA setelah itu: aktifkan GitHub private vulnerability reporting** (Settings → **Advanced Security**,
    UI lama: *Code security and analysis* → "Private vulnerability reporting" → Enable).
-3. **Tag `v0.1.0`** dari commit ber-CI-hijau (paling awal: `2d89abc`) + GitHub Release. **Bukan `npm publish`**
+3. **Tag `v0.1.0`** dari commit ber-CI-hijau (paling awal: `b9983e0`) + GitHub Release. **Bukan `npm publish`**
    (`"private": true` disengaja; G-59 membuat npm bukan kanal distribusi yg sehat untuk repo ini).
 
 > **KOREKSI urutan (20 Jul, diverifikasi):** versi awal item ini menaruh "aktifkan PVR" SEBELUM flip visibility —

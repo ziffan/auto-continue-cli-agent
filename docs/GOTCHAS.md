@@ -94,6 +94,7 @@
 - **G-52** — `<Hidden>true>` Task Scheduler TAK cegah jendela konsol; node @logon dapat PseudoConsoleWindow terlihat -> pakai conhost headless
 
 ## Repo publik / dokumen turunan
+- **G-61** — Audit privasi yang memindai ISI file melewatkan **metadata commit** (author/committer email) — jalur PII yang tak tersentuh gate mana pun
 - **G-60** — Dokumen keamanan tulisan subagent terbaca meyakinkan tapi bisa BERTENTANGAN dgn kode/ADR → verifikasi tiap klaim ke kode; gate baru wajib punya assertion anti-kosong (lolos-palsu)
 
 ## Backup / Notifier (I-32 / I-8)

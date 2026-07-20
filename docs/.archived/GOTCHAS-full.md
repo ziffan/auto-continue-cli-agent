@@ -898,6 +898,31 @@ biasa pun kena). **Sumber:** sesi 19 Jul, permintaan packaging lintas-mesin owne
 
 ## Repo publik / dokumen turunan (kesiapan publik, 20 Jul)
 
+### G-61 — Audit privasi pra-publik yang memindai ISI FILE melewatkan metadata commit (email author/committer)
+**Konteks:** menjelang repo dibuka publik, dijalankan audit kerahasiaan: grep secret/PII/path/UUID atas working tree
+**dan** seluruh history blob → vonis "bersih, nol temuan". Vonis itu **salah-sebagian**. Sapuan berikutnya (diminta
+owner, dikerjakan subagent) menemukan **25 dari 178 commit membawa alamat email pribadi asli owner** (di domain sendiri, bukan bentuk noreply)
+di field **author + committer** — bukan di dalam file mana pun, melainkan di metadata commit. Penyebabnya banal:
+`git config user.email` di satu mesin di-set ke alamat asli, di mesin/kanal lain (web GitHub) ke bentuk
+`@users.noreply.github.com` → pola berselang-seling per-mesin, bukan keputusan sadar.
+**Kenapa lolos:** semua alat verifikasi menatap **isi**. `git grep` (bahkan atas `git rev-list --all`) membaca
+**blob**, tak pernah menyentuh header commit. Gate `test/ci-workflow.test.ts` yang sengaja meng-assert "SECURITY.md
+nol alamat email" **lulus** — memberi rasa aman palsu, karena email tetap bocor lewat jalur yang tak diperiksa
+gate mana pun. Akun GitHub owner sendiri sudah menyembunyikan email (`gh api user` → `email: null`), jadi satu-satunya
+sumber kebocoran adalah metadata commit.
+**Fix:** `git log --all --format='%ae'` + `--format='%ce'` di-`uniq -c` = pemeriksaan 2 detik yang WAJIB masuk audit
+pra-publik. Remediasi: `git filter-repo --mailmap` (repo private + solo = ongkos termurah SEBELUM publik), lalu
+`git config user.email` di-set ke noreply di **tiap** mesin. Verifikasi rewrite yang benar = bandingkan
+**tree hash** HEAD lama vs baru (harus IDENTIK — membuktikan hanya metadata berubah, nol perubahan isi) + jumlah
+commit sama; jangan cukup "kelihatannya jalan".
+**Konsekuensi yang harus diantisipasi:** rewrite mengubah **semua** hash → (a) referensi SHA di docs jadi basi
+(harus diperbarui), (b) clone di mesin lain **wajib clone ulang** — pull biasa akan menarik balik commit lama
+ber-email dan menghidupkannya lagi, (c) butuh force-push (pengecualian sadar atas larangan force-push-ke-main;
+sah di sini karena solo + pra-publik + nol kolaborator).
+**Pelajaran:** "audit isi bersih" ≠ "repo bersih". Repo Git membawa PII di **tiga** lapis — isi file, metadata commit,
+dan nama ref/branch. Audit pra-publik harus menyebut ketiganya eksplisit. **Sumber:** sesi 20 Jul, sapuan privasi
+lanjutan atas permintaan owner (yang menemukan apa yang audit orkestrator lewatkan).
+
 ### G-60 — Dokumen KEAMANAN yang ditulis subagent terbaca meyakinkan tapi bisa BERTENTANGAN dgn kode & ADR
 **Konteks:** slice kesiapan publik menurunkan penulisan `SECURITY.md` ke subagent Sonnet dgn spec yang **sudah**
 memerintahkan "ambil fakta dari `docs/THREAT-MODEL.md` + `CLAUDE.md`, jangan mengarang". Hasilnya rapi, terstruktur,
@@ -958,6 +983,7 @@ per-call" tak menjamin perilaku waktu-nyata. Negative control terbukti (bypass g
 
 | Tanggal | Perubahan |
 |---|---|
+| 2026-07-20 (sapuan privasi lanjutan, pra-publik) | **G-61** baru — audit privasi memindai ISI file (working tree + blob history) lalu memvonis "bersih", padahal **25/178 commit membawa email pribadi asli di metadata author/committer** — jalur PII yang `git grep` maupun gate "SECURITY.md nol email" tak pernah sentuh. Diremediasi `git filter-repo --mailmap` (tree hash HEAD lama==baru → terbukti hanya metadata berubah) + `git config user.email` → noreply. |
 | 2026-07-20 (sesi lisensi + kesiapan repo publik) | **G-60** baru — dokumen keamanan tulisan subagent (`SECURITY.md`) terbaca meyakinkan tapi memuat DUA klaim yang bertentangan dgn kode/ADR (jalur kredensial `~/.gemini/…` yang tak pernah dibaca; allowlist egress memuat host Google OAuth yang justru SENGAJA dikeluarkan ADR-019) — ketahuan saat orkestrator `grep` ke `credentials.ts`/`http.ts`, bukan saat baca dokumen. Plus residual kelas G-46: regex gate `^\s*uses:` tak menangkap `- uses:` → gate lolos-palsu, tertangkap hanya oleh guard anti-kosong. |
 | 2026-07-18 (audit keempat, D-1/RD-1) | **G-57** baru (transisi terminal tanpa guard status [`markExited` clobber] + test yang men-seed status langsung = interaksi lifecycle tak teruji → D-1 P1 senyap: sesi LIMIT_HIT exit-bersih kehilangan auto-resume saat guard I-35 hadir, jalur agy-exited ADR-019 dead-code tanpa test merah. Aturan: transisi state wajib guard eksplisit [default preserve] + test komposisi lifecycle utk tiap pasangan transisi×guard + audit semua penulis kolom saat menambah guard). Dari audit keempat + fix RD-1 Opsi A (18 Jul). |
 | 2026-07-18 (I-35, job `verify`) | **G-55** baru (callback `onUsageContradiction` menyala PER BARIS output → enqueue `verify` polos = N job/episode pada prosa multi-literal [skenario inti I-35/I-36]; fix = guard `hasPendingKind` idempoten, satu verify/episode; test wajib >1 pemicu; kelas G-54 = dedup di titik AKSI bukan deteksi). **G-56** baru (`git checkout <tracked-file>` untuk buang edit NC sementara MENGHAPUS semua perubahan uncommitted file itu — bukan cuma baris NC; beda G-51 [untracked tak ter-revert] = ini over-revert tracked; fix = Edit-balik baris NC saja / stash dulu; verifikasi `git status`+`grep` marker pasca-git destruktif). Dari penutupan residual I-35 (probe verifikasi eksplisit), 18 Jul. |
