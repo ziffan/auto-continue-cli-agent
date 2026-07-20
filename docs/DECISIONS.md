@@ -2,7 +2,7 @@
 
 > **Body ADR lengkap** (Context/Decision/Consequences/Alternatives) + **Change Log** → [`.archived/DECISIONS-full.md`](.archived/DECISIONS-full.md) (grep `ADR-0NN`).
 > ADR **Accepted = immutable** — jangan edit; revisi = ADR baru yang men-supersede. Locked decision **tidak di-relitigasi** tanpa revisit formal.
-> Status ringkas: ADR-001…017 + ADR-019…028 **Accepted (locked)**; **ADR-018 Superseded by ADR-019**. Tak ada ADR Proposed.
+> Status ringkas: ADR-001…017 + ADR-019…029 **Accepted (locked)**; **ADR-018 Superseded by ADR-019**. Tak ada ADR Proposed.
 
 ---
 
@@ -38,6 +38,7 @@
 | 026 | **Deployment Windows MVP = autostart per-user (Task Scheduler @logon, run-hidden, restart-on-failure)** | Accepted; men-supersede sebagian realisasi Windows ADR-021; **meng-unblock I-33** |
 | 027 | Banner/splash `acca` = tampil di bawah gating ketat (TTY-only · `NO_COLOR` · `--plain` · ASCII-fallback · zero-dep · pure-function) | Accepted; menguatkan ADR-013 (dekoratif vs data); belum ada kode |
 | 028 | Web UI monitor = dashboard read-only localhost (bind `127.0.0.1` · zero-framework `http` · proyeksi ter-firewall = nol jalur data baru · Host-guard · opt-in) | Accepted; menguatkan ADR-008/013 + ADR-023/T-L1; **M-web dibangun + DITUTUP FORMAL 19 Jul** (gate keamanan T-W1..T-W6 lulus penuh) |
+| 029 | **Lisensi repo = Apache License 2.0** (`LICENSE` verbatim + `NOTICE` atribusi kampusmerah.com; tanpa header per-file; `private:true` tetap) | Accepted 20 Jul; menutup Pending "Lisensi repo" |
 
 ## Larangan keras (JANGAN PERNAH)
 
@@ -54,11 +55,12 @@
 
 | Keputusan | Owner | Target |
 |---|---|---|
-| Lisensi repo (MIT vs proprietary) — terkait rencana komersialisasi | Ziffan | sebelum publik |
 | Web UI **aksi kontrol** (resume/cancel via web) — butuh parity confirm-gate ADR-013 | Ziffan | ADR terpisah bila diminta (di luar v1 read-only) |
 | Web UI **akses LAN** (bind non-loopback + auth token) — bila kebutuhan muncul | Ziffan | ADR terpisah + THREAT-MODEL ingress LAN |
 
-> **Ditutup sesi ini (18 Jul):** ~~Banner/splash policy~~ → **ADR-027** · ~~Web UI monitor read-only (port/bind/auth/egress)~~ → **ADR-028** (read-only localhost, loopback-only, proyeksi ter-firewall, Host-guard). Meng-unblock kode banner (M-web menyusul). *(Web UI memunculkan 2 pending turunan di atas: aksi-kontrol + akses-LAN — keduanya di luar v1.)*
+> **Ditutup 20 Jul:** ~~Lisensi repo (MIT vs proprietary)~~ → **ADR-029** (Apache 2.0 + NOTICE atribusi kampusmerah.com). Premis "terkait komersialisasi" gugur — owner menyatakan acca non-komersial; AGPL+dual-license ditawarkan & ditolak owner.
+
+> **Ditutup 18 Jul:** ~~Banner/splash policy~~ → **ADR-027** · ~~Web UI monitor read-only (port/bind/auth/egress)~~ → **ADR-028** (read-only localhost, loopback-only, proyeksi ter-firewall, Host-guard). Meng-unblock kode banner (M-web menyusul). *(Web UI memunculkan 2 pending turunan di atas: aksi-kontrol + akses-LAN — keduanya di luar v1.)*
 
 > Semua pending lain **sudah selesai** (probe agy → ADR-010/019, IPC → ADR-015, TUI → plain ANSI, resume agy MATI →
 > ADR-019, pin WinSW → ADR-025, retensi backup → ADR-024, THREAT-MODEL + ADR-011/012/013, redaksi, lib bot, retensi

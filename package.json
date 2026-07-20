@@ -2,13 +2,19 @@
   "name": "auto-continue-cli-agent",
   "version": "0.1.0",
   "description": "Supervisor lokal untuk memonitor usage & auto-continue sesi Claude Code / Antigravity CLI",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Ziffany Firdinal",
+    "url": "https://ziffany.firdinal.my.id"
+  },
+  "homepage": "https://kampusmerah.com",
   "type": "module",
   "private": true,
   "bin": {
     "acca": "dist/cli/index.js"
   },
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24"
   },
   "scripts": {
     "prepare": "npm run build",

@@ -17,9 +17,12 @@
 
 > **Status roadmap (owner 18 Jul):** M-remote DITUNDA tanpa target. Modul **M-web** (Web UI monitor, ADR-028)
 > **DITUTUP FORMAL 19 Jul** (W-1 gate LULUS). Tak ada milestone aktif. Sisa = P3 oportunistik.
+> **20 Jul:** lisensi repo di-LOCK **Apache 2.0** (ADR-029) · **W-2 DITOLAK** owner (lihat di bawah).
 
-### W-2 — M-web.2 `acca daemon --web` co-host [P3, opsional]
-Mount server web yang sama di daemon (flag `--web`). Nilai kemudahan (satu proses). Belum dikerjakan.
+### ~~W-2 — M-web.2 `acca daemon --web` co-host~~ [DITOLAK owner 20 Jul]
+Rencana: mount server web yang sama di daemon (flag `--web`), nilai = satu proses. **Ditolak owner:** `acca web`
+"tidak selalu dibutuhkan" → biarkan proses terpisah, dinyalakan saat perlu. Efek samping baik: isolasi **T-W6**
+(crash server web ≠ ganggu daemon auto-resume) tak tererosi. Jangan relitigasi tanpa kebutuhan baru.
 
 ### W-3 — Polish halaman Web UI [P3, kosmetik — SEBAGIAN selesai 19 Jul]
 - ✅ **Kolom `reset_at`/`updated_at` human-readable** (19 Jul, `page.ts` `fmtTs`): epoch-ms → `HH:MM` lokal,

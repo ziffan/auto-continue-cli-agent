@@ -31,6 +31,28 @@ untuk dua CLI coding-agent: **Claude Code** dan **Antigravity CLI**.
 
 ---
 
+## English summary
+
+**The documentation in this repository is written in Indonesian.** This section is the English entry point.
+
+`acca` is a **local supervisor** for two long-running coding-agent CLIs — **Claude Code** and **Antigravity CLI**. Both enforce usage limits (a rolling 5-hour window plus a weekly quota), and hitting one stops a session mid-task. `acca` watches usage through each tool's official channels, detects when a session stalls on a limit, and resumes it automatically once the window resets — injecting an explicit continue instruction into a live session, or resuming a dead one by id in its original working directory.
+
+Design constraints, in short:
+
+- **Human-in-the-loop, never autonomous.** Automatic actions are limited to resume/continue/probe/verify on sessions that already exist. The supervisor never invents instructions (ADR-008).
+- **Agent output is data, not commands.** Nothing branches on the *content* of a CLI transcript — a prompt-injection firewall, since transcripts can contain text from the open web (ADR-013).
+- **Local by default.** State lives in a local SQLite database, network egress is restricted to an in-code allowlist, and there is no telemetry. The optional web dashboard (`acca web`) is read-only and binds to `127.0.0.1` only.
+
+**Status: pre-release (`0.x`), not published to any package registry.** Install is from source; see [Instalasi](#instalasi-dari-source) — the commands there are language-neutral. Runs on Linux and Windows 11 (systemd `--user` / Task Scheduler at logon).
+
+Start here: [`SECURITY.md`](SECURITY.md) (trust model and what `acca` touches on your machine) · [`LICENSE`](LICENSE) (Apache 2.0) · [`CHANGELOG.md`](CHANGELOG.md) · [`docs/DECISIONS.md`](docs/DECISIONS.md) (architecture decision records — the headings are readable even without Indonesian).
+
+This repository is also a **worked example of a doc-first workflow** — see [Metodologi](#metodologi-doc-first-repo-ini-sebagai-demonstrasi) below.
+
+> **Not affiliated with, endorsed by, or supported by Anthropic or Google.** `acca` is an independent tool that drives their command-line clients as a user would. "Claude Code" and "Antigravity" belong to their respective owners.
+
+---
+
 ## Masalah
 
 Sesi agent panjang sering terhenti di tengah jalan karena kehabisan usage:
@@ -300,10 +322,42 @@ auto-continue native sedang diminta ke upstream Claude Code (tracking #13354, **
 | [`docs/CONTEXT.md`](docs/CONTEXT.md)           | Status proyek (update tiap sesi)                                             |
 | [`docs/ISSUES.md`](docs/ISSUES.md)             | Issue terbuka/tertutup + prioritas                                           |
 
-## Konteks agent
+## Metodologi doc-first (repo ini sebagai demonstrasi)
+
+Repo ini bukan cuma alat — ia **artefak demonstrasi** dari metode kerja *doc-first* yang saya bahas di
+[kampusmerah.com](https://kampusmerah.com). Kalau kamu datang dari tulisan itu, di sinilah metodenya bisa
+diperiksa apa adanya, termasuk bagian yang tidak rapi.
+
+Aturan intinya satu: **tak ada kode fitur sebelum spec LOCKED.** Keputusan dibuat di dokumen, lalu kode
+menyusul — bukan sebaliknya. Turunannya terlihat di struktur repo:
+
+- **`docs/DECISIONS.md`** — ADR bergaya Nygard (Context → Decision → Consequences → Alternatives Rejected).
+  ADR ber-status *Accepted* bersifat **immutable**: revisi = ADR baru yang men-supersede, bukan edit diam-diam.
+  Contoh nyata ada di repo ini — ADR-018 dibatalkan ADR-019 setelah verifikasi live membuktikan premisnya salah,
+  dan jejak kesalahannya sengaja dibiarkan terbaca.
+- **`docs/GOTCHAS.md`** — katalog jebakan yang sudah dibayar mahal, satu baris per temuan, detail di arsip.
+  Ini yang membuat sesi kerja berikutnya (manusia atau agent) tak mengulang biaya yang sama.
+- **`docs/THREAT-MODEL.md`** + **`docs/NFR.md`** — keamanan dan target non-fungsional ditulis sebagai kontrak
+  yang bisa diuji, lalu di-gate di `test/security-*.test.ts`, bukan jadi niat baik di kepala penulis.
+- **`docs/CONTEXT.md`** — status ditulis ulang tiap akhir sesi, karena konteks agent hilang antar-sesi dan
+  ingatan manusia juga tidak lebih baik.
+- **`.claude/skills/`** — ritual kerjanya sendiri ikut di-version-control (buka sesi, tutup sesi, tulis ADR,
+  tier-review sebelum commit, pecah vertical slice). Ini **sengaja ikut publik**: metode yang tak bisa
+  diperiksa orang lain bukan metode, cuma klaim.
+
+Jujur soal ongkosnya: dokumen di repo ini **lebih banyak dari kodenya**, dan itu memang mahal di awal. Yang
+dibeli dengan ongkos itu adalah keputusan yang tidak di-relitigasi tiap sesi baru, dan agent yang bisa
+melanjutkan pekerjaan tanpa mengarang konvensinya sendiri. Untuk proyek eksperimen sekali-pakai, ini
+berlebihan — pilih sadar-sadar.
+
+### Konteks agent
 
 `CLAUDE.md` adalah satu sumber konteks untuk semua coding agent. `AGENTS.md` adalah **symlink** ke `CLAUDE.md` supaya Codex/Cursor/Windsurf/OpenCode dan Claude Code berbagi instruksi yang sama.
 
-## Lisensi
+## Lisensi & dukungan
 
-TBD (lihat ADR-terkait di `docs/DECISIONS.md` saat lock).
+Dilisensikan di bawah Apache License 2.0 — lihat [`LICENSE`](LICENSE) untuk teks lengkap dan [`NOTICE`](NOTICE) untuk atribusi.
+
+Copyright 2026 Ziffany Firdinal.
+
+Dibuat di **[kampusmerah.com](https://kampusmerah.com)** — workshop dev pribadi, brand payung untuk project independent. Author: [ziffany.firdinal.my.id](https://ziffany.firdinal.my.id).
