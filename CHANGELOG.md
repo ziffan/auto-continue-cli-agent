@@ -1,11 +1,15 @@
 # Changelog
 
 Semua perubahan penting proyek ini. Format: [Keep a Changelog](https://keepachangelog.com/id/1.1.0/),
-versi mengikuti [SemVer](https://semver.org/). Belum ada rilis publik (`0.1.0`, unpackaged).
+versi mengikuti [SemVer](https://semver.org/). **Rilis publik pertama `0.1.0` (2026-07-21)** — repo publik, Apache-2.0, unpackaged (bukan `npm publish`; G-59).
 
 > Riwayat lengkap per-sesi ada di `docs/CONTEXT.md` + git log; CHANGELOG ini mulai dari M5.
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-07-21
+
+Rilis publik pertama. Repo di-flip ke publik + private vulnerability reporting aktif + tag/Release `v0.1.0` dari commit ber-CI-hijau `f30e915` (target `main`). Menutup P-1. Isi rilis = seluruh entri di bawah (M1–M5 + M-web + kesiapan publik Apache-2.0/CI/SECURITY + remediasi PII G-61).
 
 ### Added
 

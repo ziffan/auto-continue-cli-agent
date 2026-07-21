@@ -94,6 +94,7 @@
 - **G-52** — `<Hidden>true>` Task Scheduler TAK cegah jendela konsol; node @logon dapat PseudoConsoleWindow terlihat -> pakai conhost headless
 
 ## Repo publik / dokumen turunan
+- **G-62** — Langkah owner-action (tag/Release, flip visibility) TAK bisa dari sesi agent: `git push <tag>` ditolak 403 oleh egress proxy (push di-scope ke branch designated; ref tag bukan branch) + GitHub MCP tak punya `create_release`/create-ref-tag (hanya `create_branch`=`refs/heads`). Verifikasi via API tetap bisa (read).
 - **G-61** — Audit privasi yang memindai ISI file melewatkan **metadata commit** (author/committer email) — jalur PII yang tak tersentuh gate mana pun
 - **G-60** — Dokumen keamanan tulisan subagent terbaca meyakinkan tapi bisa BERTENTANGAN dgn kode/ADR → verifikasi tiap klaim ke kode; gate baru wajib punya assertion anti-kosong (lolos-palsu)
 
