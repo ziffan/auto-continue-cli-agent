@@ -92,10 +92,13 @@
 - **G-50** — XML comment tak boleh memuat `--`; naive tag-balance lolos, parser sungguhan menolak (task gagal register)
 - **G-51** — `git checkout -- <file>` TAK bisa mengembalikan file baru/untracked (negative-control revert gagal senyap)
 - **G-52** — `<Hidden>true>` Task Scheduler TAK cegah jendela konsol; node @logon dapat PseudoConsoleWindow terlihat -> pakai conhost headless
+- **G-64** — `LastTaskResult=0x800710E0` ("operator/administrator refused") pada task `acca-daemon` = watchdog `IgnoreNew` menolak instance baru saat daemon hidup = **SEHAT**, bukan error; yang mencurigakan justru `0x0` berulang
 
 ## Repo publik / dokumen turunan
 - **G-62** — Langkah owner-action (tag/Release, flip visibility) TAK bisa dari sesi agent: `git push <tag>` ditolak 403 oleh egress proxy (push di-scope ke branch designated; ref tag bukan branch) + GitHub MCP tak punya `create_release`/create-ref-tag (hanya `create_branch`=`refs/heads`). Verifikasi via API tetap bisa (read).
 - **G-61** — Audit privasi yang memindai ISI file melewatkan **metadata commit** (author/committer email) — jalur PII yang tak tersentuh gate mana pun
+- **G-63** — Remediasi G-61 di mesin kedua tak harus clone-ulang: `reset --hard` + `reflog expire` + `gc --prune=now` setara, tanpa mengorbankan file gitignored (`.internal/`) / `npm link` / path Task Scheduler
+- **G-65** — `npm install --dry-run` TETAP menjalankan lifecycle `prepare` → `dist/` sungguh ditulis ulang (bukan no-op); pakai `--ignore-scripts` bila benar-benar butuh nol efek samping
 - **G-60** — Dokumen keamanan tulisan subagent terbaca meyakinkan tapi bisa BERTENTANGAN dgn kode/ADR → verifikasi tiap klaim ke kode; gate baru wajib punya assertion anti-kosong (lolos-palsu)
 
 ## Backup / Notifier (I-32 / I-8)

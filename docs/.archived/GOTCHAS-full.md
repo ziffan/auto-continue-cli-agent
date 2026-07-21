@@ -923,6 +923,65 @@ sah di sini karena solo + pra-publik + nol kolaborator).
 dan nama ref/branch. Audit pra-publik harus menyebut ketiganya eksplisit. **Sumber:** sesi 20 Jul, sapuan privasi
 lanjutan atas permintaan owner (yang menemukan apa yang audit orkestrator lewatkan).
 
+### G-63 — Remediasi G-61 di mesin kedua TAK harus clone-ulang: `reset --hard` + `reflog expire` + `gc --prune=now` setara & tak mengorbankan file gitignored
+**Konteks:** pasca-rewrite history (G-61), CONTEXT + ISSUES mencatat aksi wajib "**hapus & clone-ulang** repo di mesin
+Windows" — karena `git pull` biasa akan menarik balik commit ber-email lama. Instruksi itu benar soal bahayanya, tapi
+**terlalu kasar soal obatnya**. Saat dijalankan, `git fetch` melaporkan `forced-update` + divergensi **133 ahead / 143
+behind** (angka menakutkan yang murni artefak rewrite: merge-base mundur ke commit purba karena SEMUA sha berubah).
+**Kenapa clone-ulang mahal di sini:** folder kerja memegang file **gitignored yang tidak ada di remote mana pun** —
+`.internal/` (profil/hardware/metodologi), `COWORK-TOOLING-NOTES.md`, `.claude/settings.local.json` — plus
+`node_modules`/`dist` hasil build native (`node-pty`, `better-sqlite3`), `npm link` global, dan **path absolut di
+action Task Scheduler** (`D:\PROYEK\auto-continue-cli-agent\dist\cli\index.js`). Clone ke folder baru + hapus lama =
+kehilangan permanen file gitignored + re-setup toolchain + task autostart menunjuk path mati.
+**Fix (in-place, hasil identik):** verifikasi dulu nol kerja lokal yang belum ada di remote (tree bersih, stash kosong,
+tiap commit lokal ketemu di `origin` lewat `--grep` subject → sha baru), lalu
+`git reset --hard origin/main && git reflog expire --expire=now --all && git gc --prune=now`.
+**Verifikasi yang membuktikan setara clone:** `git log --format='%ae|%ce' --all | sort -u` = nol email pribadi, DAN
+`git cat-file -t <sha-lama>` → `fatal: Not a valid object name` (objek benar-benar terhapus fisik, bukan sekadar
+tak-terjangkau).
+**Yang perlu diluruskan soal risiko:** objek unreachable **tak pernah ikut ter-push**, jadi bahkan SEBELUM `gc`
+tak ada jalur bocor ke repo publik — satu-satunya jalur adalah `git push --force` dari lokal, yang memang harus
+dihindari. Urgensi sesungguhnya = kebersihan `.git` lokal, bukan pencegahan kebocoran.
+**Pelajaran:** instruksi remediasi lintas-mesin sebaiknya menyebut **invarian yang harus tercapai** ("nol objek
+ber-PII terjangkau maupun tersimpan di `.git`") + cara memverifikasinya, bukan satu resep prosedural ("clone ulang")
+yang mengabaikan biaya lokal mesin lain. **Sumber:** sesi 21 Jul (Windows), menutup aksi wajib G-61.
+
+### G-64 — Task Scheduler `LastTaskResult = 0x800710E0` pada `acca-daemon` = watchdog SEHAT, bukan kegagalan
+**Konteks:** cek kesehatan autostart (ADR-026) menampilkan `State=Running` tapi
+`LastTaskResult: 0x800710E0` — `net helpmsg 4320` menerjemahkannya "**The operator or administrator has refused the
+request**", yang terbaca seperti masalah izin/kebijakan dan mengundang "perbaikan" yang tak perlu.
+**Arti sebenarnya:** itu kode yang dikembalikan Task Scheduler saat **instance baru ditolak** karena satu instance
+masih jalan dan kebijakannya `MultipleInstances=IgnoreNew`. Pola watchdog G-49 justru **sengaja** memicu ini: trigger
+@logon ber-`Repetition Interval=PT1M` menyala tiap menit; selama daemon hidup, tiap percikan ditolak → `0x800710E0`.
+Jadi kode ini adalah **bukti watchdog bekerja**. Yang patut dicurigai justru kebalikannya: `0x0` berulang sementara
+daemon seharusnya hidup (berarti tiap repetisi men-spawn instance baru → `IgnoreNew` tak berlaku).
+**Cara baca yang benar (jangan berhenti di kode hasil):** korelasikan tiga hal — `(Get-ScheduledTask).State`,
+`Settings.MultipleInstances`, dan proses nyata (`Get-CimInstance Win32_Process` + `CommandLine` yang memuat
+`dist\cli\index.js daemon`) + `acca status` (heartbeat). Sehat = `State=Running` + `IgnoreNew` + tepat satu proses
+daemon + heartbeat segar + `LastTaskResult=0x800710E0`.
+**Pelajaran:** pada task ber-`IgnoreNew` + repetisi, `LastTaskResult` mengukur "apakah percikan TERAKHIR boleh
+memulai instance", **bukan** "apakah task sehat". Teks `net helpmsg` untuk 4320 menyesatkan di konteks ini.
+**Sumber:** sesi 21 Jul (Windows), sanity-check pasca-rilis publik.
+
+### G-65 — `npm install --dry-run` TETAP menjalankan lifecycle `prepare` (bukan no-op; `dist/` sungguh ditulis ulang)
+**Konteks:** dengan sesi CC berjalan di bawah acca, `--dry-run` dipilih justru untuk **menghindari** mutasi —
+kekhawatirannya rebuild native (`node-pty`, `better-sqlite3`) gagal `EBUSY` karena `.node` sedang dimuat proses hidup
+di Windows. Outputnya memang `up to date` (nol paket dipasang → kekhawatiran itu terjawab), **tapi** di atasnya
+tercetak `> prepare` → `> build` → `tsc` + salin migrasi: skrip `prepare` (ditambah untuk instalasi lintas-mesin,
+G-59) benar-benar dieksekusi dan `dist/` ditulis ulang.
+**Kenapa berbahaya secara halus:** `--dry-run` mengiklankan diri sebagai simulasi, sehingga dipakai sebagai
+"pemeriksaan aman" sebelum aksi berisiko. Untuk paket yang punya `prepare`/`postinstall` bertenaga (build, codegen,
+migrasi), asumsi itu salah dan bisa menimpa artefak saat proses lain sedang berjalan.
+**Yang menyelamatkan di sini:** proses Node yang hidup sudah memuat modulnya ke memori, jadi menimpa `dist/` tak
+mengubah daemon maupun wrapper PTY yang sedang menjaga sesi (diverifikasi: `acca status` pasca-build → sesi tetap
+RUNNING, proc alive, heartbeat 0s). Efek nettonya kebetulan menguntungkan (langkah build tersubstitusi), tapi itu
+keberuntungan, bukan desain.
+**Fix:** untuk benar-benar nol efek samping pakai `npm install --dry-run --ignore-scripts`, atau baca kebutuhan dari
+`npm ls`/lockfile. Dan saat melapor, sebut mutasi yang terjadi — jangan mengklaim "tidak mengubah apa pun" hanya
+karena flag-nya bernama dry-run.
+**Pelajaran:** flag "simulasi" milik package manager mensimulasikan **resolusi dependensi**, bukan **lifecycle
+script**. **Sumber:** sesi 21 Jul (Windows).
+
 ### G-60 — Dokumen KEAMANAN yang ditulis subagent terbaca meyakinkan tapi bisa BERTENTANGAN dgn kode & ADR
 **Konteks:** slice kesiapan publik menurunkan penulisan `SECURITY.md` ke subagent Sonnet dgn spec yang **sudah**
 memerintahkan "ambil fakta dari `docs/THREAT-MODEL.md` + `CLAUDE.md`, jangan mengarang". Hasilnya rapi, terstruktur,
