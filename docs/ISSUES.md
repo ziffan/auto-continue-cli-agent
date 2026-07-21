@@ -21,28 +21,25 @@
 > **DITUTUP FORMAL 19 Jul** (W-1 gate LULUS). Tak ada milestone aktif. Sisa = P3 oportunistik.
 > **20 Jul:** lisensi repo di-LOCK **Apache 2.0** (ADR-029) · **W-2 DITOLAK** owner (lihat di bawah).
 
-### P-1 — Sisa langkah membuka repo ke publik [P2, aksi OWNER — bukan kerja agent]
-Repo **masih private** (keputusan owner 20 Jul: "belum publik sampai benar-benar pas"). Fondasinya sudah siap
-(ADR-029 Apache 2.0 + `LICENSE`/`NOTICE`, `SECURITY.md`, CI lintas-OS hijau, audit history nol secret/PII).
-**Prasyarat mendesak (20 Jul, jangan dilewat):** history di-**rewrite** (hapus alamat email pribadi owner dari
-metadata 25 commit — G-61) → **clone di mesin Windows WAJIB dihapus & di-clone ulang**. `git pull` biasa di sana
-akan menarik balik commit lama ber-email dan menghidupkannya kembali di `origin` pada push berikutnya.
+### ~~P-1 — Membuka repo ke publik + rilis v0.1.0~~ [SELESAI 21 Jul — repo PUBLIK, rilis LIVE]
+**TUNTAS.** Ketiga langkah owner dijalankan & diverifikasi via GitHub API (sesi 21 Jul, Linux):
+1. ✅ **Visibility → public** (`private:false`, `visibility:public`).
+2. ✅ **Private vulnerability reporting aktif** (dikonfirmasi owner; tool MCP tak ekspos field ini — cek manual di Settings).
+3. ✅ **Tag + Release `v0.1.0`** dari commit ber-CI-hijau `f30e915` (target `main`) — dipublish owner via GitHub UI
+   (`draft:false, prerelease:false`, author `ziffan`, id `357080209`). **Bukan `npm publish`** (`"private":true`; G-59).
 
-Tiga langkah tersisa, **semua di tangan owner**, urut:
-1. **Flip visibility** ke publik (Settings → General → Danger Zone → Change repository visibility).
-2. **SEGERA setelah itu: aktifkan GitHub private vulnerability reporting** (Settings → **Advanced Security**,
-   UI lama: *Code security and analysis* → "Private vulnerability reporting" → Enable).
-3. **Tag `v0.1.0`** dari commit ber-CI-hijau (paling awal: `b9983e0`) + GitHub Release. **Bukan `npm publish`**
-   (`"private": true` disengaja; G-59 membuat npm bukan kanal distribusi yg sehat untuk repo ini).
+**Verifikasi keamanan pasca-publik:** G-61 dicek ulang di sisi remote — **182 commit remote (2 halaman API) = 100%
+noreply**, nol email pribadi terekspos. Lisensi Apache-2.0 terdeteksi GitHub · description · 5 topics · CI hijau ·
+**website About** = `https://ziffany.firdinal.my.id/` (diisi owner) · **tab Issues dimatikan** (`has_issues:false`,
+konsisten posture demo-only CONTRIBUTING). `.claude/skills/*` sengaja ikut publik.
 
-> **KOREKSI urutan (20 Jul, diverifikasi):** versi awal item ini menaruh "aktifkan PVR" SEBELUM flip visibility —
-> **itu tak mungkin**. PVR hanya tersedia untuk repo **publik**; selama private, `GET /repos/:o/:r/private-vulnerability-reporting`
-> balas **404** dan `security_and_analysis` = `null` (dicek langsung via `gh api`, bukan diasumsikan). Konsekuensi
-> yang diterima: ada **jeda singkat** pasca-flip di mana link "Report a vulnerability" di `SECURITY.md` masih 404 —
-> perkecil dgn mengerjakan langkah 2 langsung setelah 1; kontak alternatif (kampusmerah.com) sudah ada di
-> `SECURITY.md` sebagai jaring.
-**Catatan:** `.claude/skills/*` sengaja ikut publik (README §Metodologi) — bila owner berubah pikiran, keluarkan
-**sebelum** repo publik; setelah publik, history-nya sudah beredar.
+> **Gotcha sesi ini (G-62):** langkah tag/Release **tak bisa** dijalankan agent dari sesi ini — `git push origin <tag>`
+> ditolak **403** oleh egress proxy (push di-scope ke branch designated saja; ref tag bukan branch), dan GitHub MCP tak
+> punya tool `create_release`/create-ref-tag (hanya `create_branch` = `refs/heads`). Langkah owner-action ini memang
+> harus dari UI/mesin owner. Verifikasi via API tetap bisa dari sesi (read).
+
+> **Residual GC (kejujuran, diterima):** commit pra-rewrite yang tak-terjangkau bisa diakses **bila SHA lama diketahui**
+> (hanya ada di transcript sesi) sampai GitHub GC jalan — risiko mendekati nol. Kepastian penuh = minta GitHub Support GC.
 
 ### ~~W-2 — M-web.2 `acca daemon --web` co-host~~ [DITOLAK owner 20 Jul]
 Rencana: mount server web yang sama di daemon (flag `--web`), nilai = satu proses. **Ditolak owner:** `acca web`
