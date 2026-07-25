@@ -86,15 +86,20 @@ const MS_PER_SECOND = 1_000;
 const MS_PER_MINUTE = 60_000;
 const MS_PER_HOUR = 3_600_000;
 
-/** Countdown ringkas: "<N>dt" (<1m), "<N>m" (<1h), "<N>h<N>m" (>=1h). "now" bila reset sudah lewat. */
+/** Countdown ringkas + jam absolut: "Ndt (HH:MM)", "Nm (HH:MM)", "NhXXm (HH:MM)",
+ *  "now (HH:MM)". Bila reset >24 jam → sisip nama hari: "NhXXm (Sen 03:15)". */
 function formatCountdown(nowMs: number, resetAt: number): string {
   const diff = resetAt - nowMs;
-  if (diff <= 0) return 'now';
-  if (diff < MS_PER_MINUTE) return `${Math.floor(diff / MS_PER_SECOND)}dt`;
-  if (diff < MS_PER_HOUR) return `${Math.floor(diff / MS_PER_MINUTE)}m`;
+  const d = new Date(resetAt);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const absTime = diff > MS_PER_DAY * 1 ? `${DAY_NAMES[d.getDay()]} ${hh}:${mm}` : `${hh}:${mm}`;
+  if (diff <= 0) return `now (${absTime})`;
+  if (diff < MS_PER_MINUTE) return `${Math.floor(diff / MS_PER_SECOND)}dt (${absTime})`;
+  if (diff < MS_PER_HOUR) return `${Math.floor(diff / MS_PER_MINUTE)}m (${absTime})`;
   const h = Math.floor(diff / MS_PER_HOUR);
   const m = Math.floor((diff % MS_PER_HOUR) / MS_PER_MINUTE);
-  return `${h}h${m > 0 ? String(m).padStart(2, '0') + 'm' : ''}`;
+  return `${h}h${m > 0 ? String(m).padStart(2, '0') + 'm' : ''} (${absTime})`;
 }
 
 /** Nama hari ringkas (lokal) untuk sel reset jangka-jauh — konsisten wireframe §5 ("resume ~Sen"). */
