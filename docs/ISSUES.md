@@ -21,13 +21,30 @@
 > **DITUTUP FORMAL 19 Jul** (W-1 gate LULUS). Tak ada milestone aktif. Sisa = P3 oportunistik.
 > **20 Jul:** lisensi repo di-LOCK **Apache 2.0** (ADR-029) · **W-2 DITOLAK** owner (lihat di bawah).
 
-### I-37 — Output PTY visual nabrak/berhimpitan [P2, butuh investigasi]
+### I-37 — Output PTY visual nabrak/berhimpitan [P2, masih terbuka]
 
 Output CLI agent (CC/agy) yang dijalankan via `acca run` sering mengalami teks nabrak/berhimpitan secara
-visual di terminal. Workaround: resize terminal (besar-kecilkan) → normal lagi. Gejala mengarah ke isu
-ConPTY/ANSI escape/reflow — kemungkinan terkait `node-pty` di Windows (G-12) atau dimensi PTY tidak
-sinkron dengan terminal host saat spawn. **Perlu investigasi lebih lanjut** — rekam layar + cek `cols`/`rows`
-saat spawn vs ukuran window aktual. Bisa juga terkait CSI escape sequence yang tidak di-handle ConPTY.
+visual di terminal — terutama saat menampilkan isi percakapan. Workaround: resize terminal (besar-kecilkan)
+→ normal lagi.
+
+**Investigasi 25 Jul (sesi Windows):**
+- **Fix #1 `encoding: 'utf8'` → GAGAL.** `node-pty` Windows mengabaikan opsi ini (stderr: "Setting encoding
+  on Windows is not supported"). ConPTY sudah menangani UTF-16↔UTF-8 secara internal.
+- **Fix #2 `xterm-256color` → `vt100` → GAGAL.** Hipotesis: subset CSI lebih sederhana → ConPTY lebih
+  akurat. Tidak berpengaruh — masalah masih muncul saat menampilkan isi percakapan. Bukan isu kompleksitas
+  escape sequence.
+
+**Hipotesis baru — race dimensi ConPTY saat spawn:**
+`pty.spawn()` mengalokasi buffer ConPTY dengan `cols`/`rows` dari `process.stdout`, tapi internal state
+ConPTY belum fully-initialized saat child process mulai menulis output. ANSI absolute-positioning memakai
+koordinat yang dihitung dari dimensi buffer yang belum stabil → teks di posisi salah. `ptyProcess.resize()`
+di event handler `process.stdout.on('resize')` memicu full repaint → tampilan "diperbaiki". Root cause =
+**tidak ada resize eksplisit setelah spawn** untuk memaksa sinkronisasi.
+
+**Next fix (belum diimplementasi — owner sedang pakai acca):**
+`process-wrapper.ts` baris 208 — tambah `ptyProcess.resize(cols, rows)` setelah `pty.spawn()`. Satu baris,
+nol perubahan API, murni memaksa ConPTY menyelesaikan inisialisasi dimensi sebelum output pertama masuk.
+
 **Sumber:** laporan owner 25 Jul.
 
 ### ~~P-1 — Membuka repo ke publik + rilis v0.1.0~~ [SELESAI 21 Jul — repo PUBLIK, rilis LIVE]
