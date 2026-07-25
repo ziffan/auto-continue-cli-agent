@@ -7,6 +7,12 @@ versi mengikuti [SemVer](https://semver.org/). **Rilis publik pertama `0.1.0` (2
 
 ## [Unreleased]
 
+### Fixed
+- **Grace window post-unlatch 5s→120s (G-37).** Live-verify `#hnce` (25 Jul): CC TUI repaint banner limit lama @T+9s pasca-inject memicu LIMIT_HIT palsu kedua → double-trigger continue. Grace window 5s awal tidak cukup; 120s menutup kasus ini (bukti `#hnce` @9s) dan `#z36i` (16 Jul, @157s). Hook StopFailure (deteksi PRIMER) TIDAK disuppress.
+
+### Added
+- **Web UI enrichment — card layout + context window CC.** `acca web` kini menampilkan card per sesi dengan: model name, context window (token count + progress bar warna threshold), status badge, reset countdown di usage. Data context window dibaca dari transcript JSONL CC (modul baru `src/web/transcript.ts`, path encoding G-34). Semua derived values (bukan path/secret) — T-W1 utuh. Progress bar DOM berwarna: hijau <70%, kuning 70-90%, merah ≥90%.
+
 ## [0.1.0] - 2026-07-21
 
 Rilis publik pertama. Repo di-flip ke publik + private vulnerability reporting aktif + tag/Release `v0.1.0` dari commit ber-CI-hijau `f30e915` (target `main`). Menutup P-1. Isi rilis = seluruh entri di bawah (M1–M5 + M-web + kesiapan publik Apache-2.0/CI/SECURITY + remediasi PII G-61).
