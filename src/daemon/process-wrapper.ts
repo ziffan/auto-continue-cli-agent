@@ -199,7 +199,7 @@ export function runSession(spec: RunSessionSpec, deps: RunSessionDeps): RunSessi
       throw new Error(`Executable tak ditemukan di PATH: ${spec.file}`);
     }
     ptyProcess = pty.spawn(resolvedFile, spawnArgs, {
-      name: 'xterm-256color',
+      name: 'vt100',
       cols,
       rows,
       cwd: spec.cwd,
