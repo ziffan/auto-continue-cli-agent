@@ -26,9 +26,16 @@ const PAGE_HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>acca — monitor</title>
 <style>
-  :root { color-scheme: light dark; --fg:#1a1a1a; --dim:#6b7280; --bg:#ffffff; --card:#f4f4f5; --line:#e4e4e7; --accent:#0e7490; }
+  :root { color-scheme: light dark;
+    --fg:#1a1a1a; --dim:#6b7280; --bg:#ffffff; --card:#f4f4f5; --line:#e4e4e7;
+    --accent:#0e7490; --green:#16a34a; --yellow:#ca8a04; --red:#dc2626;
+    --st-RUNNING:#16a34a; --st-LIMIT_HIT:#dc2626; --st-BLOCKED:#9333ea;
+  }
   @media (prefers-color-scheme: dark) {
-    :root { --fg:#e5e7eb; --dim:#9ca3af; --bg:#0b0c0e; --card:#17181b; --line:#26272b; --accent:#22d3ee; }
+    :root { --fg:#e5e7eb; --dim:#9ca3af; --bg:#0b0c0e; --card:#17181b; --line:#26272b;
+      --accent:#22d3ee; --green:#4ade80; --yellow:#facc15; --red:#f87171;
+      --st-RUNNING:#4ade80; --st-LIMIT_HIT:#f87171; --st-BLOCKED:#c084fc;
+    }
   }
   * { box-sizing: border-box; }
   body { margin:0; padding:1.25rem; background:var(--bg); color:var(--fg);
@@ -42,13 +49,32 @@ const PAGE_HTML = `<!doctype html>
   h2 { font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--dim);
        margin:0 0 .5rem; }
   pre { margin:0; white-space:pre-wrap; word-break:break-word; }
-  table { width:100%; border-collapse:collapse; }
-  th, td { text-align:left; padding:.25rem .5rem; border-bottom:1px solid var(--line); }
-  th { color:var(--dim); font-weight:600; font-size:.72rem; text-transform:uppercase; }
-  td { white-space:nowrap; }
   .events { max-height:16rem; overflow:auto; }
   .empty { color:var(--dim); }
-  .err { color:#dc2626; }
+  .err { color:var(--red); }
+
+  /* Card layout per sesi */
+  .cards { display:flex; flex-direction:column; gap:.5rem; }
+  .card { background:var(--bg); border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .card-hdr { display:flex; gap:.5rem; align-items:baseline; padding:.4rem .65rem;
+              font-weight:600; font-size:.82rem; border-bottom:1px solid var(--line); }
+  .card-body { padding:.5rem .65rem; font-size:.8rem; line-height:1.7; }
+  .card-ft { padding:.3rem .65rem; font-size:.72rem; color:var(--dim); border-top:1px solid var(--line); }
+
+  /* Status badge */
+  .st { font-size:.7rem; padding:1px 5px; border-radius:3px; font-weight:500; }
+  .st-RUNNING { color:var(--st-RUNNING); }
+  .st-LIMIT_HIT { color:var(--st-LIMIT_HIT); }
+  .st-RESUMED, .st-BLOCKED, .st-FAILED { color:var(--st-BLOCKED); }
+  .st-EXITED { color:var(--dim); }
+
+  /* Progress bar DOM */
+  .bar-wrap { display:inline-block; width:10ch; height:1em; background:var(--line);
+              vertical-align:middle; border-radius:2px; overflow:hidden; }
+  .bar-fill { height:100%; display:block; border-radius:2px; }
+  .c-g { background:var(--green); }
+  .c-y { background:var(--yellow); }
+  .c-r { background:var(--red); }
 </style>
 </head>
 <body>
@@ -66,36 +92,62 @@ const PAGE_HTML = `<!doctype html>
 ${FMT_TS_JS}
 (function () {
   var REFRESH_MS = 5000;
-  var TS_COLS = { reset_at: 1, updated_at: 1 };
   var $ = function (id) { return document.getElementById(id); };
-
   function setText(el, text) { el.textContent = text; }
+
+  function barHtml(pct) {
+    var cls = pct >= 90 ? 'c-r' : pct >= 70 ? 'c-y' : 'c-g';
+    return '<span class="bar-wrap"><span class="bar-fill ' + cls + '" style="width:' + Math.round(pct) + '%"></span></span>';
+  }
 
   function renderSessions(list, nowMs) {
     var host = $('sessions');
     host.textContent = '';
     if (!list || list.length === 0) { host.className = 'empty'; host.textContent = 'Belum ada sesi.'; return; }
-    host.className = '';
-    var cols = ['id', 'tool', 'status', 'proc_state', 'pid', 'reset_at', 'reset_source', 'updated_at'];
-    var table = document.createElement('table');
-    var thead = document.createElement('thead');
-    var htr = document.createElement('tr');
-    cols.forEach(function (c) { var th = document.createElement('th'); th.textContent = c; htr.appendChild(th); });
-    thead.appendChild(htr); table.appendChild(thead);
-    var tbody = document.createElement('tbody');
+    host.className = 'cards';
     list.forEach(function (row) {
-      var tr = document.createElement('tr');
-      cols.forEach(function (c) {
-        var td = document.createElement('td');
-        var v = row[c];
-        if (TS_COLS[c]) { td.textContent = fmtTs(v, nowMs); }
-        else { td.textContent = (v === null || v === undefined) ? '-' : String(v); }
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
+      var card = document.createElement('div');
+      card.className = 'card';
+
+      var hdr = document.createElement('div');
+      hdr.className = 'card-hdr';
+      var idSpan = document.createElement('span'); idSpan.textContent = '#' + row.id; hdr.appendChild(idSpan);
+      var toolSpan = document.createElement('span'); toolSpan.textContent = row.tool; hdr.appendChild(toolSpan);
+      var stSpan = document.createElement('span');
+      stSpan.className = 'st st-' + (row.status || 'EXITED');
+      stSpan.textContent = row.status || '-';
+      hdr.appendChild(stSpan);
+      card.appendChild(hdr);
+
+      var body = document.createElement('div');
+      body.className = 'card-body';
+      var ctx = row.context;
+      if (ctx) {
+        if (ctx.model) {
+          var ml = document.createElement('div'); ml.textContent = 'Model:   ' + ctx.model; body.appendChild(ml);
+        }
+        var cx = document.createElement('div');
+        cx.innerHTML = 'Context: ' + barHtml(ctx.contextPct) + ' ';
+        cx.appendChild(document.createTextNode(formatK(ctx.contextTokens) + ' / ' + ctx.contextPct + '%'));
+        body.appendChild(cx);
+      } else {
+        var na = document.createElement('div'); na.textContent = '(detail tak tersedia)'; body.appendChild(na);
+      }
+      card.appendChild(body);
+
+      var ft = document.createElement('div');
+      ft.className = 'card-ft';
+      ft.textContent = 'Diperbarui ' + fmtTs(row.updated_at, nowMs);
+      card.appendChild(ft);
+
+      host.appendChild(card);
     });
-    table.appendChild(tbody);
-    host.appendChild(table);
+  }
+
+  function formatK(tokens) {
+    if (tokens == null || isNaN(tokens)) return '-';
+    if (tokens < 1000) return String(Math.round(tokens));
+    return (tokens / 1000).toFixed(1) + 'K';
   }
 
   function apply(data) {

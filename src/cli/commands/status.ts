@@ -76,9 +76,25 @@ export function formatUsageLines(tool: Tool, raw: string | undefined, nowMs: num
   for (const limit of snapshot.limits) {
     const kind = String(limit.kind).padEnd(kindWidth);
     const pct = Math.round(clampFraction(limit.usedFraction) * 100);
-    lines.push(`  ${kind}  ${renderUsageBar(limit.usedFraction)}  ${pct}%`);
+    const countdown = limit.resetAt !== null ? `  ·  resets ${formatCountdown(nowMs, limit.resetAt)}` : '';
+    lines.push(`  ${kind}  ${renderUsageBar(limit.usedFraction)}  ${pct}%${countdown}`);
   }
   return lines;
+}
+
+const MS_PER_SECOND = 1_000;
+const MS_PER_MINUTE = 60_000;
+const MS_PER_HOUR = 3_600_000;
+
+/** Countdown ringkas: "<N>dt" (<1m), "<N>m" (<1h), "<N>h<N>m" (>=1h). "now" bila reset sudah lewat. */
+function formatCountdown(nowMs: number, resetAt: number): string {
+  const diff = resetAt - nowMs;
+  if (diff <= 0) return 'now';
+  if (diff < MS_PER_MINUTE) return `${Math.floor(diff / MS_PER_SECOND)}dt`;
+  if (diff < MS_PER_HOUR) return `${Math.floor(diff / MS_PER_MINUTE)}m`;
+  const h = Math.floor(diff / MS_PER_HOUR);
+  const m = Math.floor((diff % MS_PER_HOUR) / MS_PER_MINUTE);
+  return `${h}h${m > 0 ? String(m).padStart(2, '0') + 'm' : ''}`;
 }
 
 /** Nama hari ringkas (lokal) untuk sel reset jangka-jauh — konsisten wireframe §5 ("resume ~Sen"). */

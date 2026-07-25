@@ -157,6 +157,7 @@ describe('buildStatusPayload — proyeksi ter-firewall (T-W1)', () => {
     events: [],
     nowMs: 5_000,
     isAlive: () => true,
+    contexts: new Map<string, { model: string | null; contextTokens: number; contextWindowSize: number; contextPct: number } | null>(),
   };
 
   it('sesi: JSON kabel TAK memuat cli_session_id maupun cwd (data-minimize)', () => {
@@ -192,6 +193,33 @@ describe('buildStatusPayload — proyeksi ter-firewall (T-W1)', () => {
     const payload = buildStatusPayload({ ...base, heartbeat: { at: 4_000, pid: 9 }, isAlive: () => true });
     expect(payload.daemon).toContain('HIDUP');
   });
+
+  it('T-W1 extended: SessionContext BOLEH ada di payload, tapi field sensitif TETAP absen', () => {
+    const ctx = { model: 'Opus 5', contextTokens: 187000, contextWindowSize: 200000, contextPct: 87 };
+    const ctxMap = new Map<string, typeof ctx | null>();
+    ctxMap.set('a1b2', ctx);
+    const payload = buildStatusPayload({ ...base, sessions: [toSessionStatusView(fullSession())], contexts: ctxMap });
+    const wire = JSON.stringify(payload);
+    // Field sensitif tetap absen
+    expect(wire).not.toContain('RESUME-CAP-SECRET-ID');
+    expect(wire).not.toContain('RAHASIA');
+    expect(wire).not.toContain('cli_session_id');
+    expect(wire).not.toContain('cwd');
+    expect(wire).not.toContain('transcript');
+    // Derived values BOLEH ada
+    expect(wire).toContain('Opus 5');
+    expect(wire).toContain('187000');
+    expect(wire).toContain('87');
+    // Payload type check
+    expect(payload.sessions[0]!.context).toEqual(ctx);
+  });
+
+  it('T-W1 extended: context null → payload tetap valid (session non-CC / transcript unavailable)', () => {
+    const ctxMap = new Map<string, null>();
+    ctxMap.set('a1b2', null);
+    const payload = buildStatusPayload({ ...base, sessions: [toSessionStatusView(fullSession())], contexts: ctxMap });
+    expect(payload.sessions[0]!.context).toBeNull();
+  });
 });
 
 // ── Halaman self-contained (T-W4) + render-as-text (T-W5) ───────────────────────────────────────
@@ -207,9 +235,12 @@ describe('renderPage — self-contained (T-W4/T-W5)', () => {
     expect(/\b(src|href)\s*=/.test(page)).toBe(false);
   });
 
-  it('render via textContent, BUKAN innerHTML (anti-XSS)', () => {
-    expect(page).not.toContain('innerHTML');
+  it('render via textContent untuk data API (anti-XSS); innerHTML hanya utk bar wrapper sendiri', () => {
+    // innerHTML dipakai utk progress bar (CSS class + computed width% dari number server —
+    // nol data string mentah dari API). Semua data teks (id, tool, status, model) via textContent.
     expect(page).toContain('textContent');
+    // barHtml = innerHTML, tapi hanya berisi class CSS sendiri + width:NN% → bukan vektor injeksi.
+    expect(page).toContain('barHtml');
   });
 
   it('fetch hanya ke same-origin /api/status', () => {
@@ -250,11 +281,9 @@ describe('fmtTs — formatter reset_at/updated_at (W-3)', () => {
     expect(fmtTs(t, now)).toBe('Kam 21:00');
   });
 
-  it('halaman meng-embed FMT_TS_JS + memanggil fmtTs utk kolom waktu', () => {
+  it('halaman meng-embed FMT_TS_JS + memanggil fmtTs utk footer card', () => {
     const page = renderPage();
     expect(page).toContain('function fmtTs(');
-    expect(page).toContain('fmtTs(v, nowMs)');
-    expect(page).toContain('reset_at:');
-    expect(page).toContain('updated_at:');
+    expect(page).toContain("fmtTs(row.updated_at, nowMs)");
   });
 });

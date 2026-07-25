@@ -7,8 +7,11 @@ import { isProcessAlive } from '../../shared/proc.js';
 import { buildStatusPayload } from '../../web/status-json.js';
 import { renderPage } from '../../web/page.js';
 import { DEFAULT_WEB_PORT, WEB_HOST, startWebServer } from '../../web/server.js';
+import { readCcTranscriptContext, type SessionContext } from '../../web/transcript.js';
 
 const EVENT_TAIL = 50;
+/** Cache TTL transcript context: 30 detik (web polling tiap 5s → hit file max 1× per 6 siklus). */
+const CONTEXT_CACHE_TTL_MS = 30_000;
 
 /** Resolve port: `--port` > env `ACCA_WEB_PORT` > default. Invalid → throw (pesan jelas). */
 export function resolveWebPort(flag: string | undefined, env: string | undefined): number {
@@ -36,16 +39,44 @@ export function registerWebCommand(program: Command): void {
       const events = createEventsRepo(db);
 
       // Boundary impur: baca snapshot SEGAR tiap request (read-only). Proyeksi ter-firewall (T-W1).
-      const readStatus = () =>
-        buildStatusPayload({
+      // Cache context transcript per session: key = session.id, value = { ctx, updatedAt }.
+      const contextCache = new Map<string, { ctx: SessionContext | null; updatedAt: number; fetchedAt: number }>();
+
+      const readStatus = () => {
+        const nowMs = Date.now();
+        const fullSessions = sessions.listActive();
+        const contexts = new Map<string, SessionContext | null>();
+
+        for (const session of fullSessions) {
+          if (session.tool !== 'claude') {
+            contexts.set(session.id, null);
+            continue;
+          }
+          const cached = contextCache.get(session.id);
+          if (
+            cached !== undefined &&
+            cached.updatedAt === session.updated_at &&
+            nowMs - cached.fetchedAt < CONTEXT_CACHE_TTL_MS
+          ) {
+            contexts.set(session.id, cached.ctx);
+            continue;
+          }
+          const ctx = readCcTranscriptContext(session);
+          contextCache.set(session.id, { ctx, updatedAt: session.updated_at, fetchedAt: nowMs });
+          contexts.set(session.id, ctx);
+        }
+
+        return buildStatusPayload({
           usageClaudeRaw: meta.get('usage_snapshot_claude'),
           usageAntigravityRaw: meta.get('usage_snapshot_antigravity'),
           heartbeat: meta.getHeartbeat(),
-          sessions: sessions.listActive().map(toSessionStatusView),
+          sessions: fullSessions.map(toSessionStatusView),
           events: events.listRecent(EVENT_TAIL),
-          nowMs: Date.now(),
+          nowMs,
           isAlive: isProcessAlive,
+          contexts,
         });
+      };
 
       let server;
       try {
