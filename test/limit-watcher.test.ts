@@ -97,7 +97,7 @@ describe('createLimitWatcher — unlatch (R3/I-21: deteksi siklus limit >1× per
     expect(getCalls()).toBe(1);
 
     watcher.unlatch(); // auto-continue berhasil di-inject → siap deteksi siklus berikutnya
-    clock.t += 5_000; // majukan melewati grace-window OUTPUT-CC (genuine cycle-2 = jauh kemudian)
+    clock.t += 120_000; // majukan melewati grace-window OUTPUT-CC (genuine cycle-2 = jauh kemudian)
     watcher.feedOutput('usage limit reached\n');
     expect(getCalls()).toBe(2); // siklus limit KEDUA terdeteksi (bukan lagi one-shot)
   });
@@ -117,7 +117,7 @@ describe('createLimitWatcher — unlatch (R3/I-21: deteksi siklus limit >1× per
     expect(getSuppressed()).toBe(1); // audit-only
 
     // Setelah window lewat, sinyal limit SAH via output tetap bisa fire (genuine cycle berikutnya).
-    clock.t += 5_000;
+    clock.t += 120_000;
     watcher.feedOutput('usage limit reached\n');
     expect(getCalls()).toBe(2);
   });

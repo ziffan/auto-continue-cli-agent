@@ -69,9 +69,14 @@ const BUFFER_TAIL_LEN = 4096;
  * HANYA jalur output CC yang disuppress: (a) re-limit CC SAH datang lewat `feedSignal` (hook StopFailure =
  * deteksi PRIMER CC, I-23) yang TAK disuppress → tetap fire seketika; (b) agy TAK disuppress → re-limit
  * langsung ADR-019 optimistic ("\bIndividual \bquota reached") tetap terdeteksi. Genuine cycle-2 CC via output
- * (fallback tanpa hook) selalu >window kemudian → tetap terdeteksi. 5s = margin aman atas repaint (live: repaint
- * di detik yang sama dgn inject); reversibel. */
-const POST_UNLATCH_OUTPUT_GRACE_MS = 5_000;
+ * (fallback tanpa hook) selalu >window kemudian → tetap terdeteksi.
+ *
+ * **120s (owner Ziffan, 25 Jul):** nilai 5s awal terbukti terlalu pendek — live-verify `#hnce` (25 Jul)
+ * mencatat LIMIT_HIT palsu @T+9s pasca-inject (grace window sudah expired). Data historis `#z36i` (16 Jul)
+ * mencatat palsu @T+157s — 120s menutup kedua kasus. Hook StopFailure TAK disuppress → genuine re-limit
+ * lewat jalur primer tetap fire seketika; perpanjangan ini murni menaikkan margin keamanan tanpa
+ * menambah blind-spot. */
+const POST_UNLATCH_OUTPUT_GRACE_MS = 120_000;
 
 /**
  * I-35 (insiden live 17 Jul): ambang "kuota jelas longgar". Sinyal limit dari OUTPUT **CC** yang datang
