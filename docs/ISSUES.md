@@ -21,6 +21,15 @@
 > **DITUTUP FORMAL 19 Jul** (W-1 gate LULUS). Tak ada milestone aktif. Sisa = P3 oportunistik.
 > **20 Jul:** lisensi repo di-LOCK **Apache 2.0** (ADR-029) · **W-2 DITOLAK** owner (lihat di bawah).
 
+### I-37 — Output PTY visual nabrak/berhimpitan [P2, butuh investigasi]
+
+Output CLI agent (CC/agy) yang dijalankan via `acca run` sering mengalami teks nabrak/berhimpitan secara
+visual di terminal. Workaround: resize terminal (besar-kecilkan) → normal lagi. Gejala mengarah ke isu
+ConPTY/ANSI escape/reflow — kemungkinan terkait `node-pty` di Windows (G-12) atau dimensi PTY tidak
+sinkron dengan terminal host saat spawn. **Perlu investigasi lebih lanjut** — rekam layar + cek `cols`/`rows`
+saat spawn vs ukuran window aktual. Bisa juga terkait CSI escape sequence yang tidak di-handle ConPTY.
+**Sumber:** laporan owner 25 Jul.
+
 ### ~~P-1 — Membuka repo ke publik + rilis v0.1.0~~ [SELESAI 21 Jul — repo PUBLIK, rilis LIVE]
 **TUNTAS.** Ketiga langkah owner dijalankan & diverifikasi via GitHub API (sesi 21 Jul, Linux):
 1. ✅ **Visibility → public** (`private:false`, `visibility:public`).
