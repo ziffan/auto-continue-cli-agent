@@ -7,6 +7,9 @@ versi mengikuti [SemVer](https://semver.org/). **Rilis publik pertama `0.1.0` (2
 
 ## [Unreleased]
 
+### Changed
+- **Upgrade ESLint 9→10 + @typescript-eslint 8.47→8.65.** Fix `npm audit` 10 high (brace-expansion DoS, GHSA-mh99-v99m-4gvg). `eslint` 9.39.1→10.8.0, `@eslint/js` 9.39.1→10.0.1, `@typescript-eslint/eslint-plugin`+`parser` 8.47.0→8.65.0. 4 cast `as unknown as () => unknown` dihapus dari test (lint rule `no-unnecessary-type-assertion` baru).
+
 ### Fixed
 - **Grace window post-unlatch 5s→120s (G-37).** Live-verify `#hnce` (25 Jul): CC TUI repaint banner limit lama @T+9s pasca-inject memicu LIMIT_HIT palsu kedua → double-trigger continue. Grace window 5s awal tidak cukup; 120s menutup kasus ini (bukti `#hnce` @9s) dan `#z36i` (16 Jul, @157s). Hook StopFailure (deteksi PRIMER) TIDAK disuppress.
 

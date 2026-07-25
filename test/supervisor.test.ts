@@ -23,7 +23,7 @@ function createManualTimer() {
   return {
     setTimer: (fn: () => void, delayMs: number): TimerHandle => {
       const id = ++seq;
-      timers.set(id, { fn: fn as unknown as () => unknown, delay: delayMs });
+      timers.set(id, { fn, delay: delayMs });
       return id as unknown as TimerHandle;
     },
     clearTimer: (h: TimerHandle): void => {

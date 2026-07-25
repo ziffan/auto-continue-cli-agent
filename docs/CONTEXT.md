@@ -8,6 +8,18 @@
 
 ## Status saat ini
 
+- **Terakhir diupdate:** 2026-07-25 (sesi **Windows, dgn owner** — **maintenance: fix npm audit + verify Web UI + restart daemon**). Step 0: sinkron `origin/main` (0/0), tree bersih (hanya `package-lock.json` modif + `rencana-fitur_tambahan_acca.txt` untracked). **Sesi lanjutan dari sesi 25 Jul sebelumnya — testing + cleanup.** **Nol perubahan fungsional; dependency upgrade saja.**
+
+  **(1) Fix npm audit — 10 high → 0.** Vulnerability `brace-expansion <= 5.0.7` (GHSA-mh99-v99m-4gvg, DoS) di dependency tree eslint. Fix: upgrade `eslint` 9.39.1→10.8.0, `@eslint/js` 9.39.1→10.0.1, `@typescript-eslint/eslint-plugin`+`parser` 8.47.0→8.65.0. **4 lint error baru** (`no-unnecessary-type-assertion`) di 4 file test — cast `fn as unknown as () => unknown` dihapus (langsung assign, `() => void` kompatibel ke `() => unknown`). `@eslint/js` versi tidak sinkron dengan `eslint` (latest 10.0.1, bukan 10.8.0) — ketahuan saat install pertama gagal `ETARGET`.
+
+  **(2) Web UI enrichment terverifikasi.** `npm run build` → restart daemon (Task Scheduler watchdog respawn, PID 6204) → `acca web` → curl `/api/status` + HTML: field `context` hadir (null untuk EXITED), card layout + progress bar DOM + `fmtTs` + T-W4 (nol eksternal) + T-W5 (`textContent`, innerHTML hanya bar wrapper) — semua sesuai desain sesi sebelumnya. Grace window 120s kini live di daemon baru.
+
+  **(3) `rencana-fitur_tambahan_acca.txt` dihapus.** Dua ide (monitor per-agent statusline + delay trigger 300s dari reset) sudah dibahas di sesi sebelumnya; file diskusi dihapus.
+
+  **Verifikasi:** `npm audit` = **0 vulnerabilities** · `npm run check` = **719 pass + 4 skip / 55 file** (typecheck + lint + test). Selisih test vs sesi sebelumnya: 2 skip tambahan dari `shell-script.test.ts` (POSIX) + test count naik-turun karena perubahan file gitignored di working tree (D-5).
+
+  **Next konkret (sesi berikutnya):** tak ada milestone aktif. Sisa P3 tak berubah: W-3 residual favicon · F-4/5/6 · B-3 · I-15 (limit asli) · I-33-residual. **I-37** (output PTY nabrak) masih perlu investigasi. **M-remote** menunggu owner.
+
 - **Terakhir diupdate:** 2026-07-25 (sesi **Windows, dgn owner** — **fix double-trigger G-37 + Web UI enrichment**). Step 0: sinkron `origin/main` (0/0), tree bersih (hanya `rencana-fitur_tambahan_acca.txt` untracked). **Dua commit kode.**
 
   **(1) Fix double-trigger continue (G-37).** Owner live-test: CC kena limit → auto-continue sukses, tapi trigger 2× karena "lagging". Diagnosis dari event log `#hnce` (25 Jul): LIMIT_HIT pertama → probe ~2.4 jam → inject sukses @16:55:01 → grace window 5s men-suppress 2 baris repaint → tapi @T+9s CC mengeluarkan output limit-matching → grace window expired → LIMIT_HIT palsu kedua. Data historis `#z36i` (16 Jul): palsu @T+157s. **Fix:** `POST_UNLATCH_OUTPUT_GRACE_MS` 5.000→120.000 (owner Ziffan). Aman karena hook StopFailure (deteksi PRIMER) TAK disuppress.
